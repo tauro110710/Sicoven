@@ -221,8 +221,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       window.alert('El historial ISLR mensual contiene operaciones anteriores con parámetros o importes incompletos. Se requiere conciliación fiscal antes de acumular.');
       return;
     }
-    if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
-      window.alert('No se puede registrar la compra sin una tasa BCV manual válida mayor que cero. Verifica la tasa de la empresa e inténtalo de nuevo.');
+    // La tasa BCV es obligatoria solo cuando la operación requiere equivalencia monetaria
+    // (pago en divisas, método IGTF, o cuando el contador la ingresó y es inválida).
+    // Para operaciones nominales en bolívares sin equivalencia requerida,
+    // se permite bcvRate = 0 y la equivalencia USD queda como pendiente (0).
+    const paymentNeedsUsd = (['FOREIGN_CASH', 'FOREIGN_TRANSFER', 'CRYPTO'] as const).includes(paymentMethod as 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO');
+    const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
+    if (paymentNeedsUsd && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
+      window.alert('La tasa BCV es obligatoria para operaciones en divisas. Ingrese la tasa vigente o use el historial de la empresa.');
+      return;
+    }
+    if (bcvExplicitlyInvalid) {
+      window.alert('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
       return;
     }
     if (!Number.isFinite(totalAmountBs) || totalAmountBs <= 0) {

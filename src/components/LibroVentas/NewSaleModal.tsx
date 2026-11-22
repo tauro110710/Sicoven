@@ -98,8 +98,16 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasValidBcvRate) {
-      window.alert('Ingrese la tasa BCV aplicable a esta operación antes de guardar la factura.');
+    // La tasa BCV solo es obligatoria cuando el cobro es en divisas o se requiere equivalencia.
+    // Para ventas nominales en bolívares la equivalencia USD queda como pendiente (0).
+    const saleNeedsUsd = paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'FOREIGN_TRANSFER' || paymentCurrency === 'CRYPTO';
+    const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && !hasValidBcvRate;
+    if (saleNeedsUsd && !hasValidBcvRate) {
+      window.alert('La tasa BCV es obligatoria para ventas cobradas en divisas. Ingrese la tasa vigente o use el historial de la empresa.');
+      return;
+    }
+    if (bcvExplicitlyInvalid) {
+      window.alert('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
       return;
     }
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;

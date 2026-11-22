@@ -3196,7 +3196,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       validateRetentionVoucherSupplierEmail(purchaseData.supplierEmail, issueDate);
     }
     const rate = Number(purchaseData.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
+    // La tasa BCV es obligatoria solo cuando el medio de pago requiere equivalencia en divisas
+    // (IGTF, Zelle, transferencia internacional, criptomonedas, efectivo extranjero).
+    // Para compras nominales en bolívares sin divisa, la tasa es opcional; los importes USD
+    // quedan en cero (equivalencia pendiente) hasta que el contador suministre la tasa histórica.
+    const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
+    const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '');
+    if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas o mediante IGTF. Registre la tasa histórica antes de guardar.');
+    }
+    // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
+
     const amounts = [
       purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
       purchaseData.vatAmountBs, purchaseData.additionalLuxuryTaxBs || 0, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
@@ -3455,9 +3466,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         items.push({
           accountCode, accountName: group.name,
           debitBs: amountBs, creditBs: 0,
-          debitUsd: amountBs / rate, creditUsd: 0,
+          debitUsd: toUsd(amountBs), creditUsd: 0,
           description: `Inventario compra Fac. ${purchaseData.invoiceNumber} · ${group.productCodes.join(', ')}`
         });
+
       }
     } else {
       const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
@@ -3465,7 +3477,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (baseBs > 0 && debitAccount) items.push({
         accountCode: debitAccount.code,
         accountName: debitAccount.name,
-        debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
+        debitBs: baseBs, creditBs: 0, debitUsd: toUsd(baseBs), creditUsd: 0,
         description: `Compra ${debitAccount.type === 'GASTOS' ? 'no inventariable' : debitAccount.type === 'COSTOS' ? 'de costo de servicio' : 'de activo'} Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
@@ -3477,7 +3489,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
-        debitUsd: purchaseData.vatAmountBs / rate,
+        debitUsd: toUsd(purchaseData.vatAmountBs),
         creditUsd: 0,
         description: `IVA ${purchaseData.taxRate}% Fac. ${purchaseData.invoiceNumber}`
       });
@@ -3489,12 +3501,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!luxuryExpense) throw new Error('Falta la cuenta de gasto 6.1.1.13 para el impuesto adicional no recuperable.');
       const amountBs = Number(purchaseData.additionalLuxuryTaxBs);
       items.push({ accountCode: luxuryExpense.code, accountName: luxuryExpense.name, debitBs: amountBs, creditBs: 0,
-        debitUsd: amountBs / rate, creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
+        debitUsd: toUsd(amountBs), creditUsd: 0, description: 'Impuesto adicional al consumo suntuario 15% Fac. ' + purchaseData.invoiceNumber });
     }
 
     // Debe: IGTF de compra explícitamente confirmado por el usuario.
     if (Number(purchaseData.igtfAmountBs || 0) > 0) {
-      items.push({ accountCode: '6.1.1.11', accountName: 'Gasto por IGTF en compras', debitBs: Number(purchaseData.igtfAmountBs), creditBs: 0, debitUsd: Number(purchaseData.igtfAmountUsd || (Number(purchaseData.igtfAmountBs) / rate)), creditUsd: 0, description: `IGTF ${purchaseData.igtfRate || 3}% compra Fac. ${purchaseData.invoiceNumber}` });
+      items.push({ accountCode: '6.1.1.11', accountName: 'Gasto por IGTF en compras', debitBs: Number(purchaseData.igtfAmountBs), creditBs: 0, debitUsd: Number(purchaseData.igtfAmountUsd || toUsd(Number(purchaseData.igtfAmountBs))), creditUsd: 0, description: `IGTF ${purchaseData.igtfRate || 3}% compra Fac. ${purchaseData.invoiceNumber}` });
     }
 
     // Haber: Retención IVA por enterar al SENIAT (si la empresa retuvo)
@@ -3505,7 +3517,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: purchaseData.vatWithheldBs,
         debitUsd: 0,
-        creditUsd: purchaseData.vatWithheldBs / rate,
+        creditUsd: toUsd(purchaseData.vatWithheldBs),
         description: `Retención IVA ${purchaseData.retentionRate}% s/Fac. ${purchaseData.invoiceNumber}`
       });
     }
@@ -3518,7 +3530,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: purchaseData.islrWithheldBs,
         debitUsd: 0,
-        creditUsd: purchaseData.islrWithheldBs / rate,
+        creditUsd: toUsd(purchaseData.islrWithheldBs),
         description: `Retención ISLR ${purchaseData.islrRate}% s/Fac. ${purchaseData.invoiceNumber}`
       });
     }
@@ -3544,14 +3556,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
       validateBankOutgoingAvailability({
         availableBalance,
-        requestedAmount: bankPaymentAccount.currency === 'USD' ? netPayableBs / rate : netPayableBs,
+        requestedAmount: bankPaymentAccount.currency === 'USD' ? toUsd(netPayableBs) : netPayableBs,
         currency: bankPaymentAccount.currency
       });
     }
     items.push({
       accountCode: cashPurchase ? paymentAccount!.code : '2.1.1.01',
       accountName: cashPurchase ? paymentAccount!.name : 'Cuentas por Pagar Proveedores Nacionales',
-      debitBs: 0, creditBs: netPayableBs, debitUsd: 0, creditUsd: netPayableBs / rate,
+      debitBs: 0, creditBs: netPayableBs, debitUsd: 0, creditUsd: toUsd(netPayableBs),
       description: cashPurchase
         ? `Pago contado Fac. ${purchaseData.invoiceNumber} · Soporte ${purchaseData.paymentReference}`
         : `Neto a pagar Fac. ${purchaseData.invoiceNumber}`
@@ -3590,12 +3602,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...purchaseData,
       // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
-      totalAmountUsd: purchaseData.totalAmountBs / rate,
-      taxableBaseUsd: purchaseData.taxableBaseBs / rate,
-      vatAmountUsd: purchaseData.vatAmountBs / rate,
-      vatWithheldUsd: purchaseData.vatWithheldBs / rate,
-      islrWithheldUsd: (purchaseData.islrWithheldBs || 0) / rate,
-      igtfAmountUsd: igtfAmount / rate,
+      totalAmountUsd: toUsd(purchaseData.totalAmountBs),
+      taxableBaseUsd: toUsd(purchaseData.taxableBaseBs),
+      vatAmountUsd: toUsd(purchaseData.vatAmountBs),
+      vatWithheldUsd: toUsd(purchaseData.vatWithheldBs),
+      islrWithheldUsd: toUsd(purchaseData.islrWithheldBs || 0),
+      igtfAmountUsd: toUsd(igtfAmount),
       id: purchaseId,
       companyId: targetCompany.id,
       opNumber: nextOp,
@@ -4449,11 +4461,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (settlementModeError) throw new Error(settlementModeError);
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     const rate = Number(saleData.bcvRate);
+    // La tasa BCV es obligatoria solo cuando el cobro es en divisas.
+    // Para ventas nominales en bolívares, se permite rate = 0 (equivalencia pendiente).
+    const SALE_FOREIGN_METHODS = ['FOREIGN_CASH', 'FOREIGN_TRANSFER', 'CRYPTO'];
+    const saleNeedsRate = SALE_FOREIGN_METHODS.includes(saleData.paymentCurrency || '');
+    if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para ventas cobradas en divisas. Registre la tasa histórica antes de guardar.');
+    }
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
       saleData.vatAmountBs, saleData.additionalLuxuryTaxBs || 0, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
     ];
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
       throw new Error('La venta contiene importes inválidos o negativos.');
     }
@@ -4531,7 +4550,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accountName: 'Retenciones de IVA Acumuladas por Descontar',
         debitBs: saleData.vatWithheldBs,
         creditBs: 0,
-        debitUsd: saleData.vatWithheldBs / rate,
+        debitUsd: toUsd(saleData.vatWithheldBs),
         creditUsd: 0,
         description: `Comprobante Retención IVA Cliente ${saleData.customerName}`
       });
@@ -4544,7 +4563,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       accountName: 'Cuentas por Cobrar Clientes Comerciales',
       debitBs: receivableBs,
       creditBs: 0,
-      debitUsd: receivableBs / rate,
+      debitUsd: toUsd(receivableBs),
       creditUsd: 0,
       description: `Por cobrar Fac. Venta ${saleData.invoiceNumber}`
     });
@@ -4558,7 +4577,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: igtfBs,
         debitUsd: 0,
-        creditUsd: igtfBs / rate,
+        creditUsd: toUsd(igtfBs),
         description: `IGTF percibido 3% Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4570,7 +4589,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       debitBs: 0,
       creditBs: saleData.taxableBaseBs,
       debitUsd: 0,
-      creditUsd: saleData.taxableBaseBs / rate,
+      creditUsd: toUsd(saleData.taxableBaseBs),
       description: `Ingreso por venta Fac. ${saleData.invoiceNumber}`
     });
 
@@ -4583,7 +4602,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: saleData.exemptAmountBs,
         debitUsd: 0,
-        creditUsd: saleData.exemptAmountBs / rate,
+        creditUsd: toUsd(saleData.exemptAmountBs),
         description: `Ingreso exento por venta Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4593,7 +4612,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const luxuryTaxBs = Number(saleData.additionalLuxuryTaxBs || 0);
       const luxuryTaxAccount = accounts.find(account => account.code === '2.1.2.08' && account.isMovement && account.type === 'PASIVO');
       if (!luxuryTaxAccount) throw new Error('El plan de cuentas no contiene la cuenta de impuesto adicional al consumo suntuario.');
-      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: luxuryTaxBs / rate, description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
+      items.push({ accountCode: luxuryTaxAccount.code, accountName: luxuryTaxAccount.name, debitBs: 0, creditBs: luxuryTaxBs, debitUsd: 0, creditUsd: toUsd(luxuryTaxBs), description: `Impuesto adicional al consumo suntuario 15% Fac. ${saleData.invoiceNumber}` });
     }
 
     // Haber: Débito Fiscal IVA Ventas
@@ -4604,7 +4623,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
         debitUsd: 0,
-        creditUsd: saleData.vatAmountBs / rate,
+        creditUsd: toUsd(saleData.vatAmountBs),
         description: `Débito fiscal ${saleData.taxRate}% Fac. ${saleData.invoiceNumber}`
       });
     }
@@ -4640,16 +4659,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalSale: SaleRecord = {
       ...saleData,
-      // El registro conserva la tasa efectiva usada en su asiento y equivalentes
-      // USD coherentes con los importes nominales de la factura.
       bcvRate: rate,
-      totalAmountUsd: saleData.totalAmountBs / rate,
-      taxableBaseUsd: saleData.taxableBaseBs / rate,
-      vatAmountUsd: saleData.vatAmountBs / rate,
+      totalAmountUsd: toUsd(saleData.totalAmountBs),
+      taxableBaseUsd: toUsd(saleData.taxableBaseBs),
+      vatAmountUsd: toUsd(saleData.vatAmountBs),
       additionalLuxuryTaxBs: Number(saleData.additionalLuxuryTaxBs || 0),
-      additionalLuxuryTaxUsd: Number(saleData.additionalLuxuryTaxBs || 0) / rate,
-      vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
-      igtfAmountUsd: saleIgtf / rate,
+      additionalLuxuryTaxUsd: toUsd(Number(saleData.additionalLuxuryTaxBs || 0)),
+      vatWithheldUsd: toUsd(saleData.vatWithheldBs || 0),
+      igtfAmountUsd: toUsd(saleIgtf),
       id: saleId,
       companyId: targetCompany.id,
       opNumber: nextOp,
