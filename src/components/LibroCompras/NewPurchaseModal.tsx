@@ -348,7 +348,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
             documentRef: 'FAC-' + invoiceNumber.trim(), documentType: 'Factura de compra',
             counterpartyRif: formatRif(supplierRif), counterpartyName: supplierName.trim().toUpperCase(),
-            bcvRate, quantity, unitCostBs, unitCostUsd: unitCostUsd: bcvRate > 0 ? unitCostBs / bcvRate : 0,
+            bcvRate, quantity, unitCostBs, unitCostUsd: bcvRate > 0 ? unitCostBs / bcvRate : 0,
             totalCostBs: quantity * unitCostBs, totalCostUsd: bcvRate > 0 ? quantity * unitCostBs / bcvRate : 0,
             balanceQty: product.currentStock + quantity,
             balanceTotalBs: (product.currentStock + quantity) * product.avgCostBs,
