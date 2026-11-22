@@ -19,8 +19,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const accountingStartDate = currentCompany?.accountingStartDate;
+  const defaultHistoricalDate = accountingStartDate && /^\d{4}-\d{2}-\d{2}$/.test(accountingStartDate) && accountingStartDate < todayIso
+    ? accountingStartDate
+    : todayIso;
+  const [invoiceDate, setInvoiceDate] = useState<string>(defaultHistoricalDate);
+  const [accountCreditDate, setAccountCreditDate] = useState<string>(defaultHistoricalDate);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
