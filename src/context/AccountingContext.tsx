@@ -3776,7 +3776,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         withheldAmountBs: purchaseData.islrWithheldBs,
         bcvRate: rate,
         baseAmountUsd: purchaseData.taxableBaseUsd,
-        withheldAmountUsd: purchaseData.islrWithheldUsd || (purchaseData.islrWithheldBs / rate),
+        withheldAmountUsd: purchaseData.islrWithheldUsd || toUsd(purchaseData.islrWithheldBs),
         unitTaxValueBs: purchaseData.islrUnitTaxValueBs,
         formulaFactor: purchaseData.islrFormulaFactor,
         basePercentage: purchaseData.islrBasePercentage
