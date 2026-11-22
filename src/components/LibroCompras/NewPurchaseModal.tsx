@@ -348,8 +348,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
             documentRef: 'FAC-' + invoiceNumber.trim(), documentType: 'Factura de compra',
             counterpartyRif: formatRif(supplierRif), counterpartyName: supplierName.trim().toUpperCase(),
-            bcvRate, quantity, unitCostBs, unitCostUsd: unitCostBs / bcvRate,
-            totalCostBs: quantity * unitCostBs, totalCostUsd: quantity * unitCostBs / bcvRate,
+            bcvRate, quantity, unitCostBs, unitCostUsd: unitCostUsd: bcvRate > 0 ? unitCostBs / bcvRate : 0,
+            totalCostBs: quantity * unitCostBs, totalCostUsd: bcvRate > 0 ? quantity * unitCostBs / bcvRate : 0,
             balanceQty: product.currentStock + quantity,
             balanceTotalBs: (product.currentStock + quantity) * product.avgCostBs,
             balanceTotalUsd: (product.currentStock + quantity) * product.avgCostUsd
@@ -522,7 +522,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <div className="text-slate-500 font-mono-nums flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1">
                   Tasa BCV aplicable a la factura
-                  <input required type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+                  <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
                 </div>
                 {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
                   <button

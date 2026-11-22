@@ -381,7 +381,6 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                 <input
                   type="text"
                   inputMode="decimal"
-                  required
                   placeholder="Ej.: 944,4485"
                   value={bcvRateInput}
                   onChange={e => setBcvRateInput(e.target.value)}
