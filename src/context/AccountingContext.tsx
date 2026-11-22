@@ -26,6 +26,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
+import { normalizeBolivarAmountForDate } from '../types/historicalAccountingCalendar';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
@@ -3580,8 +3581,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
     setJournalEntries(prev => [...prev, createdJournalEntry]);
 
+    const normalizedPurchaseAmounts = {
+      total: normalizeBolivarAmountForDate(purchaseData.totalAmountBs, purchaseData.invoiceDate),
+      taxable: normalizeBolivarAmountForDate(purchaseData.taxableBaseBs, purchaseData.invoiceDate),
+      exempt: normalizeBolivarAmountForDate(purchaseData.exemptAmountBs, purchaseData.invoiceDate),
+      vat: normalizeBolivarAmountForDate(purchaseData.vatAmountBs, purchaseData.invoiceDate)
+    };
     const finalPurchase: PurchaseRecord = {
       ...purchaseData,
+      monetaryEraId: normalizedPurchaseAmounts.total.sourceEra.id,
+      totalAmountDigitalBs: normalizedPurchaseAmounts.total.digitalBolivars,
+      taxableBaseDigitalBs: normalizedPurchaseAmounts.taxable.digitalBolivars,
+      exemptAmountDigitalBs: normalizedPurchaseAmounts.exempt.digitalBolars,
+      vatAmountDigitalBs: normalizedPurchaseAmounts.vat.digitalBolivars,
       // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
       totalAmountUsd: purchaseData.totalAmountBs / rate,
@@ -5745,8 +5757,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
 
+    const normalizedMovementCost = normalizeBolivarAmountForDate(unitCostBs, movData.date);
+    const normalizedMovementTotal = normalizeBolivarAmountForDate(totalCostBs, movData.date);
+    const normalizedMovementBalance = normalizeBolivarAmountForDate(Math.round(newStock * newAverageBs * 100) / 100, movData.date);
     const newMov: InventoryMovement = {
       ...movData,
+      monetaryEraId: normalizedMovementCost.sourceEra.id,
+      unitCostDigitalBs: normalizedMovementCost.digitalBolivars,
+      totalCostDigitalBs: normalizedMovementTotal.digitalBolivars,
+      balanceTotalDigitalBs: normalizedMovementBalance.digitalBolivars,
       id: `mov-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id,
       quantity: movementQuantity,
