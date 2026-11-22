@@ -5940,7 +5940,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let totalCostUsd = 0;
     let newStock = prod.currentStock;
     let newAverageBs = prod.avgCostBs;
-    let newAverageUsd = toUsd(prod.avgCostBs);
+    let newAverageUsd = rate > 0 ? toUsd(prod.avgCostBs) : Number(prod.avgCostUsd || 0);
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {
@@ -5969,9 +5969,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
       } else {
         unitCostBs = prod.avgCostBs;
-        unitCostUsd = toUsd(unitCostBs);
+        unitCostUsd = rate > 0 ? toUsd(unitCostBs) : Number(prod.avgCostUsd || 0);
         totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = toUsd(totalCostBs);
+        totalCostUsd = rate > 0 ? toUsd(totalCostBs) : Math.round(Number(movData.quantity) * unitCostUsd * 100) / 100;
         newStock = prod.currentStock - Number(movData.quantity);
       }
     } else {
