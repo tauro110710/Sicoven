@@ -198,7 +198,7 @@ function isValidIsoDate(value: string): boolean {
 /** Exact base-10 addition for historical report aggregation. */
 export function addExactDecimals(left: string | number, right: string | number): string {
   const parse = (input: string | number) => {
-    const raw = String(input).trim();
+    const raw = expandDecimalExponent(String(input).trim());
     if (!/^-?\\d+(?:\\.\\d+)?$/.test(raw)) throw new Error('Invalid decimal amount.');
     const negative = raw.startsWith('-');
     const unsigned = negative ? raw.slice(1) : raw;
