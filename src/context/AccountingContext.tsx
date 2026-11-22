@@ -5167,8 +5167,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Contrapartida de apertura de inventario ' + code }
           ], createdAt: new Date().toISOString()
         };
+        entry.monetaryEraId = normalizeBolivarAmountForDate(0, date).sourceEra.id;
+        entry.items = entry.items.map(item => ({
+          ...item,
+          debitDigitalBs: normalizeBolivarAmountForDate(item.debitBs, date).digitalBolivars,
+          creditDigitalBs: normalizeBolivarAmountForDate(item.creditBs, date).digitalBolivars
+        }));
         openingEntries.push(entry);
+        const normalizedOpeningCost = normalizeBolivarAmountForDate(unitCostBs, date);
+        const normalizedOpeningTotal = normalizeBolivarAmountForDate(totalBs, date);
         openingMovements.push({
+          monetaryEraId: normalizedOpeningCost.sourceEra.id,
+          unitCostDigitalBs: normalizedOpeningCost.digitalBolivars,
+          totalCostDigitalBs: normalizedOpeningTotal.digitalBolivars,
+          balanceTotalDigitalBs: normalizedOpeningTotal.digitalBolivars,
           id: 'mov-opening-' + product.id, companyId: targetCompanyId, productId: product.id,
           productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
           documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
