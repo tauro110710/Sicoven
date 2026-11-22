@@ -127,7 +127,7 @@ export function convertVenezuelanAmount(
   const source = VENEZUELAN_MONETARY_ERAS.find(era => era.id === fromEraId);
   const target = VENEZUELAN_MONETARY_ERAS.find(era => era.id === toEraId);
   if (!source || !target) throw new Error('La escala monetaria de origen o destino no está reconocida.');
-  const raw = String(amount).trim();
+  const raw = expandScientificDecimal(String(amount).trim());
   if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
@@ -181,6 +181,20 @@ export function roundHistoricalPresentationAmount(amount: string | number, decim
     ? digits
     : digits.slice(0, -decimalPlaces) + '.' + digits.slice(-decimalPlaces);
   return negative && rounded !== 0n ? '-' + formatted : formatted;
+}
+
+function expandScientificDecimal(raw: string): string {
+  const match = raw.match(/^(-?)(\d+)(?:\.(\d*))?[eE]([+-]?\d+)$/);
+  if (!match) return raw;
+  const sign = match[1];
+  const integer = match[2];
+  const fraction = match[3] || '';
+  const exponent = Number(match[4]);
+  const digits = integer + fraction;
+  const decimalPosition = integer.length + exponent;
+  if (decimalPosition <= 0) return sign + '0.' + '0'.repeat(-decimalPosition) + digits;
+  if (decimalPosition >= digits.length) return sign + digits + '0'.repeat(decimalPosition - digits.length);
+  return sign + digits.slice(0, decimalPosition) + '.' + digits.slice(decimalPosition);
 }
 
 function isValidIsoDate(value: string): boolean {
