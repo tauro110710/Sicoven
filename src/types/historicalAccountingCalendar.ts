@@ -136,7 +136,7 @@ export function convertVenezuelanAmount(
   const source = VENEZUELAN_MONETARY_ERAS.find(era => era.id === fromEraId);
   const target = VENEZUELAN_MONETARY_ERAS.find(era => era.id === toEraId);
   if (!source || !target) throw new Error('La escala monetaria de origen o destino no está reconocida.');
-  const raw = expandDecimalExponent(String(amount).trim();
+  const raw = expandDecimalExponent(String(amount).trim());
   if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
