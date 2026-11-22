@@ -150,6 +150,15 @@ export function convertVenezuelanAmount(
   return negative && result !== '0' ? '-' + result : result;
 }
 
+/** Convert a bolivar amount in the scale valid on its effective date to digital bolivars. */
+export function normalizeBolivarAmountForDate(amount: string | number, effectiveDate: string): {
+  sourceEra: VenezuelanMonetaryEra;
+  digitalBolivars: string;
+} {
+  const sourceEra = getVenezuelanMonetaryEra(effectiveDate);
+  return { sourceEra, digitalBolivars: convertVenezuelanAmount(amount, sourceEra.id, 'BOLIVAR_DIGITAL') };
+}
+
 export function roundHistoricalPresentationAmount(amount: string | number, decimalPlaces = 2): string {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 12) {
     throw new Error('La precisión de presentación debe estar entre 0 y 12 decimales.');
