@@ -5469,7 +5469,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let movementQuantity = Number(row.quantity);
       if (row.type === 'ENTRADA') {
         unitCostBs = effectiveUnitCost;
-        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate);
+        const weighted = rate > 0
+          ? calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate)
+          : calculateWeightedAverageCostDual(product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0), Number(row.quantity), effectiveUnitCost, 0);
         newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
         totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
       } else if (row.type === 'SALIDA') {
