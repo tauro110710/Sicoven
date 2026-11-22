@@ -15,7 +15,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -340,24 +340,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       purchaseDebitAccountCode: linkInventory ? undefined : purchaseDebitAccountCode,
       inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:parseDecimalInput(line.quantity),unitCostBs:parseDecimalInput(line.unitCostBs)})) : undefined
       });
-      if (linkInventory) {
-        for (const line of inventoryLines) {
-          const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id)!;
-          const quantity = parseDecimalInput(line.quantity);
-          const unitCostBs = parseDecimalInput(line.unitCostBs);
-          addMovement({
-            productId: product.id, productName: product.name, productCode: product.code,
-            date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
-            documentRef: 'FAC-' + invoiceNumber.trim(), documentType: 'Factura de compra',
-            counterpartyRif: formatRif(supplierRif), counterpartyName: supplierName.trim().toUpperCase(),
-            bcvRate, quantity, unitCostBs, unitCostUsd: bcvRate > 0 ? unitCostBs / bcvRate : 0,
-            totalCostBs: quantity * unitCostBs, totalCostUsd: bcvRate > 0 ? quantity * unitCostBs / bcvRate : 0,
-            balanceQty: product.currentStock + quantity,
-            balanceTotalBs: (product.currentStock + quantity) * product.avgCostBs,
-            balanceTotalUsd: (product.currentStock + quantity) * product.avgCostUsd
-          });
-        }
-      }
       });
       await waitForPersistence();
       onClose();
