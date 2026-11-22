@@ -7205,6 +7205,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         parsedDate.toISOString().slice(0, 10) !== movData.date) {
       throw new Error('La fecha del movimiento bancario no es válida.');
     }
+    if (!isOperationDateWithinAccountingStart(movData.date, currentCompany.accountingStartDate)) {
+      throw new Error('La fecha del extracto bancario no puede ser anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ').');
+    }
     if (movData.type !== 'DEBIT' && movData.type !== 'CREDIT') {
       throw new Error('La naturaleza del movimiento bancario debe ser débito o crédito.');
     }
