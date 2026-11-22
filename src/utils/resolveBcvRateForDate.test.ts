@@ -21,6 +21,7 @@ test("returns undefined for invalid date format", () => {
   assert.equal(resolveBcvRateForDate(h, ""), undefined);
   assert.equal(resolveBcvRateForDate(h, "not-a-date"), undefined);
   assert.equal(resolveBcvRateForDate(h, "2024-1-1"), undefined);
+  assert.equal(resolveBcvRateForDate(h, "2024-02-31"), undefined);
 });
 
 test("returns exact rate when effectiveDate equals query date", () => {
