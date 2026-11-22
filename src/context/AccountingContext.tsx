@@ -5856,6 +5856,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       unitCostDigitalBs: normalizedMovementCost.digitalBolivars,
       totalCostDigitalBs: normalizedMovementTotal.digitalBolivars,
       balanceTotalDigitalBs: normalizedMovementBalance.digitalBolivars,
+      additionalLandedCostsDigitalBs: normalizedLandedCosts.digitalBolivars,
       id: `mov-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id,
       quantity: movementQuantity,
