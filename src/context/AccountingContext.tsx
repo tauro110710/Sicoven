@@ -3605,7 +3605,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       total: normalizeBolivarAmountForDate(purchaseData.totalAmountBs, purchaseData.invoiceDate),
       taxable: normalizeBolivarAmountForDate(purchaseData.taxableBaseBs, purchaseData.invoiceDate),
       exempt: normalizeBolivarAmountForDate(purchaseData.exemptAmountBs, purchaseData.invoiceDate),
-      vat: normalizeBolivarAmountForDate(purchaseData.vatAmountBs, purchaseData.invoiceDate)
+      vat: normalizeBolivarAmountForDate(purchaseData.vatAmountBs, purchaseData.invoiceDate),
+      luxuryTax: normalizeBolivarAmountForDate(purchaseData.additionalLuxuryTaxBs || 0, purchaseData.invoiceDate),
+      vatWithheld: normalizeBolivarAmountForDate(purchaseData.vatWithheldBs || 0, purchaseData.invoiceDate),
+      islrWithheld: normalizeBolivarAmountForDate(purchaseData.islrWithheldBs || 0, purchaseData.invoiceDate),
+      igtf: normalizeBolivarAmountForDate(igtfAmount, purchaseData.invoiceDate)
     };
     const finalPurchase: PurchaseRecord = {
       ...purchaseData,
