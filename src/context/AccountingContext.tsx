@@ -1673,7 +1673,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addCompany = async (comp: Omit<Company, 'id'>): Promise<Company> => {
     assertSQLitePersistenceReady('Registrar la empresa');
     if (!isValidAccountingStartDate(comp.accountingStartDate || '')) {
-      throw new Error('La empresa debe tener una fecha de inicio contable válida desde el 01/01/2012.');
+      throw new Error('La empresa debe tener una fecha de inicio contable válida.');
     }
     // La fecha administrativa de registro es independiente del inicio contable.
     const companyToCreate: Omit<Company, 'id'> = {
