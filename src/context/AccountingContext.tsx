@@ -3645,10 +3645,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const landedCostsBs = Number(line.additionalLandedCostsBs || 0);
         const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
         const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
-        const totalCostUsd = toUsd(totalCostBs);
+        const unitCostUsd = rate > 0 ? toUsd(effectiveUnitCost) : pState.avgCostUsd;
+        const totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
         const weighted = rate > 0
           ? calculateWeightedAverageCost(pState.currentStock, pState.avgCostBs, qty, effectiveUnitCost, rate)
-          : calculateWeightedAverageCostDual(pState.currentStock, pState.avgCostBs, pState.avgCostUsd, qty, effectiveUnitCost, toUsd(effectiveUnitCost));
+          : calculateWeightedAverageCostDual(pState.currentStock, pState.avgCostBs, pState.avgCostUsd, qty, effectiveUnitCost, unitCostUsd);
         const newStock = weighted.quantity;
         const newAverageBs = weighted.unitCostBs;
         const newAverageUsd = weighted.unitCostUsd;
@@ -3666,7 +3667,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           documentRef: `FAC-${purchaseData.invoiceNumber}`,
           quantity: qty,
           unitCostBs: effectiveUnitCost,
-          unitCostUsd: toUsd(effectiveUnitCost),
+          unitCostUsd,
           totalCostBs,
           totalCostUsd,
           balanceQty: newStock,
