@@ -674,6 +674,7 @@ export interface InventoryMovement {
   unitCostDigitalBs?: string;
   totalCostDigitalBs?: string;
   balanceTotalDigitalBs?: string;
+  additionalLandedCostsDigitalBs?: string;
   id: string;
   companyId: string;
   productId: string;
