@@ -82,12 +82,6 @@ on:
       - 'src/types/historicalAccountingCalendar.test.ts'
       - 'src/utils/isoDateValidation.ts'
       - 'src/utils/isoDateValidation.test.ts'
-      - 'src/components/CompanyModal.tsx'
-      - 'src/components/Balances/HistoricalBalancesView.tsx'
-      - 'src/types/historicalAccountingCalendar.ts'
-      - 'src/types/historicalAccountingCalendar.test.ts'
-      - 'src/utils/isoDateValidation.ts'
-      - 'src/utils/isoDateValidation.test.ts'
       - 'src/types/vatOwnDeclaration.ts'
       - 'electron/main.cjs'
       - 'electron/preload.cjs'
@@ -205,11 +199,11 @@ jobs:
           }
 
       - name: Package installer for PR validation without publishing
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122')
+        if: github.event_name == 'pull_request'
         run: npx electron-builder --win nsis --publish never
 
       - name: Package updater metadata and installer locally
-        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122'))
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122')
         run: npx electron-builder --win nsis --publish never
 
       - name: Verify installer and updater metadata
@@ -485,7 +479,7 @@ jobs:
           }
 
       - name: Generate build manifest with validation evidence
-        if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122')
+        if: (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/pr188-finalization-20261122'))
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter 'SICOVEN-Setup-*-x64.exe' -File | Select-Object -First 1
