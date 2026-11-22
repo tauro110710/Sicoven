@@ -65,14 +65,22 @@ test('convierte escalas sin redondear ni perder precisión decimal de origen', (
   assert.equal(convertVenezuelanAmount('-1000000', 'BOLIVAR_SOBERANO', 'BOLIVAR_DIGITAL'), '-1');
 });
 
-test('normaliza importes en bolívares según fecha a escala digital', () => {
-  const historical2012Amount = normalizeBolivarAmountForDate('1000000', '2012-06-30');
-  assert.equal(historical2012Amount.sourceEra.id, 'BOLIVAR_FUERTE');
-  assert.equal(historical2012Amount.digitalBolivars, '0.00001');
-  assert.equal(normalizeBolivarAmountForDate('100000', '2019-05-01').digitalBolivars, '0.1');
-  assert.equal(normalizeBolivarAmountForDate('1000000', '2021-09-30').digitalBolivars, '1');
-  assert.equal(normalizeBolivarAmountForDate('1.25', '2022-01-01').digitalBolivars, '1.25');
-  assert.equal(normalizeBolivarAmountForDate(1e21, '2022-01-01').digitalBolivars, '1000000000000000000000');
+test('normaliza importes desde 2012 y aplica cada reconversión por fecha efectiva', () => {
+  const from2012 = normalizeBolivarAmountForDate('250000000', '2012-01-01');
+  assert.equal(from2012.sourceEra.id, 'BOLIVAR_FUERTE');
+  assert.equal(from2012.digitalBolivars, '0.0025');
+  const before2018 = normalizeBolivarAmountForDate('250000000', '2018-08-19');
+  const after2018 = normalizeBolivarAmountForDate('250000000', '2018-08-20');
+  assert.equal(before2018.sourceEra.id, 'BOLIVAR_FUERTE');
+  assert.equal(before2018.digitalBolivars, '0.0025');
+  assert.equal(after2018.sourceEra.id, 'BOLIVAR_SOBERANO');
+  assert.equal(after2018.digitalBolivars, '250');
+  const before2021 = normalizeBolivarAmountForDate('250000000', '2021-09-30');
+  const after2021 = normalizeBolivarAmountForDate('250000000', '2021-10-01');
+  assert.equal(before2021.sourceEra.id, 'BOLIVAR_SOBERANO');
+  assert.equal(before2021.digitalBolivars, '250');
+  assert.equal(after2021.sourceEra.id, 'BOLIVAR_DIGITAL');
+  assert.equal(after2021.digitalBolivars, '250000000');
 });
 
 test('separa la conversión nominal del redondeo de presentación', () => {
