@@ -1883,7 +1883,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
-    if (entry.date < (targetCompany.accountingStartDate || '1900-01-01')) throw new Error('La fecha del asiento es anterior al inicio contable de la empresa.');
+    if (entry.date < (targetCompany.accountingStartDate || '2012-01-01')) throw new Error('La fecha del asiento es anterior al inicio contable de la empresa.');
     const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
       entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
       entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
@@ -3247,8 +3247,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
     if (!isValidIsoDate(purchaseData.invoiceDate) || !isValidIsoDate(purchaseData.accountCreditDate || '') ||
-        purchaseData.invoiceDate < (targetCompany.accountingStartDate || '1900-01-01') ||
-        purchaseData.accountCreditDate! < (targetCompany.accountingStartDate || '1900-01-01') ||
+        purchaseData.invoiceDate < (targetCompany.accountingStartDate || '2012-01-01') ||
+        purchaseData.accountCreditDate! < (targetCompany.accountingStartDate || '2012-01-01') ||
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
@@ -4494,7 +4494,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (targetCompany.closedThroughDate && saleData.invoiceDate <= targetCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
-    if (!isValidIsoDate(saleData.invoiceDate) || saleData.invoiceDate < (targetCompany.accountingStartDate || '1900-01-01') || !String(saleData.invoiceNumber || '').trim() ||
+    if (!isValidIsoDate(saleData.invoiceDate) || saleData.invoiceDate < (targetCompany.accountingStartDate || '2012-01-01') || !String(saleData.invoiceNumber || '').trim() ||
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
@@ -5646,7 +5646,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
-    if (movData.date < (currentCompany.accountingStartDate || '1900-01-01')) throw new Error('La fecha del movimiento es anterior al inicio contable de la empresa.');
+    if (movData.date < (currentCompany.accountingStartDate || '2012-01-01')) throw new Error('La fecha del movimiento es anterior al inicio contable de la empresa.');
     if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
