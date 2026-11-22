@@ -7,6 +7,7 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
+import { normalizeBolivarAmountForDate } from '../../types/historicalAccountingCalendar';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -107,6 +108,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const igtfApplicable = igtfCalculation.applicable;
   const igtfAmountBs = igtfCalculation.amountBs;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
+  const monetaryScalePreview = (() => { try { return { era: normalizeBolivarAmountForDate(0, invoiceDate).sourceEra, totalDigital: normalizeBolivarAmountForDate(totalAmountBs, invoiceDate).digitalBolivars, baseDigital: normalizeBolivarAmountForDate(effectiveTaxableBaseBs, invoiceDate).digitalBolivars }; } catch { return null; } })();
   const vatWithheldBs = ivaEligibility.withheldAmount;
 
   // ISLR calculation
@@ -494,6 +496,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
             </div>
 
+            {monetaryScalePreview && <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900"><strong>Escala monetaria automática según fecha:</strong> {monetaryScalePreview.era.label}. Base equivalente digital: {monetaryScalePreview.baseDigital} Bs. · Total equivalente digital: {monetaryScalePreview.totalDigital} Bs.</div>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">{vatNotDiscriminated ? 'Precio gravado con IVA incluido (Bs.) *' : 'Base Imponible (Bs.) *'}</label>
