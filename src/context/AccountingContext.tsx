@@ -4813,18 +4813,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const qty = Number(line.quantity);
         if (qty <= 0 || pState.currentStock <= 0) continue;
         let totalCostBs = 0;
+        let totalCostUsd = 0;
         let unitCostBs = 0;
+        let unitCostUsd = 0;
         if (product.costingMethod === 'PEPS') {
           const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, pState.currentStock);
           const fifoResult = calculateFifoIssue(layers, qty);
           totalCostBs = fifoResult.totalCostBs;
-          unitCostBs = qty > 0 ? totalCostBs / qty : 0;
+          totalCostUsd = fifoResult.totalCostUsd;
+          unitCostBs = fifoResult.unitCostBs;
+          unitCostUsd = fifoResult.unitCostUsd;
         } else {
           unitCostBs = pState.avgCostBs;
+          unitCostUsd = pState.avgCostUsd;
           totalCostBs = Math.round(qty * unitCostBs * 100) / 100;
+          totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
         }
-        const totalCostUsd = toUsd(totalCostBs);
         const newStock = Math.max(0, pState.currentStock - qty);
         const newAverageBs = newStock > 0 ? pState.avgCostBs : 0;
         const newAverageUsd = toUsd(newAverageBs);
@@ -4842,7 +4847,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           documentRef: `FAC-${saleData.invoiceNumber}`,
           quantity: qty,
           unitCostBs,
-          unitCostUsd: toUsd(unitCostBs),
+          unitCostUsd,
           totalCostBs,
           totalCostUsd,
           balanceQty: newStock,
