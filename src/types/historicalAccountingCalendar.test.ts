@@ -42,12 +42,13 @@ test('permite reconstruir ejercicios anteriores a 2015 cuando esa fue la fecha r
   assert.equal(exercises[0].startDate, '1998-09-03');
 });
 
-test('permite iniciar registro contable desde 2012 y rechaza fechas anteriores o inválidas', () => {
+test('permite cualquier fecha contable válida, incluido 2012 y años anteriores', () => {
   assert.equal(isValidAccountingStartDate('2012-01-01'), true);
   assert.equal(isValidAccountingStartDate('2012-05-17'), true);
-  assert.equal(isValidAccountingStartDate('2011-12-31'), false);
-  assert.equal(isValidAccountingStartDate('1995-01-01'), false);
+  assert.equal(isValidAccountingStartDate('2011-12-31'), true);
+  assert.equal(isValidAccountingStartDate('1995-01-01'), true);
   assert.equal(isValidAccountingStartDate('2026-02-30'), false);
+  assert.equal(isValidAccountingStartDate('1899-12-31'), true);
 });
 
 test('determina la escala monetaria histórica por la fecha efectiva legal', () => {
