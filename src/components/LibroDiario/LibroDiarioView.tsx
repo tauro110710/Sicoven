@@ -491,6 +491,7 @@ export const LibroDiarioView: React.FC = () => {
                               </td>
                               <td className="py-2 px-4 text-right font-mono font-medium text-slate-900">
                                 {item.creditBs > 0 ? formatBs(item.creditBs) : '-'}
+                                {item.creditBs > 0 && <div className="text-[10px] font-normal text-indigo-600">Digital: {formatBs(Number(item.creditDigitalBs || normalizeBolivarAmountForDate(item.creditBs, entry.date).digitalBolivars))}</div>}
                               </td>
                             </>
                           )}
