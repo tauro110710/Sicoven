@@ -118,7 +118,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad, los costos y la tasa BCV sean válidos.'); return; }
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0) { setError('Verifique que la cantidad y los costos sean válidos.'); return; }
+    // La tasa BCV es opcional para movimientos en bolívares; solo se rechaza si el contador
+    // ingresó un valor explícito que no es un número positivo válido.
+    if (bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.'); return; }
+
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
       if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }

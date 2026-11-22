@@ -351,7 +351,9 @@ export function validateInventoryMovement(input: {
     return 'La fecha del movimiento no es válida.';
   }
   if (!validPositive(input.quantity)) return 'La cantidad debe ser mayor que cero.';
-  if (!validPositive(input.bcvRate)) return 'La tasa BCV histórica debe ser mayor que cero.';
+  // bcvRate = 0 significa equivalencia USD pendiente (permitido para operaciones nominales en Bs.).
+  // Se rechaza solo si es NaN, Infinity o negativo.
+  if (!Number.isFinite(input.bcvRate) || input.bcvRate < 0) return 'La tasa BCV no puede ser negativa ni estar ausente.';
   if (!validNonNegative(input.unitCostBs)) return 'El costo unitario no puede ser negativo.';
   if (!validNonNegative(input.availableQuantity)) return 'La existencia disponible no es válida.';
   if (input.type === 'SALIDA' && input.quantity - input.availableQuantity > 1e-8) {

@@ -5704,40 +5704,42 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .slice().sort((a, b) => a.date.localeCompare(b.date));
     if (prior.length && movData.date < prior[prior.length - 1].date) throw new Error('El movimiento está fechado antes del último registro del Kardex. Importe primero los períodos históricos en orden cronológico para evitar saldos y costos incorrectos.');
     let unitCostBs = requestedCost;
-    let unitCostUsd = requestedCost / rate;
+    // Helper seguro: si no hay tasa, equivalencia USD = 0 (pendiente).
+    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
+    let unitCostUsd = toUsd(requestedCost);
     let totalCostBs = 0;
     let totalCostUsd = 0;
     let newStock = prod.currentStock;
     let newAverageBs = prod.avgCostBs;
-    let newAverageUsd = prod.avgCostBs / rate;
+    let newAverageUsd = toUsd(prod.avgCostBs);
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {
       unitCostBs = effectiveUnitCost;
-      unitCostUsd = unitCostBs / rate;
+      unitCostUsd = toUsd(unitCostBs);
       const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
       totalCostBs = Math.round(Number(movData.quantity) * effectiveUnitCost * 100) / 100;
-      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+      totalCostUsd = toUsd(totalCostBs);
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(prior, prod.currentStock);
         const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = toUsd(totalCostBs);
         unitCostBs = fifo.unitCostBs;
-        unitCostUsd = unitCostBs / rate;
+        unitCostUsd = toUsd(unitCostBs);
         newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
         newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
-        newAverageUsd = newAverageBs / rate;
+        newAverageUsd = toUsd(newAverageBs);
       } else {
         unitCostBs = prod.avgCostBs;
-        unitCostUsd = unitCostBs / rate;
+        unitCostUsd = toUsd(unitCostBs);
         totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = toUsd(totalCostBs);
         newStock = prod.currentStock - Number(movData.quantity);
       }
     } else {
@@ -5748,7 +5750,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (prod.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(prior, prod.currentStock);
         const fifoAdjustment = applyFifoAdjustment(layers, targetStock - prod.currentStock,
-          requestedCost, requestedCost / rate, movData.date, movData.documentRef);
+          requestedCost, toUsd(requestedCost), movData.date, movData.documentRef);
         totalCostBs = fifoAdjustment.totalCostBs;
         totalCostUsd = fifoAdjustment.totalCostUsd;
         unitCostBs = fifoAdjustment.unitCostBs;
@@ -5762,9 +5764,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           newAverageUsd = weighted.unitCostUsd;
         }
         totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
-        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        totalCostUsd = toUsd(totalCostBs);
         unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
-        unitCostUsd = unitCostBs / rate;
+        unitCostUsd = toUsd(unitCostBs);
       }
     }
 
@@ -5832,7 +5834,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
       lastCostBs: movData.type === 'ENTRADA' ? effectiveUnitCost : p.lastCostBs,
-      lastCostUsd: movData.type === 'ENTRADA' ? effectiveUnitCost / rate : p.lastCostUsd
+      lastCostUsd: movData.type === 'ENTRADA' ? toUsd(effectiveUnitCost) : p.lastCostUsd
     } : p));
     if (generatedEntries.length > 0) setJournalEntries(prev => [...prev, ...generatedEntries]);
     return newMov;
