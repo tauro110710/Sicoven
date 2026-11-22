@@ -399,6 +399,12 @@ export interface SupplierDebitNoteReview {
 }
 
 export interface PurchaseRecord {
+  /** Automatic scale snapshot based on invoice date. */
+  monetaryEraId?: 'BOLIVAR_ORIGINAL' | 'BOLIVAR_FUERTE' | 'BOLIVAR_SOBERANO' | 'BOLIVAR_DIGITAL';
+  totalAmountDigitalBs?: string;
+  taxableBaseDigitalBs?: string;
+  exemptAmountDigitalBs?: string;
+  vatAmountDigitalBs?: string;
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
   /** Cuenta explícita de débito para compras no inventariables; nunca se infiere por defecto. */
@@ -645,6 +651,11 @@ export type InventoryMovementImportDraft =
   Partial<Omit<InventoryMovement, 'id' | 'companyId' | 'productId' | 'date' | 'type' | 'concept' | 'documentRef' | 'quantity' | 'unitCostBs'>>;
 
 export interface InventoryMovement {
+  /** Automatic scale snapshot based on movement date. */
+  monetaryEraId?: 'BOLIVAR_ORIGINAL' | 'BOLIVAR_FUERTE' | 'BOLIVAR_SOBERANO' | 'BOLIVAR_DIGITAL';
+  unitCostDigitalBs?: string;
+  totalCostDigitalBs?: string;
+  balanceTotalDigitalBs?: string;
   id: string;
   companyId: string;
   productId: string;
