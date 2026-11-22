@@ -3254,6 +3254,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
     }
+    if (targetCompany.accountingStartDate &&
+        (purchaseData.invoiceDate < targetCompany.accountingStartDate ||
+         purchaseData.accountCreditDate < targetCompany.accountingStartDate)) {
+      throw new Error('Las fechas de la compra no pueden ser anteriores al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
+    }
     if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
       throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
     }
