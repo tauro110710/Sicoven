@@ -3247,6 +3247,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
     if (!isValidIsoDate(purchaseData.invoiceDate) || !isValidIsoDate(purchaseData.accountCreditDate || '') ||
+        purchaseData.invoiceDate < (targetCompany.accountingStartDate || '2012-01-01') ||
+        purchaseData.accountCreditDate! < (targetCompany.accountingStartDate || '2012-01-01') ||
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
