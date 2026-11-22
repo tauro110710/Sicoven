@@ -487,6 +487,7 @@ jobs:
             "Commit: $env:GITHUB_SHA",
             "Branch: $branch",
             "Build UTC: $([DateTime]::UtcNow.ToString('o'))",
+            "Actions Run: $env:GITHUB_RUN_ID (#$env:GITHUB_RUN_NUMBER)",
             'Platform: Windows x64',
             "Installer: $($installer.Name)",
             "SHA256: $hash",
