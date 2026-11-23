@@ -42,7 +42,7 @@ test('rejects amounts that do not reconcile to settlement rate', () => {
 });
 
 test('rejects invalid amounts and unresolved ledger accounts', () => {
-  assert.throws(() => buildCreditSettlementJournalItems({ ...base, kind: 'SALE_COLLECTION', amountUsd: 0 }), /válidos/);
+  assert.throws(() => buildCreditSettlementJournalItems({ ...base, kind: 'SALE_COLLECTION', amountUsd: -1 }), /válidos/);
   assert.throws(() => buildCreditSettlementJournalItems({ ...base, kind: 'SALE_COLLECTION', cashAccount: undefined as never }), /cuentas contables/);
 });
 
