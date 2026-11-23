@@ -1,4 +1,5 @@
 import type { Account, JournalEntry } from './accounting';
+import { normalizeVenezuelanAmountToCurrentScale } from './historicalAccountingCalendar';
 
 export type FinancialDisclosureKind =
   | 'ACCOUNTING_POLICY'
@@ -97,8 +98,8 @@ export function buildDisclosureAccountMovements(
         debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
         balanceBs: 0, balanceUsd: 0, entryIds: []
       };
-      row.debitBs += line.debitBs;
-      row.creditBs += line.creditBs;
+      row.debitBs += Number(normalizeVenezuelanAmountToCurrentScale(String(line.debitBs), entry.date));
+      row.creditBs += Number(normalizeVenezuelanAmountToCurrentScale(String(line.creditBs), entry.date));
       row.debitUsd += line.debitUsd;
       row.creditUsd += line.creditUsd;
       if (!row.entryIds.includes(entry.id)) row.entryIds.push(entry.id);

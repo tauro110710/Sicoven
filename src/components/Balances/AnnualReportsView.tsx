@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { normalizeVenezuelanAmountToCurrentScale } from '../../types/historicalAccountingCalendar';
 import { buildEquityChangesReport } from '../../types/equityChanges';
 import { buildDisclosureAccountMovements, type FinancialDisclosureKind } from '../../types/financialDisclosures';
 import { ArrowLeft, Download, FileSpreadsheet, Printer, ShieldAlert, TrendingUp } from 'lucide-react';
@@ -83,8 +84,8 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
         let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
         for (const entry of fiscalEntries) for (const item of entry.items) {
           if (item.accountCode !== account.code) continue;
-          debitBs += Number(item.debitBs || 0);
-          creditBs += Number(item.creditBs || 0);
+          debitBs += Number(normalizeVenezuelanAmountToCurrentScale(String(item.debitBs || 0), entry.date));
+          creditBs += Number(normalizeVenezuelanAmountToCurrentScale(String(item.creditBs || 0), entry.date));
           debitUsd += Number(item.debitUsd || 0);
           creditUsd += Number(item.creditUsd || 0);
         }
