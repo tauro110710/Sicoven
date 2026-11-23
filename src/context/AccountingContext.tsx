@@ -2336,7 +2336,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
       let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
       try {
-        fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+        if (draft.amountUsd <= 0 || invoiceRate <= 0 || draft.bcvRate <= 0) throw new Error('No hay equivalencia USD suficiente para proponer ajuste fiscal.');
+      fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
           totalAmountUsd: Number(document.totalAmountUsd || 0),
           taxableBaseUsd: Number(document.taxableBaseUsd || 0),
           vatAmountUsd: Number(document.vatAmountUsd || 0),
@@ -3002,7 +3003,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (paymentDateError) throw new Error(paymentDateError);
     }
     const balance = getCreditBalance(draft.documentId, kind);
-    const error = validateCreditSettlement(draft, balance.outstandingUsd);
+    const error = validateCreditSettlement(draft, balance.outstandingUsd, balance.outstandingBsAtInvoiceRate);
     if (error) throw new Error(error);
     const isBankTransfer = draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD';
     const settlementBank = isBankTransfer
@@ -3032,7 +3033,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       item.documentId === draft.documentId && item.kind === kind && !item.isReversed);
     const duplicate = prior.some(item => {
       const sameDate = item.settlementDate === draft.settlementDate;
-      const sameAmount = Math.round(item.amountUsd * 100) === Math.round(draft.amountUsd * 100);
+      const sameAmount = Math.round(item.amountUsd * 100) === Math.round(draft.amountUsd * 100) && Math.round(item.amountBs * 100) === Math.round(draft.amountBs * 100);
       const sameMethod = item.method === draft.method && item.bankAccountId === draft.bankAccountId;
       const sameRate = Math.round(item.bcvRate * 1000000) === Math.round(draft.bcvRate * 1000000);
       const sameReference = Boolean(normalizedReference && item.reference?.trim().toLocaleLowerCase() === normalizedReference);
@@ -3057,16 +3058,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const invoiceRate = Number(document.bcvRate) > 0
       ? Number(document.bcvRate)
       : (Number(document.totalAmountUsd) > 0 ? Number(document.totalAmountBs) / Number(document.totalAmountUsd) : 0);
-    if (!Number.isFinite(invoiceRate) || invoiceRate <= 0) {
-      throw new Error('La factura no tiene una tasa de emisión válida. Corrija la tasa original antes de registrar el pago.');
+    if (draft.amountUsd > 0 && (!Number.isFinite(invoiceRate) || invoiceRate <= 0)) {
+      throw new Error('La factura tiene saldo USD pero no conserva una tasa de emisión válida; no se registró el pago.');
     }
-    const amountAtInvoiceRate = Math.round(draft.amountUsd * invoiceRate * 100) / 100;
-    const amountAtSettlementRate = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
     const actualAmountBs = Math.round(draft.amountBs * 100) / 100;
-    if (Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
+    const amountAtInvoiceRate = draft.amountUsd > 0
+      ? Math.round(draft.amountUsd * invoiceRate * 100) / 100
+      : actualAmountBs;
+    const amountAtSettlementRate = draft.bcvRate > 0
+      ? Math.round(draft.amountUsd * draft.bcvRate * 100) / 100
+      : actualAmountBs;
+    if (draft.amountUsd > 0 && draft.bcvRate > 0 && Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
       throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.');
     }
-    const fxDifferenceBs = Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100;
+    const fxDifferenceBs = draft.amountUsd > 0 && invoiceRate > 0
+      ? Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100
+      : 0;
     const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
     // La propuesta fiscal es informativa: nunca debe impedir ni dejar a medias
     // el registro contable válido de una liquidación histórica.
