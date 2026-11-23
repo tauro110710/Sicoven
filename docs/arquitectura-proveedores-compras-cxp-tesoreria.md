@@ -1,0 +1,50 @@
+# Arquitectura integrada de proveedores, compras, CxP y tesorería
+
+**Estado:** directiva de diseño para implementación y auditoría en SICOVEN.  
+**Alcance:** registro maestro de proveedores, origen de compras, cuentas por pagar y aplicación de pagos. No autoriza cambios en `main`, fusión del PR ni publicación.
+
+## Principios
+
+1. **Una sola operación fuente:** la compra es el evento origen de la obligación; CxP no duplica ni vuelve a registrar la factura.
+2. **Proveedor centralizado, registro oportuno:** existe un maestro de proveedores con identificación fiscal, nombre legal, contactos y estado activo/inactivo. El usuario puede seleccionar uno existente o crear uno desde la compra. No se exige navegar previamente al módulo Proveedores.
+3. **Persistencia atómica:** registrar una compra y sus efectos vinculados (asiento, movimientos de inventario/Kardex cuando aplique, documento CxP y relación proveedor) debe ser una transacción indivisible. Si falla una validación, se revierte todo.
+4. **Cuentas por pagar automáticas:** compra a crédito genera saldo de CxP por la porción pendiente. Compra de contado genera compra y pago vinculados; no queda saldo abierto.
+5. **Pagos trazables:** pagos parciales/totales se registran en Tesorería y se aplican a facturas seleccionadas, conservando fecha, moneda, tasa aplicable, cuenta de caja/banco, referencia, soporte y distribución. Nunca sobrescribir ni eliminar el historial.
+6. **Estado de cuenta proveedor:** consolidar facturas, notas de crédito/débito válidas, anticipos, aplicaciones, pagos, reversos y saldos por fecha; permitir consulta de documentos y asiento origen.
+7. **Control de saldos:** no permitir aplicar pagos o créditos por encima del saldo disponible, salvo que la operación se registre explícitamente como anticipo o saldo a favor, con su tipo y trazabilidad.
+8. **Notas de crédito y débito:** deben vincularse al comprobante afectado cuando corresponda, respetar requisitos fiscales, validar los asientos y afectar CxP/Kardex/retenciones según naturaleza y fecha; no se relajarán controles para pasar tests.
+9. **Histórico monetario:** cada compra, obligación y pago conserva fecha efectiva y valores originales. Las validaciones monetarias aplican la escala y política correspondiente a la fecha, sin exigir USD como base de cuadre para operaciones anteriores al inicio de la dualidad definido por SICOVEN.
+10. **Inmutabilidad y auditoría:** correcciones mediante reversos/ajustes documentados. El maestro de proveedores puede editarse o desactivarse con restricciones; documentos históricos preservan su snapshot de identificación para evitar cambios retroactivos por editar la ficha.
+
+## Flujo
+
+- **Compra:** seleccionar proveedor o crear ficha inline → registrar factura, fecha, términos, moneda/tasa, impuestos/retenciones, líneas y cuentas → prevalidar → guardar atómicamente.
+- **Contado:** asiento y compra vinculados, pago aplicado en la misma transacción y saldo CxP cero.
+- **Crédito:** asiento y compra vinculados; documento CxP automático por monto neto pendiente.
+- **Abono:** Tesorería registra pago → aplica distribución a una o varias facturas del mismo proveedor → recalcula saldo → asiento y audit trail vinculados.
+- **Anticipo:** registrar desembolso como anticipo al proveedor (no como factura ni como pago aplicado), luego imputarlo a compras o documentar reembolso.
+- **Consulta:** módulo CxP ofrece pendientes, vencimientos, pagos, anticipos y estado de cuenta; no crea obligaciones manuales duplicadas a partir de una factura ya registrada.
+
+## Criterios de aceptación
+
+- Alta inline de proveedor y selección de proveedor existente desde Compras.
+- Detección de duplicidad por identificador fiscal, con revisión antes de crear.
+- Compra a crédito crea automáticamente la obligación y la vinculación al asiento.
+- Compra de contado queda totalmente pagada y no duplica movimientos de caja/banco.
+- Pagos parciales, pagos totales, distribución a varias facturas, anticipos, aplicación de anticipo y reembolso.
+- Estado de cuenta, saldos pendientes y vencimientos consistentes con documentos fuente.
+- Transacciones atómicas y persistencia SQLite; pruebas de rollback y concurrencia.
+- Importación/restauración no puede eludir las mismas validaciones de integridad.
+- No regresiones en validación fiscal, retenciones, notas de crédito/débito, Kardex ni coherencia monetaria histórica.
+
+## Plan de implementación
+
+1. Auditar modelo, IPC, persistencia, pantallas y tests actuales; identificar qué ya existe y evitar duplicarlo.
+2. Definir/ajustar modelo de proveedor y migración segura de datos.
+3. Integrar alta/selección inline en compras.
+4. Garantizar generación/conciliación automática de CxP desde compras.
+5. Unificar pagos y aplicaciones con Tesorería/CxP.
+6. Implementar estados de cuenta y consultas de saldos.
+7. Añadir pruebas unitarias, integración SQLite, rollback, importación y concurrencia.
+8. Ejecutar CI y build Windows; revisar los cuatro fallos contables preexistentes y mantenerlos como pendientes hasta que se resuelvan y pasen.
+
