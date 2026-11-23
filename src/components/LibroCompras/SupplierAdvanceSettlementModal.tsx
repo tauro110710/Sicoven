@@ -138,7 +138,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
             <label className="text-xs font-semibold text-slate-700">Tasa BCV {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
           </div>
           {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
-            <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>
+            <h3 className="text-xs font-bold text-slate-800">Previsualización de distribución por notas de crédito</h3><p className="mt-1 text-xs text-slate-500">Vista parcial: solo muestra anticipos originados en notas de crédito. Los desembolsos directos también participan en el FIFO cronológico real al guardar; pueden cubrir importes que esta vista no muestra.</p>
             {allocationPreview.error ? <p role="alert" className="mt-2 text-xs text-amber-800">{allocationPreview.error}</p> :
               allocationPreview.rows.length === 0 ? <p className="mt-2 text-xs text-slate-500">No hay notas disponibles para distribuir este importe.</p> :
               <div className="mt-2 overflow-x-auto">
