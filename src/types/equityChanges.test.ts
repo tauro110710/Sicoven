@@ -17,6 +17,20 @@ const entry = (id: string, date: string, type: JournalEntry['type'], items: Jour
 });
 
 describe('equity changes report', () => {
+  it('normalizes Bs movements across the 2021 reconversion boundary to current scale', () => {
+    const entries = [
+      entry('pre-digital', '2021-09-30', 'MANUAL', [
+        { accountCode: '3.1', accountName: 'Capital social', debitBs: 0, creditBs: 1000000, debitUsd: 0, creditUsd: 1 }
+      ]),
+      entry('digital-era', '2021-10-01', 'MANUAL', [
+        { accountCode: '3.1', accountName: 'Capital social', debitBs: 0, creditBs: 1, debitUsd: 0, creditUsd: 1 }
+      ])
+    ];
+    const report = buildEquityChangesReport(entries, accounts, 'co-1', 2021);
+    assert.equal(report.movementTotalBs, 2);
+    assert.equal(report.rows.find(row => row.accountCode === '3.1')?.movementBs, 2);
+  });
+
   it('reconciles opening equity, posted movements and a transferred result in both currencies', () => {
     const entries = [
       entry('opening-2026', '2026-01-01', 'APERTURA', [

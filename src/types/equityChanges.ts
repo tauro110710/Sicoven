@@ -1,4 +1,5 @@
 import type { Account, JournalEntry } from './accounting';
+import { normalizeVenezuelanAmountToCurrentScale } from './historicalAccountingCalendar';
 
 export interface EquityChangeRow {
   accountCode: string;
@@ -60,7 +61,7 @@ const signedProfitLoss = (entry: JournalEntry, accountsByCode: Map<string, Accou
   entry.items.reduce((sum, item) => {
     if (!isProfitLoss(accountsByCode.get(item.accountCode))) return sum;
     return {
-      bs: sum.bs + amount(item.creditBs) - amount(item.debitBs),
+      bs: sum.bs + Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.creditBs) - amount(item.debitBs)), entry.date)),
       usd: sum.usd + amount(item.creditUsd) - amount(item.debitUsd)
     };
   }, { bs: 0, usd: 0 });
@@ -114,7 +115,7 @@ export function buildEquityChangesReport(
       if (!equityCodes.has(item.accountCode)) continue;
       const account = accountsByCode.get(item.accountCode);
       addOpening(item.accountCode, account?.name || item.accountName,
-        amount(item.creditBs) - amount(item.debitBs),
+        Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.creditBs) - amount(item.debitBs)), openingEntry.date)),
         amount(item.creditUsd) - amount(item.debitUsd));
     }
   } else {
@@ -123,7 +124,7 @@ export function buildEquityChangesReport(
         if (!equityCodes.has(item.accountCode)) continue;
         const account = accountsByCode.get(item.accountCode);
         addOpening(item.accountCode, account?.name || item.accountName,
-          amount(item.creditBs) - amount(item.debitBs),
+          Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.creditBs) - amount(item.debitBs)), entry.date)),
           amount(item.creditUsd) - amount(item.debitUsd));
       }
     }
@@ -154,7 +155,7 @@ export function buildEquityChangesReport(
     for (const item of entry.items) {
       if (!equityCodes.has(item.accountCode)) continue;
       const account = accountsByCode.get(item.accountCode);
-      const debitBs = amount(item.debitBs), creditBs = amount(item.creditBs);
+      const debitBs = Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.debitBs)), entry.date)), creditBs = Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.creditBs)), entry.date));
       const debitUsd = amount(item.debitUsd), creditUsd = amount(item.creditUsd);
       const netBs = creditBs - debitBs, netUsd = creditUsd - debitUsd;
       addMovement(item.accountCode, account?.name || item.accountName, netBs, netUsd);
