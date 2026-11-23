@@ -35,7 +35,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
   const bcvRate = parseAmount(bcvRateInput) || 0;
   const effectiveOpeningDate = openingDate || (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
-  const rateRequired = isBcvRateRequiredForDate(effectiveOpeningDate);
+  const rateRequired = parsedOpeningBalance > 0 && isBcvRateRequiredForDate(effectiveOpeningDate);
   const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
   const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
   const handleSubmit = async (e: React.FormEvent) => {
