@@ -35,7 +35,9 @@ export interface PurchaseCreditNoteAmounts {
     originalMovementId: string;
     quantity: number;
     unitCostBs: number;
+    unitCostUsd: number;
     inventoryCostBs: number;
+    inventoryCostUsd: number;
   }>;
 }
 
@@ -211,6 +213,10 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     if (!Number.isFinite(currentStock) || currentStock < 0 || quantity > currentStock + 0.000001) {
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
+    const returnUnitCostUsd = Number(movement.unitCostUsd);
+    if (!Number.isFinite(returnUnitCostUsd) || returnUnitCostUsd < 0) {
+      throw new Error('El costo USD de la entrada original no es válido para la devolución.');
+    }
     let returnUnitCostBs = Number(line.unitCostBs);
     if (product.costingMethod === 'PEPS') {
       const availableOriginalLayer = Number(requested.fifoLayerAvailableQuantity);
@@ -229,7 +235,8 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     else taxableBaseBs += lineValue;
     lineAmounts.push({
       productId: product.id, originalMovementId: movement.id,
-      quantity, unitCostBs: returnUnitCostBs, inventoryCostBs: lineValue
+      quantity, unitCostBs: returnUnitCostBs, unitCostUsd: returnUnitCostUsd,
+      inventoryCostBs: lineValue, inventoryCostUsd: Math.round((quantity * returnUnitCostUsd + Number.EPSILON) * 1000000) / 1000000
     });
   }
 
