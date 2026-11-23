@@ -142,3 +142,28 @@ Se inspeccionó además `importInventoryMovements`:
 ### Conciliación que debe preceder al cambio de política
 
 La prueba de conciliación no debe limitarse a comparar cantidad física. Para cada artículo y fecha, cruzar: cantidad de movimiento y balance; costo Bs. nominal y su era; USD histórico; valor del saldo; cuenta de inventario; asiento generado y referencia documental. Debe cubrir compras, ventas/CMV, devolución de cliente, devolución física a proveedor, producción/WIP, ajustes positivos/negativos, merma/autoconsumo e importaciones, con métodos promedio y PEPS, y períodos cerrados/reabiertos. Los resultados deben identificar diferencias sin reescribir la fuente histórica.
+
+
+## Auditoría de valoración del inventario contra cuentas de mayor y cierre/apertura (23-11-2026)
+
+### Catálogo y cuentas de inventario
+
+El catálogo estándar distingue cuentas de inventario de mercancías (1.1.4.01), materias primas e insumos (1.1.4.02), provisión por desvalorización (1.1.4.03) y productos en proceso (1.1.4.04). Los códigos existen como cuentas imputables separadas; por tanto, la conciliación debe segmentar por cuenta y naturaleza, no comparar un único total de existencias de producto con todo el grupo contable.
+
+
+### Comprobaciones de balance y selección temporal
+
+- `accountingReportIntegrity.ts` define una comprobación de balance en Bs. y USD, filtrado por empresa y selección de asientos por año/tipo de reporte. Esa validación comprueba que el balance presentado cuadre, pero no demuestra que el valor del inventario calculado desde cantidades y costos sea igual al saldo de las cuentas de inventario.
+- La selección de situación financiera usa la última apertura anual vinculada como frontera de arrastre; el reporte de resultados limita movimientos al año seleccionado y excluye asientos de apertura/cierre. La frontera evita duplicar saldos ya trasladados, pero necesita una prueba de reconciliación de escala en los asientos de apertura y cierre.
+
+### Riesgo específico del cierre y apertura anual
+
+- `buildClosingEntryItems` reexpresa líneas Bs. de cuentas de ingresos, costos y gastos entre la fecha del asiento y la fecha de cierre, pero deja USD sin reexpresión; las cuentas de balance se acumulan aparte en valores Bs. nominales y USD.
+- `buildOpeningEntryItems` reexpresa los saldos Bs. de cuentas de balance entre la fecha de cada asiento y la fecha de apertura; el resultado del período también se reexpresa hacia la apertura. USD se conserva sin conversión.
+- Esto es evidencia de tratamientos distintos, deliberados por clase de cuenta, en los procesos de cierre y apertura. No confirma por sí solo un error de balance, pero obliga a probar que inventario (auxiliar/Kardex), cuentas de inventario de mayor y asientos de traslado se mantienen comparables y conciliados al cruzar reconversiones. El cierre reexpresa resultados nominales, no revalúa automáticamente el inventario auxiliar descrito en las auditorías anteriores.
+
+### Diferencia entre controles existentes y conciliación faltante
+
+Los controles actuales verifican cuadratura de asientos, selección temporal y cantidades PEPS. La auditoría no ha encontrado evidencia en estas funciones de una conciliación monetaria independiente que compare, por artículo/fecha/cuenta, valor de Kardex normalizado, saldo mayor de inventario, movimientos y costo de ventas. La ausencia de esa comprobación en los módulos inspeccionados no se debe extrapolar como ausencia total en toda la interfaz.
+
+**Próximo paso de auditoría:** localizar los reportes UI que consumen estos cálculos, identificar su fuente de valor (mayor, auxiliar o producto/costo), y diseñar una conciliación de inventario por cuenta que explicite fecha de referencia y escala Bs., preserve USD y valores nominales originales, y detecte diferencias sin modificar registros históricos.
