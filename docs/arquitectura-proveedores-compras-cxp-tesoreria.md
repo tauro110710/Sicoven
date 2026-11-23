@@ -398,3 +398,34 @@ Se revisó el test `src/types/journalReversal.test.ts` (825 líneas) y el flujo 
 
 
 **Conclusión:** el test existente confirma que la reversión está protegida en escenarios duales, pero no cubre la operación Bs-only permitida por la política histórica. La secuencia de persistencia y actualización React presenta riesgo de estado no revertido ante fallo de confirmación; es riesgo de integración confirmado por código, no pérdida de datos demostrada. No se ejecutaron pruebas locales.
+
+
+## Auditoría de consecutivos, referencias, reversos encadenados y aislamiento por empresa (23-11-2026)
+
+### Controles confirmados
+
+- **Correlativo por empresa:** `addJournalEntry` calcula el máximo de `entryNumber` de la empresa destino y lo combina con `journalSequenceRef` indexado por `companyId`; los consecutivos de otras empresas no forman parte de ese cálculo.
+- **Validación SQLite de secuencias:** `validateAccountingSnapshot` exige números enteros crecientes por empresa y rechaza reutilizar números previos o duplicarlos dentro del snapshot.
+- **Reversión única y vínculo:** el helper de reversión detecta contra-asientos y fuentes ya reversadas. El validador SQLite verifica misma empresa, vínculo recíproco, referencia `REV-<número>`, tipo AJUSTE, fecha, razón, papel de trabajo, tasa y que cada línea invierta Debe/Haber de la fuente. También rechaza una segunda reversión del mismo origen.
+- **Aislamiento de origen:** la función React busca el asiento fuente en la empresa activa; el validador de persistencia exige que la empresa del origen coincida con la empresa del contra-asiento.
+- **AIA:** el validador exige que las líneas de resultados se reclasifiquen a una única cuenta patrimonial de movimiento, mientras las cuentas de balance se conservan.
+
+### Defecto de integración detectado: vínculo recíproco de reversión no emitido desde React
+
+En el flujo `reverseJournalEntry`, tras `addJournalEntry` se actualizan documentos auxiliares (ventas, compras, liquidaciones, anticipos, activos y conciliación bancaria), pero no se encontró una actualización del asiento fuente que establezca `reversedByEntryId = reversal.id` y `isAdjusted = true`. El contra-asiento nuevo sí recibe `reversalOfEntryId`.
+
+Sin embargo, el validador de `electron/accounting-integrity.cjs` exige que el asiento fuente en el siguiente snapshot tenga `reversedByEntryId === entry.id` y `isAdjusted === true`. Los tests de integridad construyen manualmente el asiento fuente ya marcado para validar el contra-asiento; no cubren la ejecución end-to-end del flujo React.
+
+**Impacto probable y bloqueante:** la reversión puede quedar rechazada por SQLite al validar el snapshot, aunque el contra-asiento se haya agregado al estado React. La confirmación depende del efecto de persistencia/rollback; el caso de integración no está cubierto por los tests revisados. No se ejecutó la aplicación para confirmar el comportamiento en runtime.
+
+### Cobertura revisada y brechas
+
+- Tests existentes: rechazo de consecutivo inferior, contra-asiento que no invierte exactamente, falta de vínculo/papel de trabajo, segunda reversión y reversión de contra-asiento.
+- No se encontró prueba dedicada que intente cruzar empresas en el vínculo de reversión o simule concurrencia real de correlativos.
+- No se encontró prueba end-to-end que invoque `reverseJournalEntry`, persista el snapshot y confirme el vínculo recíproco que exige SQLite.
+- La referencia `REV-<entryNumber>` no incluye companyId; su validación es contextual al origen y a la empresa, por lo que no debe tratarse como clave global.
+- Sigue vigente el bloqueo Bs-only previo a 2018 en `buildReversalItems`, que requiere totales positivos tanto en Bs como USD; su cobertura se documentó en auditoría anterior.
+
+### Conclusión
+
+La secuencia de números está protegida por empresa y SQLite rechaza reutilización/duplicidad. El aislamiento de empresa y los contra-asientos exactos están protegidos por el validador. Pero la inspección encontró una discrepancia concreta entre el flujo React de reversión y los requisitos del validador: el flujo no parece emitir el enlace recíproco que SQLite exige. Debe corregirse y cubrirse con prueba de integración antes de considerar segura la reversión contable. La inspección de código no sustituye una ejecución local.
