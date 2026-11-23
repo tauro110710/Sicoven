@@ -74,7 +74,7 @@ export function buildDisclosureAccountMovements(
   const start = `${fiscalYear}-01-01`;
   const end = `${fiscalYear}-12-31`;
   const scoped = entries.filter(entry =>
-    entry.companyId === companyId && entry.date >= start && entry.date <= end && entry.type !== 'CIERRE'
+    entry.companyId === companyId && entry.date >= start && entry.date <= end && entry.type !== 'CIERRE' && entry.type !== 'APERTURA'
   );
   const accountTypes = new Map(accounts.map(account => [account.code, account.type]));
   const byCode = new Map<string, DisclosureAccountMovement>();
