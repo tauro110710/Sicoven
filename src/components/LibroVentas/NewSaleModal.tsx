@@ -4,6 +4,7 @@ import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -15,11 +16,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
-  const todayIso = new Date().toISOString().split('T')[0];
-  const startDate = (() => {
-    const s = currentCompany?.accountingStartDate;
-    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;
-  })();
+  const todayIso = getLocalISODate();
+  const accountingStartDate = isValidIsoCalendarDate(currentCompany?.accountingStartDate)
+    ? currentCompany.accountingStartDate
+    : undefined;
+  const startDate = accountingStartDate || todayIso;
 
   const [invoiceDate, setInvoiceDate] = useState<string>(startDate);
   React.useEffect(() => {
@@ -65,7 +66,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
-  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
+  const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); if (!Number.isFinite(d.getTime())) return ''; d.setDate(d.getDate() + creditDays); return getLocalISODate(d); })();
   // Vinculación de líneas de inventario al Kardex
   const [linkInventory, setLinkInventory] = useState(false);
   const [saleInventoryLines, setSaleInventoryLines] = useState<Array<{productId:string; quantity:string; unitPriceBs:string}>>([
@@ -293,6 +294,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                 <input
                   type="date"
                   required
+                  min={accountingStartDate}
                   value={invoiceDate}
                   onChange={e => setInvoiceDate(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"

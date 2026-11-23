@@ -65,6 +65,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
 import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
@@ -1674,6 +1675,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Registrar la empresa');
     // La fecha de registro es administrativa y automática; nunca sustituye la
     // fecha histórica desde la que el contador reconstruirá la contabilidad.
+    if (!isValidIsoDate(comp.accountingStartDate)) {
+      throw new Error('La empresa requiere una fecha de inicio contable válida.');
+    }
+    if (comp.operationalStartDate && !isValidIsoDate(comp.operationalStartDate)) {
+      throw new Error('La fecha real de inicio de operaciones debe ser válida.');
+    }
     const companyToCreate: Omit<Company, 'id'> = {
       ...comp,
       registeredAt: comp.registeredAt || new Date().toISOString()
@@ -1880,7 +1887,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('El asiento requiere SQLite local de escritorio disponible y lista. No se registró.');
     }
-    if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
+    if (!isOperationDateWithinAccountingStart(entry.date, targetCompany.accountingStartDate)) {
+      throw new Error('La fecha del asiento no puede ser anterior al inicio contable de la empresa (' + (targetCompany.accountingStartDate || 'no definido') + ') o no es válida.');
+    }
     const authorizedYearClose = allowSystemYearClosing && entry.type === 'CIERRE' &&
       entry.date === String(targetCompany.fiscalYear) + '-12-31' &&
       entry.referenceDoc === 'CIERRE:' + targetCompany.id + ':' + entry.date;
@@ -3196,15 +3205,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       validateRetentionVoucherSupplierEmail(purchaseData.supplierEmail, issueDate);
     }
     const rate = Number(purchaseData.bcvRate);
-    // La tasa BCV es obligatoria solo cuando el medio de pago requiere equivalencia en divisas
-    // (IGTF, Zelle, transferencia internacional, criptomonedas, efectivo extranjero).
-    // Para compras nominales en bolívares sin divisa, la tasa es opcional; los importes USD
-    // quedan en cero (equivalencia pendiente) hasta que el contador suministre la tasa histórica.
+    // La tasa BCV es obligatoria para medios de pago en divisas, no para operaciones
+    // nominales en bolívares. Sin tasa, la equivalencia USD queda pendiente (0).
     const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
     const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '');
-    const purchaseNeedsHistoricalRate = isValidIsoDate(purchaseData.invoiceDate) && purchaseData.invoiceDate >= '2018-01-01';
-    if ((purchaseNeedsRate || purchaseNeedsHistoricalRate) && (!Number.isFinite(rate) || rate <= 0)) {
-      throw new Error('La tasa BCV es obligatoria para compras desde 2018 y para operaciones pagadas en divisas. Registre la tasa histórica antes de guardar.');
+    if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
     // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
     const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
@@ -3256,6 +3262,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
+    }
+    if (targetCompany.accountingStartDate &&
+        (purchaseData.invoiceDate < targetCompany.accountingStartDate ||
+         (purchaseData.accountCreditDate || '') < targetCompany.accountingStartDate)) {
+      throw new Error('Las fechas de la compra no pueden ser anteriores al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
     }
     if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
       throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
@@ -4573,6 +4584,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
+    if (targetCompany.accountingStartDate && saleData.invoiceDate < targetCompany.accountingStartDate) {
+      throw new Error('La fecha de la venta no puede ser anterior al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
+    }
     if (saleData.documentType !== '01') {
       throw new Error('Las notas de débito/crédito de clientes requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
     }
@@ -5441,6 +5455,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA') {
         throw new Error('Importación bloqueada en fila ' + (index + 2) + ': las devoluciones a proveedor requieren una nota de crédito conciliada con factura, Kardex, CxP e impuestos. No se importó ningún movimiento.');
       }
+      if (!isOperationDateWithinAccountingStart(row.date, targetCompany.accountingStartDate)) throw new Error('Fila ' + (index + 2) + ': la fecha del movimiento es inválida o anterior al inicio contable de la empresa (' + (targetCompany.accountingStartDate || 'no definido') + ').');
       if (targetCompany.closedThroughDate && row.date <= targetCompany.closedThroughDate) throw new Error('Fila ' + (index + 2) + ': la fecha está dentro del período cerrado hasta ' + targetCompany.closedThroughDate + '.');
       const product = virtualProducts.get(row.productId);
       if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa destino.');
@@ -5814,6 +5829,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
+    if (!isOperationDateWithinAccountingStart(movData.date, currentCompany.accountingStartDate)) {
+      throw new Error('La fecha del movimiento no puede ser anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ') o no es válida.');
+    }
     if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
@@ -6111,6 +6129,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    if (!isOperationDateWithinAccountingStart(date, currentCompany.accountingStartDate)) throw new Error('La fecha de producción es inválida o anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ').');
     const recipe = normalizeProductionRecipe(finished.bomComponents || [], finishedProductId);
     const productionReference = String(documentRef || '').trim();
     if (!productionReference) throw new Error('La orden de producción requiere una referencia única.');
@@ -7191,6 +7210,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !Number.isFinite(parsedDate.getTime()) ||
         parsedDate.toISOString().slice(0, 10) !== movData.date) {
       throw new Error('La fecha del movimiento bancario no es válida.');
+    }
+    if (!isOperationDateWithinAccountingStart(movData.date, currentCompany.accountingStartDate)) {
+      throw new Error('La fecha del extracto bancario no puede ser anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ').');
     }
     if (movData.type !== 'DEBIT' && movData.type !== 'CREDIT') {
       throw new Error('La naturaleza del movimiento bancario debe ser débito o crédito.');

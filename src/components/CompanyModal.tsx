@@ -3,6 +3,7 @@ import { useAccounting } from '../context/AccountingContext';
 import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
 import { AccountingFramework, TaxpayerType, IvaRetentionAgentBasis } from '../types/accounting';
 import { validateVenezuelanRif } from '../utils/formatters';
+import { isValidIsoCalendarDate } from '../utils/isoDateValidation';
 
 interface CompanyModalProps {
   isOpen: boolean;
@@ -66,18 +67,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       return;
     }
     if (!name.trim()) return;
-    const parsedAccountingStartDate = new Date(accountingStartDate + 'T00:00:00.000Z');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(accountingStartDate) ||
-        !Number.isFinite(parsedAccountingStartDate.getTime()) ||
-        parsedAccountingStartDate.toISOString().slice(0, 10) !== accountingStartDate) {
+    if (!isValidIsoCalendarDate(accountingStartDate)) {
       window.alert('Indique una fecha válida desde la que esta empresa comenzará su registro contable ordinario en SICOVEN.');
       return;
     }
     if (operationalStartDate) {
-      const parsedOperationalStartDate = new Date(operationalStartDate + 'T00:00:00.000Z');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(operationalStartDate) ||
-          !Number.isFinite(parsedOperationalStartDate.getTime()) ||
-          parsedOperationalStartDate.toISOString().slice(0, 10) !== operationalStartDate) {
+      if (!isValidIsoCalendarDate(operationalStartDate)) {
         window.alert('La fecha real de inicio de operaciones debe ser una fecha válida.');
         return;
       }

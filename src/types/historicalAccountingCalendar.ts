@@ -114,6 +114,20 @@ export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
  * Decimal strings are used internally so large 2015-era amounts do not lose integer precision.
  * Rounding belongs only to the applicable presentation/payment rule, never to source evidence.
  */
+function expandDecimalExponent(raw: string): string {
+  const match = raw.match(/^(-?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
+  if (!match || !match[4]) return raw;
+  const sign = match[1];
+  const whole = match[2];
+  const fraction = match[3] || '';
+  const digits = whole + fraction;
+  const point = whole.length + Number(match[4]);
+  if (!Number.isInteger(point) || Math.abs(point) > 10000) return raw;
+  if (point <= 0) return sign + '0.' + '0'.repeat(-point) + digits;
+  if (point >= digits.length) return sign + digits + '0'.repeat(point - digits.length);
+  return sign + digits.slice(0, point) + '.' + digits.slice(point);
+}
+
 export function convertVenezuelanAmount(
   amount: string | number,
   fromEraId: VenezuelanMonetaryEraId,
@@ -122,7 +136,7 @@ export function convertVenezuelanAmount(
   const source = VENEZUELAN_MONETARY_ERAS.find(era => era.id === fromEraId);
   const target = VENEZUELAN_MONETARY_ERAS.find(era => era.id === toEraId);
   if (!source || !target) throw new Error('La escala monetaria de origen o destino no está reconocida.');
-  const raw = String(amount).trim();
+  const raw = expandDecimalExponent(String(amount).trim());
   if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error('El importe debe ser un número decimal válido.');
   const negative = raw.startsWith('-');
   const unsigned = negative ? raw.slice(1) : raw;
@@ -144,6 +158,12 @@ export function convertVenezuelanAmount(
   const result = normalizedFraction ? normalizedWhole + '.' + normalizedFraction : normalizedWhole;
   return negative && result !== '0' ? '-' + result : result;
 }
+
+/** Normalize historical bolivar values to the current scale for comparative reports, without changing originals. */
+export function normalizeVenezuelanAmountToCurrentScale(amount: string | number, effectiveDate: string): string {
+  return convertVenezuelanAmount(amount, getVenezuelanMonetaryEra(effectiveDate).id, 'BOLIVAR_DIGITAL');
+}
+
 
 export function roundHistoricalPresentationAmount(amount: string | number, decimalPlaces = 2): string {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 12) {
@@ -173,4 +193,28 @@ function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + 'T00:00:00.000Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/** Exact base-10 addition for historical report aggregation. */
+export function addExactDecimals(left: string | number, right: string | number): string {
+  const parse = (input: string | number) => {
+    const raw = expandDecimalExponent(String(input).trim());
+    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) throw new Error('Invalid decimal amount.');
+    const negative = raw.startsWith('-');
+    const unsigned = negative ? raw.slice(1) : raw;
+    const [whole, fraction = ''] = unsigned.split('.');
+    return { sign: negative ? -1n : 1n, scale: fraction.length, coefficient: BigInt(whole + fraction) };
+  };
+  const a = parse(left), b = parse(right);
+  const scale = Math.max(a.scale, b.scale);
+  const ac = a.sign * a.coefficient * 10n ** BigInt(scale - a.scale);
+  const bc = b.sign * b.coefficient * 10n ** BigInt(scale - b.scale);
+  const sum = ac + bc, negative = sum < 0n;
+  let digits = (negative ? -sum : sum).toString().padStart(scale + 1, '0');
+  if (scale > 0) digits = digits.slice(0, -scale) + '.' + digits.slice(-scale);
+  const [whole, fraction = ''] = digits.split('.');
+  const normalizedWhole = whole.replace(/^0+(?=\d)/, '') || '0';
+  const normalizedFraction = fraction.replace(/0+$/, '');
+  const result = normalizedFraction ? normalizedWhole + '.' + normalizedFraction : normalizedWhole;
+  return negative && result !== '0' ? '-' + result : result;
 }
