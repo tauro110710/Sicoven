@@ -82,7 +82,7 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   const igtf = Number(purchase.igtfAmountBs ?? 0);
   const total = Number(purchase.totalAmountBs);
   const rate = Number(purchase.bcvRate || 0);
-  const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && rate <= 0;
+  const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01';
   const taxRate = Number(purchase.taxRate);
   const base = taxableBase + exemptBase;
   const payable = total - vatWithheld - islrWithheld;
@@ -2403,7 +2403,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           ? bsBalanced && usdBalanced
           : bsBalanced;
     if (!currencyPolicyValid) {
-      throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cumple la política de cuadre monetario para la fecha ' + entryDate + '.');
+      throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': ' + (historicalBsOnly ? 'no cuadra en Bs.' : 'no cuadra simultáneamente en Bs. y USD.') + ' Política monetaria para la fecha ' + entryDate + '.');
     }
     if (entry.type === 'CIERRE') {
       const company = asArray(nextState.companies).find(item => String(item.id) === String(entry.companyId));
