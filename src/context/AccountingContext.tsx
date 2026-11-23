@@ -3961,7 +3961,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // como saldo a favor del proveedor, nunca como reducción de una CxP inexistente.
     const supplierCredit = allocateSupplierCredit(
       valuation.netPayableReductionUsd, valuation.netPayableReductionBs,
-      balance?.outstandingUsd ?? 0, valuation.bcvRate
+      balance?.outstandingUsd ?? 0, valuation.bcvRate,
+      balance?.outstandingBsAtInvoiceRate ?? 0
     );
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = [...(cashPurchase ? [] : [payableAccountCode]), ...inventoryAccountCodes];
@@ -3977,7 +3978,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
     const rate = valuation.bcvRate;
-    const toUsd = (value: number) => Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000;
+    const toUsd = (value: number) => rate > 0 ? Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000 : 0;
     const items: JournalEntryItem[] = [];
     const line = (code: string, debitBs: number, creditBs: number, description: string): JournalEntryItem => ({
       accountCode: code, accountName: accounts.find(account => account.code === code)?.name || code,
@@ -4331,21 +4332,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const expenseBaseBs = expenseLines.reduce((sum, line) => sum + Number(line.debitBs || 0), 0);
     const expenseBaseUsd = expenseLines.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0);
     if (!expenseLines.length || Math.abs(expenseBaseBs - sourceBaseBs) > 0.02 ||
-        Math.abs(expenseBaseUsd - sourceBaseBs / Number(source.bcvRate)) > 0.0001) {
+        (Number(source.bcvRate) > 0
+          ? Math.abs(expenseBaseUsd - sourceBaseBs / Number(source.bcvRate)) > 0.0001
+          : expenseBaseUsd > 0.0001)) {
       throw new Error('El asiento original no permite aislar gastos/servicios sin inventario ni concilia su base en Bs. y USD.');
     }
     const vatLines = sourceEntry.items.filter(line =>
       String(line.accountCode || '').startsWith('1.1.3.') && Number(line.debitBs || 0) > 0);
     if ((Number(source.vatAmountBs || 0) > 0 && (vatLines.length !== 1 ||
         Math.abs(Number(vatLines[0].debitBs) - Number(source.vatAmountBs)) > 0.02 ||
-        Math.abs(Number(vatLines[0].debitUsd) - Number(source.vatAmountBs) / Number(source.bcvRate)) > 0.0001)) ||
+        Math.abs(Number(vatLines[0].debitUsd) - (Number(source.bcvRate) > 0 ? Number(source.vatAmountBs) / Number(source.bcvRate) : 0)) > 0.0001)) ||
         (Number(source.vatAmountBs || 0) === 0 && vatLines.length > 0)) {
       throw new Error('El IVA crédito fiscal del asiento original no concilia; no se puede emitir una NC automática.');
     }
     const balance = cashPurchase ? undefined : getCreditBalance(source.id, 'PURCHASE_PAYMENT');
     const allocation = allocateSupplierCredit(
       amounts.netPayableReductionUsd, amounts.netPayableReductionBs,
-      balance?.outstandingUsd ?? 0, Number(source.bcvRate)
+      balance?.outstandingUsd ?? 0, Number(source.bcvRate),
+      balance?.outstandingBsAtInvoiceRate ?? 0
     );
     const advanceAccount = allocation.supplierAdvanceBs > 0.02
       ? accounts.find(item => item.code === '1.1.2.03' && item.type === 'ACTIVO' && item.isMovement)
