@@ -5963,6 +5963,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const landedCostsBs = Number(movData.additionalLandedCostsBs || 0);
     if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Los fletes y gastos asociados no pueden ser negativos.');
     const effectiveUnitCost = movData.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(movData.quantity), 1e-8) : requestedCost;
+    if (isBcvRateRequiredForDate(movData.date) && movData.type !== 'SALIDA' && effectiveUnitCost > 0 && rate <= 0) {
+      throw new Error('La tasa BCV es obligatoria para entradas y ajustes de inventario desde 2018. Antes de 2018 puede quedar pendiente.');
+    }
     const validation = validateInventoryMovement({
       date: movData.date, quantity: isAdjustment ? Math.max(actualQuantity, 0.00000001) : Number(movData.quantity),
       bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: prod.currentStock, type: isAdjustment ? 'AJUSTE' : movData.type
