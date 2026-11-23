@@ -230,7 +230,6 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     // (pago en divisas, método IGTF, o cuando el contador la ingresó y es inválida).
     // Para operaciones nominales en bolívares sin equivalencia requerida,
     // se permite bcvRate = 0 y la equivalencia USD queda como pendiente (0).
-    const paymentNeedsUsd = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'].includes(paymentMethod);
     // Desde 2018 la tasa BCV se exige para el registro contable de compras, aunque el pago sea nominal en Bs.
     const purchaseRequiresBcv = isBcvRateRequiredForDate(invoiceDate);
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
