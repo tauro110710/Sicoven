@@ -107,7 +107,7 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     if(!reference)errors.push('Falta la referencia.');
     if(!description)errors.push('Falta la descripción.');
     if(!Number.isFinite(rawAmount)||amount<=0)errors.push('Importe inválido o no positivo.');
-    if(rate<=0&&isBcvRateRequiredForDate(date))errors.push('Falta una tasa BCV positiva para movimientos desde 2018.');
+    if(rate<=0&&isBcvRateRequiredForDate(date))errors.push('Falta una tasa BCV positiva y su fecha de vigencia BCV para movimientos desde 2018.');
     if(rate>0&&(!validDate(rateDate)||rateDate>date))errors.push('Fecha de vigencia BCV inválida o posterior al movimiento.');
     if(rate<=0&&rateDate)errors.push('No indique fecha de vigencia BCV sin una tasa.');
     const amountBs=currency==='USD'?(rate>0?Math.round(amount*rate*100)/100:0):Math.round(amount*100)/100;
