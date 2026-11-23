@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
@@ -62,6 +63,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const luxuryTaxAccount = movementAccounts.find(account => account.code === '2.1.2.08' && account.type === 'PASIVO');
 
   const rate = parseAmount(rateInput);
+  const rateRequired = isBcvRateRequiredForDate(date);
   const b16 = parseAmount(base16), b8 = parseAmount(base8), b31 = parseAmount(base31);
   const e = parseAmount(exempt), ig = parseAmount(igtf);
   const taxBreakdown = calculateFiscalZTaxBreakdown({ taxableBase16Bs: b16, taxableBase8Bs: b8, taxableBase31Bs: b31, exemptSalesBs: e, igtfBs: ig });
@@ -93,7 +95,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     items.push({
       accountCode: account.code, accountName: account.name,
       debitBs: side === 'debit' ? amount : 0, creditBs: side === 'credit' ? amount : 0,
-      debitUsd: side === 'debit' ? amount / rate : 0, creditUsd: side === 'credit' ? amount / rate : 0,
+      debitUsd: side === 'debit' ? (rate > 0 ? amount / rate : 0) : 0, creditUsd: side === 'credit' ? (rate > 0 ? amount / rate : 0) : 0,
       description
     });
   };
@@ -115,7 +117,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (currentCompany.closedThroughDate && date <= currentCompany.closedThroughDate) {
       setError('El período está cerrado hasta ' + currentCompany.closedThroughDate + '.'); return;
     }
-    if (!Number.isFinite(rate) || rate <= 0) { setError('Indique la tasa BCV aplicable al cierre.'); return; }
+    if (!Number.isFinite(rate) || rate < 0 || (rateRequired && rate <= 0)) { setError('La tasa BCV es obligatoria para Reportes Z desde 2018; antes de 2018 puede quedar pendiente.'); return; }
     const amounts = [b16, b8, b31, e, ig, ...PAYMENT_ROWS.map(row => parseAmount(payments[row.key]))];
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || totalSales <= 0) {
       setError('Hay importes inválidos o negativos, o el cierre no contiene ventas.'); return;
@@ -211,7 +213,7 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma / proveedor'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Terminal / caja (si aplica)<input value={sourceTerminalId} onChange={event => setSourceTerminalId(event.target.value)} placeholder="Ej. Caja 01" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </>}
-          <label className="font-semibold text-slate-700">Tasa BCV del cierre<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required placeholder="Ej. 889,67" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          <label className="font-semibold text-slate-700">Tasa BCV del cierre {rateRequired ? '*' : '(opcional antes de 2018)'}<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required={rateRequired} placeholder={rateRequired ? 'Ej. 889,67' : 'Opcional antes de 2018'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
         </section>
         <section className="rounded-xl border border-slate-200 p-4">
           <h3 className="mb-3 font-bold text-slate-800">Rango de documentos emitidos</h3>
