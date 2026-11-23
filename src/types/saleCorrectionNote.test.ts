@@ -111,7 +111,8 @@ test('allows a pre-2018 sales correction note in Bs only without BCV', () => {
 });
 
 test('requires BCV for sales correction notes dated from 2018', () => {
+  const historicalSource = { ...source, invoiceDate: '2017-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0 };
   assert.throws(() => calculateSaleCorrectionNote(draft({
-    noteDate: '2018-01-01', bcvRate: 0
+    sourceSale: historicalSource, noteDate: '2018-01-01', bcvRate: 0
   })), /tasa BCV de la nota no son válidos/);
 });
