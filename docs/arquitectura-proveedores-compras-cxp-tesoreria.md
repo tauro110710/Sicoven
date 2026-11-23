@@ -460,3 +460,38 @@ La secuencia de números está protegida por empresa y SQLite rechaza reutilizac
 8. Corrección directa se prueba con rol, autorización, evidencia, evento de auditoría y política de aprobación explícita.
 
 **Conclusión:** la secuencia contable e identificación observada están separadas por empresa y protegidas por validación creciente/duplicados. No se demostró colisión ni alteración entre empresas. La brecha principal es cobertura de integración: el cruce de empresa en reversos, el vínculo contra-asiento/origen y la recuperación tras fallo SQLite deben comprobarse end-to-end antes de considerar cerrado este bloque. No se ejecutaron tests locales.
+
+
+### Auditoría de cierre anual, apertura, resultados acumulados y traslado de saldos (23-11-2026)
+
+**Fuentes inspeccionadas:** `src/types/accountingYearClosing.ts`, `src/types/accountingYearClosing.test.ts`, `src/types/accountingYearOpening.ts`, `src/types/accountingYearOpening.test.ts`, `src/types/equityChanges.ts` y `src/types/equityChanges.test.ts`. Esta revisión es estática; no se ejecutaron pruebas locales.
+
+
+#### Controles que sí están implementados
+
+- **Cierre anual:** filtra por empresa y fechas del ejercicio, valida fechas, líneas, cuentas imputables, importes no negativos, asiento balanceado en Bs/USD y evita cierre vigente duplicado. Los saldos de ingresos/costos/gastos en Bs se convierten individualmente desde la fecha del asiento a la fecha de cierre; USD conserva importes registrados.
+- **Transferencia del resultado:** el resultado de cierre se recalcula a partir de los saldos Bs/USD ya redondeados de cuentas nominales; la contrapartida se exige en una cuenta de patrimonio imputable y activa, con signo apropiado para utilidad o pérdida. El asiento total debe quedar balanceado en ambas monedas.
+- **Apertura anual:** valida cronología, compañía, catálogo, asientos históricos, y duplicidad de apertura. Usa la última apertura anual vinculada como punto de partida, para evitar sumar nuevamente el histórico que esa apertura ya representa. Bs se convierte desde fecha de asiento a fecha de apertura y USD no se reexpresa.
+- **Resultado acumulado:** en apertura, ingresos/costos/gastos del ejercicio se convierten a la escala de la apertura y se trasladan a patrimonio; requiere cuenta patrimonial imputable cuando el resultado no es cero. Los balances se calculan con neto debe-haber, sin invertir arbitrariamente cuentas de naturaleza acreedora.
+- **Pruebas existentes:** incluyen utilidad y pérdida, balance en dos monedas, cuenta patrimonial requerida, ejercicio siguiente sin duplicar el resultado, límites de empresa/fecha y un caso de reconversión de 2021.
+- **Estado de cambios en patrimonio:** `buildEquityChangesReport` separa apertura, movimientos y resultado del período, mantiene los movimientos ligados a asiento, no infiere conceptos como dividendos o reservas desde descripciones, y reconoce aperturas anuales mediante `exerciseLink` en vez del tipo `APERTURA` por sí solo.
+
+#### Riesgos y cobertura pendiente
+
+- **Apertura/cierre no equivalen a una reexpresión integral de estados:** estos procedimientos trasladan saldos y resultados mediante las conversiones descritas; no se debe concluir que ya calculan y contabilizan el AIA o una reexpresión completa bajo inflación.
+- **Validación de continuidad entre ejercicios:** existen pruebas de que el resultado cerrado se traslada a la apertura siguiente una sola vez, pero falta una matriz de integración que compare, por cuenta y moneda, el cierre final y la apertura siguiente en escenarios con reconversiones, reversos, aperturas vinculadas múltiples y períodos reabiertos.
+- **Reversos y corte:** la apertura considera reversos efectivos al corte para escoger apertura previa; el cierre procesa asientos dentro de las fechas del ejercicio y los reversos presentes en ese intervalo se compensan por sus importes. Hace falta prueba integrada de reversos tardíos, reabertura/reversión del cierre y asiento correctivo insertado después de una fecha ya cerrada.
+- **Redondeo y precisión:** el cierre redondea el neto Bs por cuenta y USD por cuenta antes de recalcular el resultado; apertura acumula movimientos y redondea los netos al generar líneas. Debe comprobarse que la acumulación de muchas líneas y cuentas no introduce diferencia por redondeo entre saldos trasladados, sumas de reportes y libros.
+- **Patrimonio y clasificación:** el informe de cambios patrimoniales normaliza Bs, pero el código no determina automáticamente aportes, dividendos, reservas o correcciones por inflación; exige clasificación y evidencia explícita. Falta comprobar que los códigos patrimoniales usados para resultado acumulado estén coherentes con el catálogo y con los saldos de otros reportes.
+- **AIA:** en los módulos inspeccionados se encontró una matriz de clasificación inflacionaria que define tratamiento, pero no se comprobó en este bloque la cadena completa de cálculo, autorización, asiento, persistencia y reflejo en cierre/apertura de AIA. No se afirma que esa funcionalidad esté ausente; queda como auditoría separada.
+
+#### Pruebas de integración propuestas
+
+1. Cierre 2021 con operaciones antes y después del cambio de escala, reverso dentro del período y saldo patrimonial; verificar ambos libros y la apertura siguiente.
+2. Cierre con utilidad, pérdida, resultado cero, múltiples cuentas patrimoniales y centavos acumulados; comprobar balance y diferencias por redondeo.
+3. Reverso posterior al corte, asiento tardío y cierre reabierto: conservar la fecha efectiva, no alterar períodos congelados sin flujo de reapertura, y reconciliar la nueva apertura.
+4. Dos aperturas vinculadas y una apertura anulada: seleccionar la vigente correcta, no duplicar historia ni saltar saldos válidos.
+5. Conciliar por cuenta y moneda cierre-apertura, balance de comprobación, balance general, cambios patrimoniales y resultado acumulado, registrando explícitamente diferencias esperadas por bases distintas.
+6. AIA: confirmar clasificación aprobada por componente, fecha/base de medición, cálculo, asiento dual, trazabilidad, reversión y efecto en los reportes; mantener separación de partidas monetarias/no monetarias.
+
+**Conclusión:** el núcleo de cierre y apertura anual tiene controles sólidos y normaliza Bs por fecha en las cuentas de resultado y en los saldos que traslada; USD conserva la base registrada. La evidencia de pruebas es buena para los casos aritméticos y el traslado de resultado, pero insuficiente para cerrar la continuidad integral de ejercicios en casos complejos de reconversión, reversos, reapertura, redondeo y AIA. No se encontró ni se ejecutó una prueba que cierre todo el recorrido integrado.
