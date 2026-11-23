@@ -9,7 +9,6 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaAr
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -233,7 +232,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     // Desde 2018 la tasa BCV se exige para el registro contable de compras, aunque el pago sea nominal en Bs.
     const purchaseRequiresBcv = isBcvRateRequiredForDate(invoiceDate);
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
-    if (purchaseRequiresBcv && (paymentNeedsUsd || purchaseRequiresBcv) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
+    if (purchaseRequiresBcv && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
       window.alert('La tasa BCV es obligatoria para compras desde 2018. Antes de 2018 puede dejarla pendiente y registrarla si el contador la considera necesaria.');
       return;
     }
