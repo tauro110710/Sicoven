@@ -282,3 +282,35 @@ Se inspeccionaron directamente los cinco archivos de pruebas en la rama `audit/m
 6. Mantener USD original, fecha efectiva, tasa, monto nominal y trazabilidad; cualquier reexpresión debe ser una vista/calculo derivado, no reescritura de fuente.
 
 **Limitación de ejecución:** esta etapa fue una inspección de archivos de prueba en GitHub. No se ejecutó suite local ni CI en esta sesión; las brechas son ausencia de casos encontrados en los archivos examinados, no afirmación de que todos los escenarios fallen en runtime.
+
+
+## Auditoría de pruebas del Balance General y reportes de balances (23-11-2026)
+
+Se enumeraron los archivos del árbol de la rama y se inspeccionaron directamente `BalancesView.tsx`, `HistoricalBalancesView.tsx`, `AnnualReportsView.tsx` y `accountingReportIntegrity.test.ts`.
+
+### Cobertura automatizada localizada
+
+- No se encontró un test dedicado a `BalancesView.tsx`, `HistoricalBalancesView.tsx` o `AnnualReportsView.tsx` en el árbol de archivos revisado.
+- Existe `src/types/accountingReportIntegrity.test.ts`, pero sus pruebas se centran en integridad/selección de movimientos y no constituyen cobertura de presentación de las tres vistas ni prueba de equivalencia de escala entre ellas.
+- Cierre y apertura anual tienen sus tests separados en `accountingYearClosing.test.ts` y `accountingYearOpening.test.ts`; sus casos no prueban directamente el resultado visible de Balance General después de varios ciclos.
+
+### Verificación de fuente del Balance General
+
+En `BalancesView.tsx`, los acumuladores de movimientos regulares y ajustes suman `debitBs/creditBs` directamente. En el bloque revisado no aplican `normalizeVenezuelanAmountToCurrentScale` antes de sumar. Por tanto, los reportes seleccionados pueden agregar nominal Bs. de fechas pertenecientes a escalas distintas, según el período que seleccione la vista.
+
+### Diferencia de tratamiento en las otras vistas
+
+- `HistoricalBalancesView.tsx` importa la normalización de escala por fecha desde `historicalAccountingCalendar` y la usa en el cálculo histórico.
+- `AnnualReportsView.tsx` también importa el normalizador por fecha, además de los generadores de cambios en patrimonio y disclosure.
+- Esta inspección confirma que el riesgo está en la divergencia de bases monetarias de cálculo; la impresión/PDF que replica los valores de pantalla no soluciona por sí sola la diferencia.
+
+### Casos de regresión requeridos
+
+1. Un conjunto común de asientos pre/post 2008, 2018 y 2021 con saldos de activo, pasivo y patrimonio.
+2. Períodos de balance que incluyan movimientos de varias escalas, con fecha de corte explícita.
+3. Balance General nominal y balance histórico reexpresado: comprobar que la base monetaria de cada uno esté identificada y que las diferencias sean explicables, no asumir igualdad de cifras.
+4. Apertura, cierre y reverso de ambos, y el balance después de cada paso.
+5. Comparar pantalla y PDF/exportación con la misma fuente, fecha, moneda y método; probar que la exportación no altere ni normalice de manera distinta.
+6. Validar cuadre por cuenta, empresa, año/período y movimientos incluidos/excluidos.
+
+**Conclusión de cobertura:** la divergencia monetaria identificada en las vistas no está protegida por tests de componentes específicos localizados. La matriz de pruebas debe cubrir cálculo, integración de apertura/cierre y presentación/exportación antes de decidir si se cambia el cálculo nominal del Balance General o se incorpora un modo de presentación reexpresada. Mantener separados el valor nominal fuente y cualquier valor derivado de comparación.
