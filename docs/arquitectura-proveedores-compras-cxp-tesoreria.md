@@ -579,3 +579,22 @@ En `approveInflationIndexSeries`, el código exige actor con rol contable, decis
 4. Confirmar por pruebas de integración que la exportación no se ejecuta concurrentemente con escrituras contables no drenadas, especialmente ante fallo de persistencia.
 
 **Conclusión:** la exportación de empresa tiene una cadena de revalidación, controles de identidad/aislamiento, hashes de artefactos y registro de auditoría. La descarga de texto está acotada por origen, tipo, tamaño y nombre; la revisión de allowlist de origen y cobertura de tablas sin `company_id` queda pendiente.
+
+
+## Auditoría de intents durables y recuperación de operaciones IPC (23-11-2026)
+
+### Controles confirmados por revisión estática
+- El módulo `operation-receipts.cjs` mantiene una lista explícita de canales recuperables y asigna un tipo de operación a cada canal; `prepareOperationIntent` rechaza canales desconocidos, modos incompatibles y solicitudes que no correspondan a la empresa operativa.
+- La preparación exige identificador estable, limita longitud de la solicitud y conserva hash SHA-256, canal, tipo, empresa, modo y actor en SQLite. Reutilizar el identificador con datos/canal/tipo/actor distintos es rechazado.
+- `operation-intent-list` requiere licencia válida y sesión autenticada, y limita pendientes a la empresa y usuario de la sesión. Antes de retornar, valida canal permitido, modo de llamada, JSON y hash de la solicitud.
+- Los recibos idempotentes y la finalización de intent se escriben en una transacción SQLite junto con el efecto de negocio; tests cubren replay, reinicio, rollback y errores de completion. La operación de negocio debe ser síncrona dentro de la transacción.
+- La recuperación de renderer solicita confirmación explícita antes de ejecutar pendientes; usa el mismo operationId y los argumentos almacenados para replay, y deja pendientes los resultados con error o `ok:false`.
+
+### Puntos de seguimiento (no confirmados como vulnerabilidades)
+1. La función de recuperación en preload invoca `intent.channel` directamente. El módulo de persistencia restringe los canales a un mapa explícito, pero conviene probar en integración que cada handler del mapa aplique autenticación, permisos/rol, empresa activa y reglas de negocio, además de idempotencia, incluso ante token expirado o revocado entre la lista y el replay.
+2. La recuperación trata un retorno sin error como `RECOVERED`, excepto `ok:false`; algunos handlers podrían devolver otras formas de rechazo o resultado ambiguo. Recomendada matriz de contratos por handler, incluyendo resultados vacíos, excepciones, y pérdida de respuesta después del commit.
+3. El filtro de pendientes por actor puede dejar intents de un usuario anterior sin resolver tras cambio de usuario; no es pérdida de datos, pero requiere flujo de soporte/admin para inspección y resolución segura sin ejecutar bajo otra identidad.
+4. Confirmación de recuperación se ofrece en preload como parámetro booleano; debe confirmarse que UI presenta resumen comprensible, identidad/empresa, consecuencias y oportunidad de cancelar antes de pasar `confirmed=true`.
+
+### Alcance
+Revisión estática de preload, `operation-receipts.cjs`, sus pruebas y registro en `main.cjs`. No se ejecutaron pruebas localmente ni simulaciones de renderer/IPC.
