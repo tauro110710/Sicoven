@@ -123,3 +123,22 @@ Se inspeccionó además `importInventoryMovements`:
 **Impacto ampliado:** el problema de comparabilidad de Bs. puede propagarse desde materia prima hacia producción en proceso, producto terminado, costo de ventas y reportes. No se concluye que todas las rutas operativas sean incorrectas; la política contable de referencia y pruebas de extremo a extremo siguen pendientes.
 
 **Siguiente etapa de auditoría:** revisar orden cronológico de Kardex, importaciones y restauración, cierres/reaperturas, generación y persistencia de asientos y movimientos; construir una matriz de pruebas que cubra períodos de reconversión, promedio, PEPS, producción, devolución, merma y ajustes; cuantificar discrepancias sin alterar datos existentes.
+
+
+## Conciliación de costo de Kardex, devolución física y costo de ventas (23-11-2026)
+
+### Hallazgo: el saldo Bs. de Kardex no es una conciliación monetaria por escala
+
+- `reconstructFifoLayers` verifica que las cantidades de capas reconstruidas concilien con los saldos por movimiento y con existencia actual, y rechaza capas estimadas si no cuadran.
+- Esa comprobación es cuantitativa: las capas se reconstruyen con `unitCostBs`/`unitCostUsd` nominales por movimiento; no valida que Bs. de diferentes eras sean comparables ni reconcilia por sí misma el total de inventario con el saldo mayor de las cuentas contables.
+- `calculatePeriodicCostOfSales` aplica apertura + compras/costos desembarcados - inventario final en Bs. Esto depende de que los tres valores ya estén en la misma escala monetaria; la fórmula no hace conversión por fecha.
+
+### Devolución física a proveedor y devolución de cliente
+
+- La nota de crédito física a proveedor identifica la entrada original de Kardex, valida factura/RIF/artículo, cantidad retornada acumulada, existencia y capa PEPS disponible; para promedio ponderado bloquea si el promedio actual difiere del costo original. La devolución usa el costo original Bs. y calcula USD desde Bs. a la tasa de la nota, según el código inspeccionado.
+- Esto conserva la referencia y limita la devolución a la compra original, pero plantea un punto que deberá decidir la política: cómo se reconcilia el USD derivado en la fecha de devolución con el USD histórico original de la capa, y cómo se valora el saldo Bs. en escala comparable entre eras. No debe alterarse la protección existente de capas originales.
+- La devolución de cliente y el costo de ventas utilizan el costo PEPS de las capas reconstruidas o el costo promedio almacenado; los asientos CMV/inventario reflejan esos importes. Si esos costos nominales mezclan escalas, la discrepancia se propaga a CMV y al saldo de inventario.
+
+### Conciliación que debe preceder al cambio de política
+
+La prueba de conciliación no debe limitarse a comparar cantidad física. Para cada artículo y fecha, cruzar: cantidad de movimiento y balance; costo Bs. nominal y su era; USD histórico; valor del saldo; cuenta de inventario; asiento generado y referencia documental. Debe cubrir compras, ventas/CMV, devolución de cliente, devolución física a proveedor, producción/WIP, ajustes positivos/negativos, merma/autoconsumo e importaciones, con métodos promedio y PEPS, y períodos cerrados/reabiertos. Los resultados deben identificar diferencias sin reescribir la fuente histórica.
