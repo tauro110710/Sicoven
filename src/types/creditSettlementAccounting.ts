@@ -22,10 +22,11 @@ export interface CreditSettlementJournalPlanInput {
 export function buildCreditSettlementJournalItems(input: CreditSettlementJournalPlanInput): JournalEntryItem[] {
   const { kind, method, cashAccount, controlAccount } = input;
   const values = [input.amountBs, input.amountUsd, input.invoiceRate, input.settlementRate];
+  const isUsdMethod = method === 'CASH_USD' || method === 'BANK_TRANSFER_USD';
   if (!['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(kind) ||
       values.some(value => !Number.isFinite(value) || value < 0) ||
       input.amountBs <= 0 || input.amountUsd < 0 ||
-      (input.amountUsd > 0 && input.invoiceRate <= 0)) {
+      (input.amountUsd > 0 && input.invoiceRate <= 0) || (isUsdMethod && input.settlementRate <= 0)) {
     throw new Error('Los importes deben ser válidos; las tasas no pueden ser negativas y se requieren cuando hay equivalencia USD.');
   }
   if (!cashAccount?.code || !cashAccount.name || !controlAccount?.code || !controlAccount.name) {
