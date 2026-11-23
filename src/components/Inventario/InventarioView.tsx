@@ -54,12 +54,12 @@ export const InventarioView: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
   const effectiveSelectedProductId = companyProducts.some(product => product.id === selectedProductId) ? selectedProductId : 'ALL';
 
-  const normalizeInventorySearch = (value: string) => value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const normalizeInventorySearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   // Search across code, name, category and unit; accent-insensitive and multi-term.
   const filteredProducts = companyProducts.filter(p => {
     const query = normalizeInventorySearch(searchTerm);
     if (!query) return true;
-    const tokens = query.split(/\\s+/).filter(Boolean);
+    const tokens = query.split(/\s+/).filter(Boolean);
     const searchable = [p.code, p.name, p.category, p.unit].map(normalizeInventorySearch);
     return tokens.every(token => searchable.some(value => value.includes(token)));
   });
