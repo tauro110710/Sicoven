@@ -77,3 +77,9 @@ test('supports manual Bs value for pre-2018 dual settlement when rate is omitted
   assert.equal(lines[1].creditBs, 1000);
   assert.equal(lines[2].creditBs, 100);
 });
+
+test('requires a settlement rate for USD cash or bank settlement methods', () => {
+  assert.throws(() => buildCreditSettlementJournalItems({
+    ...base, kind: 'SALE_COLLECTION', method: 'CASH_USD', settlementRate: 0
+  }), /tasas|validos/i);
+});
