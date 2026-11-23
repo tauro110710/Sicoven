@@ -429,3 +429,34 @@ Sin embargo, el validador de `electron/accounting-integrity.cjs` exige que el as
 ### Conclusión
 
 La secuencia de números está protegida por empresa y SQLite rechaza reutilización/duplicidad. El aislamiento de empresa y los contra-asientos exactos están protegidos por el validador. Pero la inspección encontró una discrepancia concreta entre el flujo React de reversión y los requisitos del validador: el flujo no parece emitir el enlace recíproco que SQLite exige. Debe corregirse y cubrirse con prueba de integración antes de considerar segura la reversión contable. La inspección de código no sustituye una ejecución local.
+
+
+### Auditoría de consecutivos, referencias, reversos encadenados e aislamiento por empresa (23-11-2026)
+
+#### Protecciones verificadas
+
+- **Consecutivo por empresa:** `addJournalEntry` calcula el máximo a partir de asientos de `targetCompany.id` y mantiene `journalSequenceRef` indexado por ese ID. Empresas distintas pueden tener secuencias independientes; el ID del asiento incluye el identificador de empresa y número.
+- **Validación SQLite de secuencia:** el validador rechaza nuevos números no crecientes, duplicados dentro de la misma empresa y entradas con líneas inválidas o insuficientes. Se encontró prueba de rechazo de correlativo inferior y aceptación del siguiente correlativo.
+- **Origen de reversión aislado:** `reverseJournalEntry` busca el original por ID y empresa activa, bloquea revertir un contra-asiento, y rechaza si el original ya tiene reversión o hay un contra-asiento enlazado en esa empresa.
+- **Evidencia correctiva:** `findLinkedCorrectionEvidence` filtra por empresa, entidad origen y vínculo de ID; para ventas/compras exige tipos documentales 02/03 y referencia coincidente. Tests cubren evidencia vinculada y empresa.
+- **Concurrencia de reversión en UI:** los refs `journalReversalInFlightRef` y `correctionWorkflowInFlightRef` impiden dos reversiones/correcciones simultáneas en el flujo observado.
+
+#### Brechas y riesgos que requieren prueba/corrección
+
+- **Reverso encadenado no probado entre empresas:** no se encontró un test dedicado que intente enlazar una reversión de una empresa con un asiento original de otra, o duplicar el vínculo de reversión entre empresas. Los filtros de UI son positivos, pero la prueba SQLite cruzada sigue faltando.
+- **Flujo de reversión versus vínculo recíproco:** el flujo React emite `reversalOfEntryId` en el contra-asiento y declara que el original no se modifica. El validador y pruebas previas exigen coherencia del enlace de reversión; el flujo de UI no escribe `reversedByEntryId` en el origen. Esto mantiene el original inmutable, pero debe confirmarse en integración que el snapshot satisface el contrato SQLite sin dejar la reversión rechazada o parcialmente aplicada.
+- **Consecutivo reservado antes de confirmación:** `addJournalEntry` incrementa `journalSequenceRef` y crea el asiento antes de que el flujo `reverseJournalEntry` espere la confirmación del snapshot. En fallo de persistencia puede quedar un salto de número en memoria. Un salto no reutiliza números ni altera otro asiento, pero la recuperación/reinicio y el mensaje al usuario deben verificarse; no se encontró prueba específica de este escenario para reversión.
+- **Casos de corrección con ejecución directa:** el workflow de correcciones tiene pruebas explícitas de aprobación directa sin revisión ni papel de trabajo; esto es un comportamiento configurado, no un defecto por sí solo, pero debe evaluarse contra la política contable y permisos de SICOVEN.
+
+#### Matriz de regresión añadida
+
+1. Dos empresas crean asientos con consecutivos independientes y la misma referencia visible; no hay colisión de IDs.
+2. Reversión de empresa A con un asiento de empresa B como origen debe ser rechazada en UI y SQLite.
+3. Reversión duplicada y reversión de un contra-asiento deben rechazarse sin modificar auxiliares.
+4. Fallo de SQLite tras reservar número: reintento no duplica el asiento, no reutiliza número persistido y restablece/explica el salto.
+5. Reversión en empresa A no marca ventas, compras, retenciones, anticipos ni conciliaciones de empresa B.
+6. Reversal link unidireccional/recíproco y snapshot completo se valida en una prueba end-to-end de `reverseJournalEntry`.
+7. Referencias iguales entre empresas no deben confundirse; evidencia correctiva debe ser ID-linked y company-scoped.
+8. Corrección directa se prueba con rol, autorización, evidencia, evento de auditoría y política de aprobación explícita.
+
+**Conclusión:** la secuencia contable e identificación observada están separadas por empresa y protegidas por validación creciente/duplicados. No se demostró colisión ni alteración entre empresas. La brecha principal es cobertura de integración: el cruce de empresa en reversos, el vínculo contra-asiento/origen y la recuperación tras fallo SQLite deben comprobarse end-to-end antes de considerar cerrado este bloque. No se ejecutaron tests locales.
