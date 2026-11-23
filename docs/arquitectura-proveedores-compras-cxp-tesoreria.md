@@ -634,3 +634,9 @@ Al verificar el parser común, se detectó que `Number('')` devuelve `0` en Java
 - Se añadió una guardia de cadena vacía tras el trim y se devuelve `Number.NaN`.
 - Se amplió la prueba con entrada de espacios.
 - Pruebas no ejecutadas en este entorno; queda pendiente validar suite y build.
+
+
+### Ajuste funcional: alcance de la previsualización FIFO de anticipos (23-11-2026)
+La distribución efectiva de liquidaciones usa una cola FIFO conjunta que mezcla anticipos originados en notas de crédito y desembolsos directos. Sin embargo, la previsualización del formulario mostraba exclusivamente notas de crédito, sin indicar que los anticipos directos también se consumirían al guardar. Esto podía confundir al operador cuando la vista parcial no cubría el importe solicitado.
+Se aclaró el título y se añadió una advertencia visible: la previsualización es parcial, solo detalla notas de crédito, y los desembolsos directos participan en el FIFO cronológico real.
+No se ejecutaron pruebas ni build localmente; queda pendiente validar el comportamiento UI y la distribución FIFO en ejecución.
