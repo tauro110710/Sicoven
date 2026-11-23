@@ -64,7 +64,7 @@ import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnD
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
+import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, normalizeFifoLayersToDate } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
@@ -4857,7 +4857,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         let unitCostUsd = 0;
         if (product.costingMethod === 'PEPS') {
           const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, pState.currentStock);
+          const layers = normalizeFifoLayersToDate(reconstructFifoLayers(history, pState.currentStock), saleData.invoiceDate);
           const fifoResult = calculateFifoIssue(layers, qty);
           totalCostBs = fifoResult.totalCostBs;
           totalCostUsd = fifoResult.totalCostUsd;
@@ -5533,7 +5533,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, product.currentStock);
+          const layers = normalizeFifoLayersToDate(reconstructFifoLayers(history, product.currentStock), row.date);
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
           const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
           totalCostBs = fifoIssue.totalCostBs;
@@ -5559,7 +5559,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newStock = targetStock;
         if (product.costingMethod === 'PEPS') {
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, product.currentStock);
+          const layers = normalizeFifoLayersToDate(reconstructFifoLayers(history, product.currentStock), row.date);
           const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
             requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
@@ -5895,7 +5895,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       totalCostUsd = toUsd(totalCostBs);
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(prior, prod.currentStock);
+        const layers = normalizeFifoLayersToDate(reconstructFifoLayers(prior, prod.currentStock), movData.date);
         const fifoLayerValueBs = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
         const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
@@ -5921,7 +5921,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!Number.isFinite(targetStock) || targetStock < 0) throw new Error('La existencia final del ajuste no es válida.');
       newStock = targetStock;
       if (prod.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(prior, prod.currentStock);
+        const layers = normalizeFifoLayersToDate(reconstructFifoLayers(prior, prod.currentStock), movData.date);
         const fifoAdjustment = applyFifoAdjustment(layers, targetStock - prod.currentStock,
           requestedCost, toUsd(requestedCost), movData.date, movData.documentRef);
         totalCostBs = fifoAdjustment.totalCostBs;
@@ -6074,7 +6074,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let componentNewAverageUsd = component.avgCostUsd;
       if (component.costingMethod === 'PEPS') {
         const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id);
-        const layers = reconstructFifoLayers(history, component.currentStock);
+        const layers = normalizeFifoLayersToDate(reconstructFifoLayers(history, component.currentStock), date);
         const availableLayers = layers.reduce((sum, layer) => sum + layer.quantity, 0);
         if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
         const fifoLayerValueBs = layers.reduce((sum, layer) => layer.quantity > 0 ? sum + layer.quantity * layer.unitCostBs : sum, 0);
