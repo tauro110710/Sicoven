@@ -187,3 +187,23 @@ Queda confirmada una divergencia de presentación: balances actuales agregan Bs.
 ### Siguiente verificación
 
 Trazar el generador de PDF del Balance General y las funciones auxiliares que alimentan el detalle de cuentas, para comprobar que la exportación usa exactamente los mismos saldos que la pantalla. Después identificar un punto común de cálculo/normalización y definir explícitamente cuál es el método correcto para cada reporte, antes de implementar cambios. No modificar los registros ni normalizar balances de comprobación sin una política de presentación contable acordada.
+
+
+## Auditoría de exportaciones PDF/CSV de balances (23-11-2026)
+
+### Balance General PDF
+
+La pantalla `BalancesView.tsx` calcula sus saldos y totales y los entrega directamente a `exportBalanceGeneralPdf`; el generador PDF (`src/utils/pdfGenerator.ts`) no vuelve a calcular ni normaliza montos: formatea los arrays de cuentas y los totales recibidos. Por tanto, la exportación del Balance General replica la lógica y los saldos de pantalla, no corrige la escala monetaria por separado. El propio generador indica que presenta saldos nativos sin convertir moneda.
+
+
+### Reportes anuales y exportación CSV
+
+`AnnualReportsView.tsx` genera CSV desde estructuras calculadas previamente (`report`, `equityReport`, `disclosureMovements`). El CSV no contiene una capa independiente de normalización; exporta las cifras ya preparadas, además de incluir movimientos cuantitativos Bs/USD y saldos patrimoniales. La impresión/PDF se realiza desde la propia vista con `window.print()`.
+
+### Alcance de la conclusión
+
+La divergencia documentada no se origina por una diferencia de fórmula entre pantalla y PDF del Balance General: el PDF recibe y formatea los mismos saldos/totales. El riesgo de escala está en el cálculo que alimenta la pantalla y en cómo se prepara cada reporte anual/histórico, no en la exportación visual. CSV/PDF deben quedar incluidos en la futura matriz de validación de reportes, verificando que muestren la misma escala, fecha de corte y política que sus cálculos fuente.
+
+### Próximo paso
+
+Auditar los reportes de flujo de efectivo y cambios en patrimonio, así como sus impresiones/exportaciones, para determinar si normalizan por fecha, convierten con tasas o agregan Bs nominales; registrar diferencias antes de proponer un cálculo común.
