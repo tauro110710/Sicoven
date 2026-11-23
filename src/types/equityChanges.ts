@@ -144,7 +144,7 @@ export function buildEquityChangesReport(
   }
 
   const movements: EquityChangeMovement[] = [];
-  const periodEntries = companyEntries.filter(entry => entry.date >= start);
+  const periodEntries = companyEntries.filter(entry => entry.date >= start && entry.date <= end);
   const periodClosingEntries = periodEntries.filter(entry => entry.type === 'CIERRE' &&
     entry.items.some(item => equityCodes.has(item.accountCode)) &&
     entry.items.some(item => isProfitLoss(accountsByCode.get(item.accountCode))));
