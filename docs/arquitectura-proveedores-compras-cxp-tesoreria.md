@@ -369,3 +369,32 @@ En `buildReversalItems`, la validación del asiento original exige simultáneame
 6. Confirmación SQLite y evento final de auditoría: fallo de persistencia no debe dejar el usuario con una reversión presentada como completada; la auditoría final fallida debe informar que el contra-asiento ya está persistido y evitar duplicación.
 
 **Conclusión:** el requisito de USD en `buildReversalItems` contradice el tratamiento Bs-only de períodos previos a 2018 y es un bloqueo lógico verificable por inspección. Se documenta para corrección posterior; no se alteró código operacional ni se ejecutaron pruebas locales.
+
+
+## Verificación de regresiones del helper de reversión y confirmación SQLite (23-11-2026)
+
+Se revisó el test `src/types/journalReversal.test.ts` (825 líneas) y el flujo `reverseJournalEntry` (aprox. líneas 1107–1284 de `AccountingContext.tsx`).
+
+### Cobertura existente que sí se comprobó
+
+- Pruebas para reversión dual Bs/USD, AIA con reclasificación a patrimonio, cuenta patrimonial requerida, descuadre en Bs/USD, USD con tolerancia, líneas inválidas, cuentas no-movimiento y cuentas inexistentes.
+- Pruebas de protección de inventario y COGS, devoluciones parciales/totales, conciliación bancaria, compra y notas de crédito, liquidaciones, anticipos, reversión duplicada, contra-asiento, y asiento fiscal Z inmutable.
+- La prueba de reversión genérica y la evaluación preflight tienen fixtures duales (Bs/USD). No encontré un caso Bs-only ni uno de antes de 2018; por tanto el bloqueo descrito anteriormente carece de regresión que lo detecte.
+
+### Secuencia de ejecución y riesgos de persistencia
+
+- El flujo exige SQLite disponible, valida fuente/fecha/duplicidad, analiza vínculos auxiliares, genera el contra-asiento y vuelve a validar balance en Bs/USD. Registra el evento `accounting_correction_requested` antes de añadir el reverso; si falla ese evento, el flujo se detiene antes de publicar el asiento.
+- `addJournalEntry` publica el reverso y luego se actualizan en React las ventas/compras anuladas, comprobantes fiscales marcados para corrección, liquidaciones/anticipos, depreciación y vínculos de extracto. Después se espera `persistenceConfirmation`. No se observó rollback explícito de estas actualizaciones React si esa promesa rechaza. Esto refuerza el riesgo ya documentado: estado visible puede divergir si falla la confirmación de snapshot.
+- El evento `accounting_correction_executed` se escribe después de que SQLite confirma. Si falla, el código comunica expresamente que el reverso ya está guardado y que no debe repetirse. Este mensaje evita la duplicación por reintento, pero queda una operación persistida sin evento final de auditoría, que requiere reconciliación controlada.
+- El bloqueo de concurrencia libera las referencias `journalReversalInFlightRef` y `correctionWorkflowInFlightRef` en `finally`; no obstante, si la confirmación de persistencia falla, la UI puede conservar las mutaciones previas y permitir una operación posterior desde un estado incierto. Debe probarse un bloqueo de sesión/recarga obligatoria o rollback simétrico antes de liberar el flujo.
+
+### Casos añadidos a la matriz pendiente
+
+1. Asiento Bs-only válido de período anterior a 2018: el helper, preflight y posting deben aceptarlo sin USD/BCV cuando la política por fecha lo permite.
+2. Fallo del evento solicitado antes de la reversión: confirmar que no cambia libro, documentos, conciliaciones ni consecutivo.
+3. Rechazo de persistencia después de `addJournalEntry`: comprobar rollback/recuperación de cada auxiliar, contra-asiento y consecutivo; estado incierto no puede habilitar operaciones.
+4. Fallo del evento final de auditoría después de persistencia: mostrar claramente que el contra-asiento existe y prevenir duplicación; permitir reconciliar la auditoría pendiente.
+5. Doble clic, concurrencia entre reversión y corrección, y recarga/reinicio entre solicitud, persistencia y evento final.
+
+
+**Conclusión:** el test existente confirma que la reversión está protegida en escenarios duales, pero no cubre la operación Bs-only permitida por la política histórica. La secuencia de persistencia y actualización React presenta riesgo de estado no revertido ante fallo de confirmación; es riesgo de integración confirmado por código, no pérdida de datos demostrada. No se ejecutaron pruebas locales.
