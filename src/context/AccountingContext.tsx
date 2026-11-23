@@ -7140,10 +7140,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para una de las cuentas bancarias involucradas.');
     const rate = Number(draft.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Ingrese la tasa BCV aplicable a este movimiento bancario.');
-    const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
-    const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : Math.round(amountBs / rate * 1000000) / 1000000;
-    if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
+    if (!Number.isFinite(rate) || rate < 0 ||
+        (isBcvRateRequiredForDate(draft.date) && rate <= 0)) {
+      throw new Error('Ingrese una tasa BCV válida para movimientos desde 2018; antes de 2018 puede dejarla pendiente.');
+    }
+    const amountBs = source.currency === 'USD' ? (rate > 0 ? Math.round(draft.amount * rate * 100) / 100 : 0) : Math.round(draft.amount * 100) / 100;
+    const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : (rate > 0 ? Math.round(amountBs / rate * 1000000) / 1000000 : 0);
     const bankAccount = accounts.find(a => a.code === source.accountCode && a.isMovement);
     if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
     if (draft.type === 'EXPENSE' || draft.type === 'TRANSFER') {
@@ -7171,8 +7173,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const destAccount = accounts.find(a => a.code === destination.accountCode && a.isMovement);
       if (!destAccount) throw new Error('La cuenta auxiliar bancaria de destino no es válida.');
-      const destBs = destination.currency === 'USD' ? Math.round(amountUsd * rate * 100) / 100 : amountBs;
-      const destUsd = destination.currency === 'USD' ? amountUsd : Math.round(destBs / rate * 1000000) / 1000000;
+      const destBs = destination.currency === 'USD' ? (rate > 0 ? Math.round(amountUsd * rate * 100) / 100 : 0) : amountBs;
+      const destUsd = destination.currency === 'USD' ? amountUsd : (rate > 0 ? Math.round(destBs / rate * 1000000) / 1000000 : 0);
       items = [
         { accountCode: destAccount.code, accountName: destAccount.name, debitBs: destBs, creditBs: 0, debitUsd: destUsd, creditUsd: 0, description: 'Entrada por transferencia entre cuentas propias' },
         { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Salida por transferencia entre cuentas propias' }
