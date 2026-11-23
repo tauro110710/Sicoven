@@ -132,7 +132,7 @@ test('rechaza importes y tasas inválidos', () => {
   })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     bcvRate: -1
-  })), /importe de la nota debe ser positivo/);
+  })), /importe de la nota debe ser positivo; la tasa BCV solo es obligatoria desde 2018/);
 });
 
 test('exige causa económica explícita y justificación suficiente', () => {
