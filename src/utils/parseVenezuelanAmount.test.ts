@@ -14,5 +14,6 @@ test('acepta punto decimal y enteros sin alterarlos', () => {
 
 test('retorna NaN para entradas no numéricas o vacías', () => {
   assert.ok(Number.isNaN(parseVenezuelanAmount('')));
+  assert.ok(Number.isNaN(parseVenezuelanAmount('   ')));
   assert.ok(Number.isNaN(parseVenezuelanAmount('abc')));
 });
