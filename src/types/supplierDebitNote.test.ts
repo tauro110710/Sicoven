@@ -126,7 +126,7 @@ test('rechaza fechas imposibles, cronología invertida y períodos cerrados', ()
 test('rechaza importes y tasas inválidos', () => {
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     totalAmountBs: 0
-  })), /valores numéricos positivos/);
+  })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     totalAmountBs: Number.NaN
   })), /valores numéricos positivos/);
