@@ -5263,8 +5263,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(prodData.openingBcvRate ?? 0);
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
-    if (!Number.isFinite(rate) || rate < 0 || ((initialQuantity > 0 || initialCostBs > 0) && rate <= 0)) throw new Error('Ingrese la tasa BCV histórica aplicable a la valoración inicial del artículo.');
     const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
+    if (!Number.isFinite(rate) || rate < 0 ||
+        (isBcvRateRequiredForDate(openingDateValue) && (initialQuantity > 0 || initialCostBs > 0) && rate <= 0)) {
+      throw new Error('Ingrese la tasa BCV histórica aplicable a la valoración inicial del artículo desde 2018.');
+    }
     const openingDateParsed = new Date(openingDateValue + 'T00:00:00Z');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDateValue) || !Number.isFinite(openingDateParsed.getTime()) || openingDateParsed.toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
     if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
@@ -5281,9 +5284,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       price4: prodData.price4 ?? null,
       currentStock: initialQuantity,
       avgCostBs: initialCostBs,
-      avgCostUsd: rate > 0 ? initialCostBs / rate : 0,
+      avgCostUsd: rate > 0 ? initialCostBs / rate : Number(prodData.avgCostUsd || 0),
       lastCostBs: initialCostBs,
-      lastCostUsd: rate > 0 ? initialCostBs / rate : 0,
+      lastCostUsd: rate > 0 ? initialCostBs / rate : Number(prodData.lastCostUsd || prodData.avgCostUsd || 0),
       inventoryAccountCode: prodData.inventoryAccountCode || getDefaultInventoryAccountCode(prodData.itemType),
       costOfSalesAccountCode: prodData.costOfSalesAccountCode || '5.1.1.01',
       adjustmentAccountCode: prodData.adjustmentAccountCode || '5.1.2.01',
