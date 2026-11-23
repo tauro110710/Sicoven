@@ -27,7 +27,7 @@ import {
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
-import { validateJournalEntryAccounts, isJournalEntryBalanced } from '../types/journalEntryValidation';
+import { validateJournalEntryAccounts, isJournalEntryBalanced, isJournalEntryCurrencyPolicySatisfied } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../types/accountingYearClosing';
@@ -1920,7 +1920,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     if (entry.items.length < 2 || invalidLines ||
         !isJournalEntryBalanced({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd }) ||
-        (totalDebitBs <= 0 && totalDebitUsd <= 0) || (isBcvRateRequiredForDate(entry.date) && (totalDebitBs <= 0 || totalDebitUsd <= 0))) {
+        !isJournalEntryCurrencyPolicySatisfied({ date: entry.date, bcvRate: entryBcvRate, debitBs: totalDebitBs, debitUsd: totalDebitUsd })) {
       throw new Error(
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
@@ -7981,7 +7981,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
           debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
         }
-        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || (debitBs <= 0 && debitUsd <= 0) || (isBcvRateRequiredForDate(entry.date) && (debitBs <= 0 || debitUsd <= 0))) {
+        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || !isJournalEntryCurrencyPolicySatisfied({ date: entry.date, bcvRate: Number(entry.bcvRate), debitBs, debitUsd })) {
           throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
         }
       }
