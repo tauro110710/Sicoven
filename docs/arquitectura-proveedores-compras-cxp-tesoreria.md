@@ -231,3 +231,54 @@ En los flujos de efectivo y cambios en patrimonio sí está implementada la reex
 ### Próximo paso de auditoría
 
 Inspeccionar los tests de flujo directo/indirecto y cambios patrimoniales, revisar qué casos de reconversiones cubren y qué escenarios de aperturas vinculadas, anulaciones y saldos iniciales entre períodos faltan. No cambiar cálculos hasta definir la política común de presentación y su matriz de regresión.
+
+
+## Matriz precisa de cobertura de pruebas de cierres, aperturas y reportes monetarios (23-11-2026)
+
+Se inspeccionaron directamente los cinco archivos de pruebas en la rama `audit/monetary-scale-coherence`, con sus blobs actuales. Esta matriz distingue casos efectivamente presentes de escenarios no encontrados en los archivos revisados.
+
+
+### Cierre anual — `accountingYearClosing.test.ts`
+
+- Cubre cierre de ingresos, costos y gastos, traslado de utilidad/pérdida a patrimonio, balance Bs./USD, aislamiento de empresa, asientos fuera del período, rechazo de cierre duplicado y asiento descuadrado, y requisito de cuenta patrimonial válida.
+- Cubre integración cierre→apertura para que el resultado cerrado se lleve una sola vez.
+- Contiene un caso de reconversión 2021-09-30/2021-10-01; el importe de ingresos Bs. se reexpresa al cierre y se comprueba el resultado patrimonial.
+- **No encontrado:** reconversiones 2008 y 2018; serie de múltiples reconversiones; anulaciones/reversos del cierre; prueba de cierres de ejercicios consecutivos con saldos reexpresados.
+
+### Apertura anual — `accountingYearOpening.test.ts`
+
+
+- Cubre traslado de cuentas de balance y resultado, cuenta patrimonial requerida, asientos descuadrados/duplicados, aislamiento de empresa y corte de fechas, tolerancia estricta Bs./USD, última apertura anual vinculada, reverso futuro de apertura y no duplicación de ingresos/gastos de años anteriores.
+- Tiene prueba de reconversión 2018-08-19/2018-08-20: los saldos de ambas fechas se normalizan a la escala de la fecha de apertura 2022-01-01.
+- **No encontrado:** secuencia que abarque reconversiones 2008, 2018 y 2021; apertura con reversión y reapertura nueva entre escalas; cadena de varios años que pruebe repetidamente el arrastre y cierre/apertura; comparación auxiliar de inventario con cuentas de mayor.
+
+### Flujo de efectivo directo — `cashFlowStatement.test.ts`
+
+
+- Cubre clasificación y conciliación, inversión/financiación, cuentas de efectivo, transferencias, operaciones sin clasificar, empresas aisladas, períodos inválidos, apertura vinculada, arrastre desde apertura previa y reverso de apertura en el mismo día.
+- Prueba específica de escala histórica con apertura 2013 y recibo 2014: Bs. normalizado, USD sin reexpresión, saldo inicial + flujo = cierre de mayor y reporte reconciliado.
+- **No encontrado:** pruebas específicas de 2008, 2018 y 2021; varios saltos de escala en una misma serie; anulación de operación ordinaria; reversión de apertura en fecha distinta; verificación de consistencia con Balance General nominal.
+
+### Flujo de efectivo indirecto — `cashFlowIndirectStatement.test.ts`
+
+
+- Cubre resultado, depreciación, capital de trabajo, reconciliación, reversión de apertura, apertura previa vinculada y movimientos pre-período, empresas aisladas, valores no finitos, precisión USD, clasificación incompleta y discrepancia de conciliación.
+- Prueba específica de escala 2013/2014: resultado y flujo Bs. reexpresados, saldo inicial y final reconciliados, USD preservado.
+- **No encontrado:** pruebas de 2008, 2018 y 2021; cadena multi-reconversión; reversos de operaciones no-apertura; coherencia contra Balance General nominal y contra flujo directo con fuentes idénticas en todas las eras.
+
+### Cambios en patrimonio — `equityChanges.test.ts`
+
+
+- Cubre reexpresión de Bs. en la frontera 2021-09-30/2021-10-01, apertura patrimonial, movimientos, resultado transferido/no transferido, aislamiento de empresa y período inválido.
+- **No encontrado:** reconversiones 2008/2018, serie de múltiples reconversiones, reversos de apertura o movimientos patrimoniales, arrastre plurianual entre aperturas vinculadas, prueba comparativa de patrimonio contra Balance General.
+
+### Prioridad y criterio de entrada para una política monetaria común
+
+1. Agregar pruebas unitarias de normalización con casos fechados antes/después de cada reconversión, incluyendo varias eras en una misma serie.
+2. Componer las pruebas de apertura/cierre en cadena: cierre, apertura vinculada, movimientos, reverso, nueva apertura y siguiente ejercicio.
+3. Para flujos directo/indirecto y patrimonio, usar el mismo conjunto de entradas contables y verificar que los resultados se reconcilien bajo la política de presentación definida; no exigir igualdad de reportes con naturaleza diferente, sino explicar y probar sus bases y escala.
+4. Añadir casos de reversos de operaciones históricas y aperturas anuladas, sin duplicar ni eliminar fuente.
+5. Añadir comparación Balance General vs. balances históricos, flujo y patrimonio con fecha de corte, escala Bs. y origen de cifras explícitos.
+6. Mantener USD original, fecha efectiva, tasa, monto nominal y trazabilidad; cualquier reexpresión debe ser una vista/calculo derivado, no reescritura de fuente.
+
+**Limitación de ejecución:** esta etapa fue una inspección de archivos de prueba en GitHub. No se ejecutó suite local ni CI en esta sesión; las brechas son ausencia de casos encontrados en los archivos examinados, no afirmación de que todos los escenarios fallen en runtime.
