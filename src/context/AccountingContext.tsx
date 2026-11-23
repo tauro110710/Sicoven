@@ -5020,7 +5020,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? Math.min(amounts.netReceivableAdjustmentUsd, balance.outstandingUsd)
       : (isCredit && !isCashSale ? amounts.netReceivableAdjustmentUsd : 0);
     const refundPortionUsd = isCredit ? Math.max(0, amounts.netReceivableAdjustmentUsd - receivablePortionUsd) : 0;
-    const receivablePortionBs = receivablePortionUsd * draft.bcvRate;
+    const receivablePortionBs = isCredit && balance && Number(source.totalAmountUsd || 0) <= 0
+      ? Math.min(amounts.netReceivableAdjustmentBs, balance.outstandingBsAtInvoiceRate)
+      : receivablePortionUsd * draft.bcvRate;
     const refundPortionBs = isCredit
       ? Math.max(0, amounts.netReceivableAdjustmentBs - receivablePortionBs)
       : 0;
