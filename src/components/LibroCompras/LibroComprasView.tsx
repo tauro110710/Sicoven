@@ -74,7 +74,7 @@ export const LibroComprasView: React.FC = () => {
       if (monthEndFilter && period > monthEndFilter) return false;
       if (supplierFilter && String(p.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() !== supplierFilter) return false;
       if (searchTerm.trim()) {
-        const searchable = [p.supplierName, p.supplierRif, p.invoiceNumber, p.controlNumber, p.voucherNumber, p.documentType, p.opNumber].map(normalizePurchaseSearch).join(' ');
+        const searchable = [p.supplierName, p.supplierRif, p.invoiceNumber, p.controlNumber, p.voucherNumber, p.documentType, p.opNumber].map(value => normalizePurchaseSearch(String(value ?? ''))).join(' ');
         const tokens = normalizePurchaseSearch(searchTerm).split(/\s+/).filter(Boolean);
         if (!tokens.every(token => searchable.includes(token))) return false;
       }
