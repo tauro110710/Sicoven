@@ -2008,7 +2008,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const expenseAccount = accounts.find(account => account.code === draft.depreciationExpenseAccountCode);
     if (!sourceLine || sourceLine.accountCode !== draft.assetAccountCode ||
         !assetAccount || assetAccount.type !== 'ACTIVO' || !assetAccount.isMovement || !assetAccount.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(assetAccount.name) ||
-        Number(sourceLine.debitBs) <= 0 || Number(sourceLine.debitUsd) <= 0 ||
+        Number(sourceLine.debitBs) <= 0 || Number(sourceLine.debitUsd) < 0 || (isBcvRateRequiredForDate(source.date) && (Number(sourceLine.debitUsd) <= 0 || Number(sourceLine.debitBs) <= 0)) ||
         Number(sourceLine.creditBs || 0) > 0 || Number(sourceLine.creditUsd || 0) > 0) {
       throw new Error('La línea de origen debe ser un débito dual ya contabilizado en una cuenta de Propiedades, Planta y Equipos (1.2).');
     }
@@ -2063,7 +2063,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const period = getNextFixedAssetDepreciationPeriod(asset);
     if (!period) throw new Error('El activo ya alcanzó su valor residual o no tiene depreciación pendiente.');
     const calculation = calculateFixedAssetDepreciation(asset, period);
-    if (calculation.amountBs <= 0 || calculation.amountUsd <= 0) {
+    if (calculation.amountBs <= 0 || (asset.acquisitionCostUsd > 0 && calculation.amountUsd <= 0)) {
       throw new Error('El período no genera importes positivos en ambas monedas. Revise el costo, valor residual y vida útil del activo.');
     }
     const expenseAccount = accounts.find(account => account.code === asset.depreciationExpenseAccountCode);
@@ -2145,7 +2145,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             !accumulated || accumulated.type !== 'ACTIVO' || !accumulated.isMovement) {
           throw new Error('No se pudo preparar el cierre: revise las cuentas de depreciación de ' + item.asset.assetCode + '.');
         }
-        if (item.calculation.amountBs <= 0 || item.calculation.amountUsd <= 0) {
+        if (item.calculation.amountBs <= 0 || (item.asset.acquisitionCostUsd > 0 && item.calculation.amountUsd <= 0)) {
           throw new Error('La depreciación de ' + item.asset.assetCode + ' no genera importes positivos en ambas monedas.');
         }
       }
