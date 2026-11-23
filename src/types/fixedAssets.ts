@@ -1,3 +1,5 @@
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+
 export type FixedAssetDepreciationMethod = 'STRAIGHT_LINE' | 'NON_DEPRECIABLE';
 export type FixedAssetStatus = 'ACTIVE' | 'DISPOSED';
 
@@ -105,8 +107,9 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
     throw new Error(nonDepreciable ? 'Un activo no depreciable debe tener vida útil cero.' : 'La vida útil debe ser un número entero de meses mayor que cero.');
   }
   const values = [asset.acquisitionCostBs, asset.acquisitionCostUsd, asset.acquisitionBcvRate, asset.residualValueBs, asset.residualValueUsd];
-  if (!values.every(value => Number.isFinite(value) && value >= 0) || asset.acquisitionBcvRate <= 0) {
-    throw new Error('Los costos y valores residuales deben ser finitos y no negativos, y la tasa histórica de adquisición debe ser mayor que cero.');
+  if (!values.every(value => Number.isFinite(value) && value >= 0) ||
+      (isBcvRateRequiredForDate(asset.acquisitionDate) && asset.acquisitionBcvRate <= 0)) {
+    throw new Error('Los costos y valores residuales deben ser finitos y no negativos; la tasa BCV es obligatoria desde 2018.');
   }
   if (asset.residualValueBs > asset.acquisitionCostBs || asset.residualValueUsd > asset.acquisitionCostUsd) {
     throw new Error('El valor residual no puede superar el costo de adquisición.');
@@ -117,8 +120,9 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
       throw new Error('Un activo no depreciable conserva su costo como valor residual y no admite eventos ni cuentas de depreciación.');
     }
   } else if (asset.depreciationMethod !== 'STRAIGHT_LINE' ||
-      asset.residualValueBs >= asset.acquisitionCostBs || asset.residualValueUsd >= asset.acquisitionCostUsd) {
-    throw new Error('El activo depreciable debe tener importe depreciable positivo en ambas monedas.');
+      asset.residualValueBs >= asset.acquisitionCostBs ||
+      (asset.acquisitionCostUsd > 0 && asset.residualValueUsd >= asset.acquisitionCostUsd)) {
+    throw new Error('El activo depreciable debe tener importe depreciable positivo en Bs. y, si existe valoración USD, también en USD.');
   }
   if (!Number.isInteger(asset.sourceJournalLineIndex) || asset.sourceJournalLineIndex < 0) {
     throw new Error('El vínculo a la línea contable de origen no es válido.');
