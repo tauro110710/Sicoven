@@ -109,9 +109,10 @@ describe('date-aware journal BCV policy', () => {
   it('rejects historical rate-only entries that omit one currency side', () => {
     assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:6.3,debitBs:630,debitUsd:0}),false);
   });
-  it('allows Bs-only entries without BCV after 2018 when no conversion is required', () => {
-    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:0,debitBs:630,debitUsd:0}),true);
-    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2026-11-22',bcvRate:0,debitBs:630,debitUsd:0}),true);
+  it('requires BCV for Bs-only entries from 2018 onward', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:0,debitBs:630,debitUsd:0}),false);
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2026-11-22',bcvRate:0,debitBs:630,debitUsd:0}),false);
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:6.3,debitBs:630,debitUsd:0}),true);
   });
   it('requires BCV for post-2018 entries that actually contain dual-currency equivalents', () => {
     assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:0,debitBs:630,debitUsd:100}),false);
