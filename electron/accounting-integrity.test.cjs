@@ -4229,9 +4229,9 @@ test('SQLite accepts only the linked and balanced automatic year-end closing ent
 });
 
 
-test('SQLite accepts 2014 historical entries balanced in Bs. without USD validation', () => {
-  const historical = { ...sourceEntry(), date: '2014-06-30', bcvRate: 0,
-    items: [line(1120000, 0, 0, 0), line(0, 1120000, 0, 0)] };
+test('SQLite accepts pre-2018 entries balanced in Bs. without USD validation even when BCV is supplied', () => {
+  const historical = { ...sourceEntry(), date: '2014-06-30', bcvRate: 6.3,
+    items: [line(1120000, 0, 500, 0), line(0, 1120000, 0, 75)] };
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), emptyState([historical])));
 });
 
@@ -4268,6 +4268,22 @@ test('SQLite accepts a pre-2018 inventory purchase in Bs. without BCV or USD Kar
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
     ...emptyState([entry]), purchases: [purchase], movements: [movement],
+    products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }]
+  }));
+
+  // Before 2018, BCV/USD data may exist but is not a mandatory balancing basis.
+  const withRate = structuredClone(purchase);
+  withRate.bcvRate = 6.3;
+  withRate.totalAmountUsd = 1;
+  withRate.taxableBaseUsd = 0.8;
+  const entryWithRate = structuredClone(entry);
+  entryWithRate.bcvRate = 6.3;
+  entryWithRate.items[0].debitUsd = 99;
+  entryWithRate.items[1].creditUsd = 0;
+  const movementWithRate = structuredClone(movement);
+  movementWithRate.bcvRate = 6.3;
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...emptyState([entryWithRate]), purchases: [withRate], movements: [movementWithRate],
     products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }]
   }));
 });

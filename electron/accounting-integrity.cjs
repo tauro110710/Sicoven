@@ -2391,7 +2391,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       return sum;
     }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     const entryDate = String(entry.date || '');
-    const historicalBsOnly = /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate < '2018-01-01' && Number(entry.bcvRate || 0) <= 0;
+    const historicalBsOnly = /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate < '2018-01-01';
     const requiresDualCurrency = /^\d{4}-\d{2}-\d{2}$/.test(entryDate) && entryDate >= '2018-01-01';
     const bsBalanced = Math.abs(totals.debitBs - totals.creditBs) < 0.01 && totals.debitBs > 0;
     const usdBalanced = Math.abs(totals.debitUsd - totals.creditUsd) < 0.01 && totals.debitUsd > 0;
@@ -2695,7 +2695,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         !Array.isArray(purchase.inventoryLines) || purchase.inventoryLines.length === 0) continue;
     const lines = purchase.inventoryLines;
     const invoiceRate = Number(purchase.bcvRate || 0);
-    const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && invoiceRate <= 0;
+    const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01';
     const productIds = new Set();
     let lineTotal = 0;
     for (const line of lines) {
