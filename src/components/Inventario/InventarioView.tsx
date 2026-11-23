@@ -48,6 +48,7 @@ export const InventarioView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<InventoryProduct | null>(null);
+  const [productToView, setProductToView] = useState<InventoryProduct | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [isMovementImportOpen, setIsMovementImportOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -329,9 +330,13 @@ export const InventarioView: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex justify-center gap-1.5">
+                            <button type="button" onClick={() => setProductToView(prod)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50" title="Ver ficha del artículo">
+                              <Eye className="h-3 w-3" /> Ver
+                            </button>
                             <button type="button" onClick={() => { setSelectedProductId(prod.id); setSearchTerm(''); setActiveTab('KARDEX'); }}
                               className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold text-blue-800 hover:bg-blue-100" title="Ver movimientos de este artículo">
-                              <Eye className="h-3 w-3" /> Kardex
+                              <ArrowLeftRight className="h-3 w-3" /> Kardex
                             </button>
                             <button type="button" onClick={() => { setProductToEdit(prod); setIsProductModalOpen(true); }}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100" title="Editar ficha">
@@ -438,6 +443,33 @@ export const InventarioView: React.FC = () => {
         </div>
       )}
 
+      {productToView && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" role="dialog" aria-modal="true" aria-label="Ficha de artículo">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 flex items-start justify-between gap-3 border-b bg-white p-4">
+              <div><h2 className="text-lg font-bold text-slate-900">Ficha de artículo</h2><p className="text-xs text-slate-500">{productToView.code} · {productToView.name}</p></div>
+              <button type="button" onClick={() => setProductToView(null)} className="rounded-lg border px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" aria-label="Cerrar ficha">Cerrar</button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+              {[
+                ['Código', productToView.code], ['Nombre', productToView.name], ['Categoría', productToView.category], ['Unidad', productToView.unit],
+                ['Existencia actual', String(productToView.currentStock)], ['Stock mínimo', String(productToView.minStock)],
+                ['Costo promedio Bs.', formatBs(productToView.avgCostBs)], ['Costo promedio USD', formatUsd(productToView.avgCostUsd)],
+                ['Último costo Bs.', formatBs(productToView.lastCostBs)], ['Último costo USD', formatUsd(productToView.lastCostUsd)],
+                ['Precio venta Bs.', formatBs(productToView.salesPriceBs)], ['Precio venta USD', formatUsd(productToView.salesPriceUsd)],
+                ['Método de costeo', productToView.costingMethod || 'PROMEDIO PONDERADO'], ['Tipo de artículo', productToView.itemType || 'MERCANCÍA'],
+                ['Tratamiento IVA', productToView.vatTreatment || 'GENERAL_16'], ['Fecha de apertura', productToView.openingDate || '—'],
+                ['Cuenta inventario', productToView.inventoryAccountCode || 'Predeterminada'], ['Cuenta costo ventas', productToView.costOfSalesAccountCode || 'Predeterminada'],
+                ['Cuenta ajustes', productToView.adjustmentAccountCode || 'Predeterminada']
+              ].map(([label,value]) => <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div><div className="mt-1 break-words text-sm font-medium text-slate-900">{value}</div></div>)}
+            </div>
+            <div className="flex justify-end gap-2 border-t p-4">
+              <button type="button" onClick={() => { setProductToEdit(productToView); setProductToView(null); setIsProductModalOpen(true); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Editar ficha</button>
+              <button type="button" onClick={() => { setSelectedProductId(productToView.id); setSearchTerm(''); setActiveTab('KARDEX'); setProductToView(null); }} className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">Ver Kardex</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Modals */}
       <NewProductModal isOpen={isProductModalOpen} product={productToEdit} onClose={() => { setIsProductModalOpen(false); setProductToEdit(null); }} />
       <NewMovementModal isOpen={isMovementModalOpen} onClose={() => setIsMovementModalOpen(false)} />
