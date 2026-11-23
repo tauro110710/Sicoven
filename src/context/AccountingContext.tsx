@@ -4564,11 +4564,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (settlementModeError) throw new Error(settlementModeError);
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     const rate = Number(saleData.bcvRate);
-    // La tasa BCV es obligatoria solo cuando el cobro es en divisas.
-    // Para ventas nominales en bolívares, se permite rate = 0 (equivalencia pendiente).
-    const SALE_FOREIGN_METHODS = ['FOREIGN_CASH', 'FOREIGN_TRANSFER', 'CRYPTO'];
-    const saleNeedsRate = SALE_FOREIGN_METHODS.includes(saleData.paymentCurrency || '') &&
-      isBcvRateRequiredForDate(saleData.invoiceDate);
+    // Desde 2018 las facturas de venta requieren tasa para mantener su snapshot dual.
+    // Antes de 2018, la operación puede conservarse nominalmente en Bs. sin equivalencia ficticia.
+    const saleNeedsRate = isBcvRateRequiredForDate(saleData.invoiceDate);
     if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para ventas cobradas en divisas. Registre la tasa histórica antes de guardar.');
     }
