@@ -47,6 +47,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { requestNonBlockingConfirm } from '../utils/safeAlert';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import { validateRetentionVoucherSupplierEmail } from '../types/retentionVoucherCompliance';
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
@@ -3208,7 +3209,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La tasa BCV es obligatoria para medios de pago en divisas, no para operaciones
     // nominales en bolívares. Sin tasa, la equivalencia USD queda pendiente (0).
     const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
-    const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '');
+    const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '') &&
+      isBcvRateRequiredForDate(purchaseData.invoiceDate);
     if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
@@ -4565,7 +4567,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La tasa BCV es obligatoria solo cuando el cobro es en divisas.
     // Para ventas nominales en bolívares, se permite rate = 0 (equivalencia pendiente).
     const SALE_FOREIGN_METHODS = ['FOREIGN_CASH', 'FOREIGN_TRANSFER', 'CRYPTO'];
-    const saleNeedsRate = SALE_FOREIGN_METHODS.includes(saleData.paymentCurrency || '');
+    const saleNeedsRate = SALE_FOREIGN_METHODS.includes(saleData.paymentCurrency || '') &&
+      isBcvRateRequiredForDate(saleData.invoiceDate);
     if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para ventas cobradas en divisas. Registre la tasa histórica antes de guardar.');
     }
