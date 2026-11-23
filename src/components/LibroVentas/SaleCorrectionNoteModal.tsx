@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { SaleRecord } from '../../types/accounting';
 import type { SaleCorrectionNoteRequest } from '../../types/saleCorrectionNote';
 import type { Account } from '../../types/accounting';
+import { useAccounting } from '../../context/AccountingContext';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type Draft = Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string };
 
@@ -15,10 +18,21 @@ interface Props {
 }
 
 export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcvRate, treasuryAccounts, onClose, onSubmit }) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const { currentCompany } = useAccounting();
+  const now = new Date();
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
-  const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate || sourceSale.bcvRate || ''));
+  const initialHistoricalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], today);
+  const [noteBcvRate, setNoteBcvRate] = useState(String(initialHistoricalRate ?? bcvRate ?? ''));
   const rateRequired = isBcvRateRequiredForDate(noteDate);
+  useEffect(() => {
+    const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], noteDate);
+    const sameDateSourceRate = noteDate === sourceSale.invoiceDate && Number(sourceSale.bcvRate) > 0
+      ? Number(sourceSale.bcvRate) : undefined;
+    const currentRateForToday = noteDate === today && Number(bcvRate) > 0 ? Number(bcvRate) : undefined;
+    const resolved = historicalRate ?? sameDateSourceRate ?? currentRateForToday;
+    setNoteBcvRate(resolved === undefined ? '' : String(resolved).replace('.', ','));
+  }, [currentCompany.accountingBcvRateHistory, noteDate, sourceSale.invoiceDate, sourceSale.bcvRate, bcvRate, today]);
   const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>(sourceSale.fiscalEmissionMedium || '');
   const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(sourceSale.sameMediumAsOriginal === true);
   const [noteNumber, setNoteNumber] = useState('');
