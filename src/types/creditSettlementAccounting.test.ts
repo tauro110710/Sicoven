@@ -53,3 +53,27 @@ test('resuelve el asiento AJUSTE de notas de débito y conserva VENTA/COMPRA par
   assert.equal(getCreditSettlementSourceJournalType('SALE_COLLECTION', '02'), 'AJUSTE');
   assert.equal(getCreditSettlementSourceJournalType('PURCHASE_PAYMENT', '02'), 'AJUSTE');
 });
+
+test('plans a Bs-only settlement without BCV and keeps both nominal ledger sides balanced', () => {
+  const lines = buildCreditSettlementJournalItems({
+    kind: 'SALE_COLLECTION', method: 'CASH_BS', amountUsd: 0, amountBs: 500,
+    invoiceRate: 0, settlementRate: 0, cashAccount: cash, controlAccount: control
+  });
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].debitBs, 500);
+  assert.equal(lines[1].creditBs, 500);
+  assert.equal(lines[0].debitUsd, 0);
+  assert.equal(lines[1].creditUsd, 0);
+});
+
+test('supports manual Bs value for pre-2018 dual settlement when rate is omitted', () => {
+  const lines = buildCreditSettlementJournalItems({
+    kind: 'SALE_COLLECTION', method: 'CASH_BS', amountUsd: 10, amountBs: 1100,
+    invoiceRate: 100, settlementRate: 0, cashAccount: cash, controlAccount: control,
+    fxGainAccount: gain, fxLossAccount: loss
+  });
+  assert.equal(lines.length, 3);
+  assert.equal(lines[0].debitBs, 1100);
+  assert.equal(lines[1].creditBs, 1000);
+  assert.equal(lines[2].creditBs, 100);
+});
