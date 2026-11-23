@@ -18,6 +18,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const today = new Date().toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
   const [noteBcvRate, setNoteBcvRate] = useState(String(bcvRate || sourceSale.bcvRate || ''));
+  const rateRequired = isBcvRateRequiredForDate(noteDate);
   const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>(sourceSale.fiscalEmissionMedium || '');
   const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(sourceSale.sameMediumAsOriginal === true);
   const [noteNumber, setNoteNumber] = useState('');
@@ -104,8 +105,8 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <label className="text-xs font-semibold text-slate-700">Número de control
             <input required value={controlNumber} onChange={e=>setControlNumber(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
-          <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión
-            <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+          <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión {rateRequired ? '*' : '(opcional antes de 2018)' }
+            <input required={rateRequired} type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
             <input required type="text" inputMode="decimal" value={taxableBaseBs} readOnly={kind === "CREDIT" && inventoryReturnOptions.length > 0} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal read-only:bg-slate-50" />
