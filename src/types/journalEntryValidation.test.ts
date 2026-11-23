@@ -1,6 +1,6 @@
 import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateJournalEntryAccounts, isJournalEntryBalanced, convertBsToUsdAmount } from './journalEntryValidation';
+import { validateJournalEntryAccounts, isJournalEntryBalanced, convertBsToUsdAmount, isJournalEntryCurrencyPolicySatisfied } from './journalEntryValidation';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 
 describe('journal entry account validation', () => {
@@ -91,4 +91,23 @@ test('acepta asientos historicos cuadrados solo en Bs. cuando no existe equivale
 
 test('exige cuadrar USD cuando el asiento ya contiene equivalencias convertidas', () => {
   assert.equal(isJournalEntryBalanced({ debitBs: 1120000, creditBs: 1120000, debitUsd: 1120000, creditUsd: 1119999 }), false);
+});
+
+describe('date-aware journal BCV policy', () => {
+  it('allows historical Bs-only journal entries with no BCV rate', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2014-01-01',bcvRate:0,debitBs:1120000,debitUsd:0}),true);
+  });
+  it('allows historical USD-only journal entries with no BCV rate', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:0,debitBs:0,debitUsd:500}),true);
+  });
+  it('allows historical voluntary dual-currency entries when the rate is supplied', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:6.3,debitBs:630,debitUsd:100}),true);
+  });
+  it('rejects historical rate-only entries that omit one currency side', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:6.3,debitBs:630,debitUsd:0}),false);
+  });
+  it('requires BCV and both currencies from 2018 onward', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:0,debitBs:630,debitUsd:0}),false);
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2018-01-01',bcvRate:6.3,debitBs:630,debitUsd:100}),true);
+  });
 });
