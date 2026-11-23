@@ -90,7 +90,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
       await addSupplierAdvanceSettlement({
         supplierRif, kind, date, amountUsd: usd,
         amountBs: kind === 'REFUND_RECEIVED' ? parseAmount(cashReceivedBs) : (rate > 0 ? Math.round(usd * rate * 100) / 100 : historicalBookValueBs),
-        cashReceivedBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : undefined,
+        cashReceivedBs: kind === 'REFUND_RECEIVED' ? parseAmount(cashReceivedBs) : undefined,
         bcvRate: rate,
         treasuryAccountCode: kind === 'REFUND_RECEIVED' ? treasuryAccountCode : undefined,
         targetPurchaseId: kind === 'APPLIED_TO_PURCHASE' ? targetPurchaseId : undefined,
