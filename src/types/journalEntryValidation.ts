@@ -1,5 +1,4 @@
 import type { Account, JournalEntryItem } from './accounting';
-import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 /**
  * Prevents posting to missing or grouping accounts before the entry reaches
@@ -74,7 +73,7 @@ export function isJournalEntryCurrencyPolicySatisfied(input: {
   if (!Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== input.date) return false;
   const bs = Number(input.debitBs), usd = Number(input.debitUsd), rate = Number(input.bcvRate);
   if (bs <= 0 && usd <= 0) return false;
-  if (rate > 0) return bs > 0 && usd > 0;
-  if (isBcvRateRequiredForDate(input.date) && bs > 0 && usd > 0) return false;
+  if (bs > 0 && usd > 0) return rate > 0;
+  if (rate > 0) return false;
   return true;
 }

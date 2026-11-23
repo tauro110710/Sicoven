@@ -103,6 +103,9 @@ describe('date-aware journal BCV policy', () => {
   it('allows historical voluntary dual-currency entries when the rate is supplied', () => {
     assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:6.3,debitBs:630,debitUsd:100}),true);
   });
+  it('rejects historical dual-currency entries without an explicit rate', () => {
+    assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:0,debitBs:630,debitUsd:100}),false);
+  });
   it('rejects historical rate-only entries that omit one currency side', () => {
     assert.equal(isJournalEntryCurrencyPolicySatisfied({date:'2017-12-31',bcvRate:6.3,debitBs:630,debitUsd:0}),false);
   });
