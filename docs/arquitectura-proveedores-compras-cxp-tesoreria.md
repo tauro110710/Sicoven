@@ -539,3 +539,23 @@ En `approveInflationIndexSeries`, el código exige actor con rol contable, decis
 4. Definir un flujo de procedencia específico para IPC-AMC; no reutilizar automáticamente las reglas de autenticidad del INPC-BCV.
 
 **Conclusión:** la revisión independiente está protegida en expedientes alternativos, pero la aprobación de series de índices no aplica el mismo control de independencia. El hallazgo queda documentado; no se modificó el código en esta fase de auditoría.
+
+
+## Auditoría de aislamiento de sesión y empresa operativa (23-11-2026)
+
+**Revisión estática de controles presentes:**
+
+- `company-session-context.cjs` exige token hexadecimal de 64 caracteres y valida la sesión contra el proceso principal antes de listar, seleccionar o acceder a la empresa.
+- La selección solo acepta empresas activas y exige `canAccessCompany`; los permisos y el estado se vuelven a comprobar tras el cambio de contexto y antes de cada acceso a la base empresarial.
+- El renderer no controla rutas de bases de datos: la empresa seleccionada se resuelve mediante un mapa privado del proceso principal y `withActiveDatabase`. La lista accesible expone ID, nombre y RIF, no rutas.
+- El contexto operacional limita el uso a una sesión autenticada a la vez; el cambio de usuario requiere liberar la sesión anterior. El IPC de selección valida además licencia y rol antes de delegar en el contexto.
+- Los IPC de creación y actualización de ficha de empresa validan identidad/rol, licencia, empresa activa, RIF duplicado, identificador de operación y guardas de mantenimiento; sus operaciones durables usan intents/receipts para recuperar interrupciones y evitar duplicados.
+- Tests existentes cubren empresa archivada/no autorizada, token inválido, empresa manipulada desde renderer, revalidación de permisos durante cambio y acceso a DB, sesión única, logout y recuperación de operaciones de metadata/creación.
+
+**Limitaciones de cobertura que quedan abiertas (no constituyen vulnerabilidad confirmada):**
+
+1. No se identificó en la suite revisada un test explícito de carrera en que el permiso de empresa se revoca mientras una operación DB ya está dentro del callback de `withSelectedDatabase`; debe determinarse si el lock operacional evita cambios de tenant durante esa operación y agregar prueba de concurrencia.
+2. La política de una sola sesión operativa parece deliberada por el renderer/DB compartidos; falta validar mediante prueba integrada de Electron que el cierre de sesión, expiración y cierre de ventana limpien el contexto y bloqueen todas las IPC operativas, no solo los canales de empresa.
+3. La persistencia de `active_company_preference` es una preferencia, no autoridad de acceso; al restaurarla debe exigirse sesión y autorización frescas. No se debe confiar en el valor guardado para abrir una empresa.
+
+**Conclusión:** los controles revisados de aislamiento de empresa son defensivos y revalidan autorización en el proceso principal; no se encontró evidencia en estos archivos de que el renderer pueda elegir una ruta de SQLite para operar. La revisión permanece estática y parcial: requiere rastrear todos los IPC contables/exportación y validar con pruebas de concurrencia y ciclo de vida de Electron.
