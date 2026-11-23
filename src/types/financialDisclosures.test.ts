@@ -43,11 +43,11 @@ describe('financial disclosure account movements', () => {
   });
 
   it('normalizes historical Bs to current scale before aggregating movements', () => {
-    const oldEra = entry({ id: 'old-era', date: '2015-01-01', items: [
+    const oldEra = entry({ id: 'old-era', date: '2005-01-01', items: [
       { accountCode: '1.1', accountName: 'Caja', debitBs: 100000000000000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
       { accountCode: '4.1', accountName: 'Ingresos', debitBs: 0, creditBs: 100000000000000, debitUsd: 0, creditUsd: 10 }
     ]});
-    const rows = buildDisclosureAccountMovements([oldEra], accounts, 'company-a', 2015);
+    const rows = buildDisclosureAccountMovements([oldEra], accounts, 'company-a', 2005);
     assert.equal(rows.find(row => row.accountCode === '1.1')?.debitBs, 1);
     assert.equal(rows.find(row => row.accountCode === '4.1')?.creditBs, 1);
   });
