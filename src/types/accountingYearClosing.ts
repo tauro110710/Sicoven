@@ -1,5 +1,6 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 import { isJournalEntryBalanced } from './journalEntryValidation';
+import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 
 export interface ClosingEntryBuildInput {
   companyId: string;
@@ -75,8 +76,8 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
 
       if (['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type)) {
         const current = nominalBalances.get(account.code) || emptyTotals();
-        current.debitBs += Number(line.debitBs);
-        current.creditBs += Number(line.creditBs);
+        current.debitBs += Number(convertVenezuelanAmountBetweenDates(String(line.debitBs), entry.date, periodEndDate));
+        current.creditBs += Number(convertVenezuelanAmountBetweenDates(String(line.creditBs), entry.date, periodEndDate));
         current.debitUsd += Number(line.debitUsd);
         current.creditUsd += Number(line.creditUsd);
         nominalBalances.set(account.code, current);

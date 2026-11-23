@@ -4,6 +4,7 @@ import {
   buildHistoricalFiscalExercises,
   convertVenezuelanAmount,
   normalizeVenezuelanAmountToCurrentScale,
+  convertVenezuelanAmountBetweenDates,
   getVenezuelanMonetaryEra,
   roundHistoricalPresentationAmount,
   addExactDecimals
@@ -56,6 +57,12 @@ test('convierte escalas sin redondear ni perder precisión decimal de origen', (
   assert.equal(convertVenezuelanAmount('100000000000000', 'BOLIVAR_ORIGINAL', 'BOLIVAR_DIGITAL'), '1');
   assert.equal(convertVenezuelanAmount('0.00000001', 'BOLIVAR_DIGITAL', 'BOLIVAR_SOBERANO'), '0.01');
   assert.equal(convertVenezuelanAmount('-1000000', 'BOLIVAR_SOBERANO', 'BOLIVAR_DIGITAL'), '-1');
+});
+
+test('converts values between operation-date and target-date scales', () => {
+  assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2018-08-19', '2018-08-20'), '1000');
+  assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2018-08-20', '2021-10-01'), '1');
+  assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2021-09-30', '2021-10-01'), '1');
 });
 
 test('separa la conversión nominal del redondeo de presentación', () => {

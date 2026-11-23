@@ -177,3 +177,16 @@ test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al result
   assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 80);
   assert.equal(items.some(item => item.accountCode === '4.1.1' || item.accountCode === '6.1.1'), false);
 });
+
+test('normaliza balances históricos a la escala de la fecha de apertura', () => {
+  const journal = [
+    entry('legacy-2018', '2018-08-19', [line('1.1.1', 100000000000, 0, 1, 0), line('2.1.1', 0, 100000000000, 0, 1)]),
+    entry('post-2018', '2018-08-20', [line('1.1.1', 1000000, 0, 1, 0), line('2.1.1', 0, 1000000, 0, 1)])
+  ];
+  const items = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2021-01-01', periodEndDate: '2021-12-31', openingDate: '2022-01-01',
+    accounts, journalEntries: journal, retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitBs, 2);
+  assert.equal(items.find(item => item.accountCode === '2.1.1')?.creditBs, 2);
+});

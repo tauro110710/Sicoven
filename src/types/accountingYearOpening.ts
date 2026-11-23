@@ -1,5 +1,6 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 import { isJournalEntryBalanced } from './journalEntryValidation';
+import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 
 export interface OpeningEntryBuildInput {
   companyId: string;
@@ -93,19 +94,19 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
 
       if (account.type === 'INGRESOS') {
         if (entry.date >= input.periodStartDate) {
-          profitLoss.bs += Number(line.creditBs) - Number(line.debitBs);
+          profitLoss.bs += Number(convertVenezuelanAmountBetweenDates(String(Number(line.creditBs) - Number(line.debitBs)), entry.date, openingDate));
           profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
         }
       } else if (account.type === 'COSTOS' || account.type === 'GASTOS') {
         if (entry.date >= input.periodStartDate) {
           // Costs and expenses reduce the period result (income less expenses).
-          profitLoss.bs += Number(line.creditBs) - Number(line.debitBs);
+          profitLoss.bs += Number(convertVenezuelanAmountBetweenDates(String(Number(line.creditBs) - Number(line.debitBs)), entry.date, openingDate));
           profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
         }
       } else {
         const current = balances.get(account.code) || emptyTotals();
-        current.debitBs += Number(line.debitBs);
-        current.creditBs += Number(line.creditBs);
+        current.debitBs += Number(convertVenezuelanAmountBetweenDates(String(line.debitBs), entry.date, openingDate));
+        current.creditBs += Number(convertVenezuelanAmountBetweenDates(String(line.creditBs), entry.date, openingDate));
         current.debitUsd += Number(line.debitUsd);
         current.creditUsd += Number(line.creditUsd);
         balances.set(account.code, current);

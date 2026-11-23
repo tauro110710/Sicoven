@@ -106,3 +106,13 @@ test('the generated closing entry makes the next opening carry the closed result
   assert.equal(openingItems.find(item => item.accountCode === '3.1.1')?.creditBs, 400);
   assert.equal(openingItems.find(item => item.accountCode === '3.1.1')?.creditUsd, 4);
 });
+
+test('normaliza saldos de ingresos de septiembre y octubre 2021 a la escala de cierre', () => {
+  const journal = [
+    entry('income-september', '2021-09-30', [line('1.1.1', 1000000, 0, 1, 0), line('4.1.1', 0, 1000000, 0, 1)]),
+    entry('income-october', '2021-10-01', [line('1.1.1', 1, 0, 1, 0), line('4.1.1', 0, 1, 0, 1)])
+  ];
+  const items = buildClosingEntryItems({ ...input(journal, '3.1.1'), periodStartDate: '2021-01-01', periodEndDate: '2021-12-31' });
+  assert.equal(items.find(item => item.accountCode === '4.1.1')?.debitBs, 2);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 2);
+});
