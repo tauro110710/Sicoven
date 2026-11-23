@@ -613,3 +613,17 @@ En `NewEntryModal.tsx`, la interfaz ya calculaba `rateRequired` mediante la pol�
 ### Validación pendiente
 - No se ejecutó suite/build en entorno local; la corrección queda pendiente de CI y pruebas de interfaz.
 - Próximo trabajo funcional: revisar la entrada manual y los servicios de contabilización para asegurar que reglas de fecha, moneda, balance, cuentas de movimiento y persistencia sean consistentes en todos los puntos de registro, no solo en el modal.
+
+
+## Revisión funcional: reembolso de anticipos — formato decimal venezolano (23-11-2026)
+
+### Defecto confirmado
+El formulario de liquidación de anticipos interpretaba los importes con coma decimal mediante su parser, pero enviaba el campo de efectivo recibido en Bs. usando `Number(cashReceivedBs)`. Así, una entrada como `1.234,56` validada como 1234.56 en la UI terminaba enviada como `NaN`, causando que el reembolso fallara o quedara inconsistente con el importe Bs. aceptado.
+
+### Corrección
+- Se centralizó el parser en `src/utils/parseVenezuelanAmount.ts`.
+- El campo `cashReceivedBs` ahora usa el mismo parser que los demás campos de importe, conservando el formato con coma decimal.
+- Se agregó prueba automatizada para coma decimal y separador de miles (`1.234,56`, `45,70`), punto decimal, enteros, vacíos y texto inválido.
+
+### Estado de validación
+La corrección y sus pruebas fueron incorporadas a la rama de auditoría, pero no se ejecutaron localmente. Pendiente ejecutar `npm test`, `npm run check:types` y build, y revisar integración de UI/SQLite.
