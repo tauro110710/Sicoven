@@ -219,7 +219,7 @@ function closedCompanyState() {
     journalEntries: [{
       id: 'historical-entry', companyId: 'company-1', entryNumber: 1,
       date: '2026-05-15', description: 'Asiento histórico preservado',
-      type: 'AJUSTE', items: [
+      type: 'AJUSTE', bcvRate: 100, items: [
         { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
         { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
       ]
