@@ -90,3 +90,17 @@ Esta evidencia confirma una **inconsistencia algorítmica potencial cuando el hi
 - La preparación de artículos es restrictiva y protege contra datos existentes: requiere existencia cero, ningún movimiento, compras, ventas o asientos de inventario, y registra auditoría. No debe usarse para borrar o reemplazar historia.
 - Conclusión: `replayHistoricalInventory` es un módulo aislado con pruebas unitarias, no una reconstrucción operativa integrada a SQLite/contabilidad. Los hallazgos de escala en ese módulo deben tratarse como defectos de su algoritmo aislado, pero su impacto en flujo real aún requiere rastrear todos los usos/importaciones y definir la integración autorizada.
 - No se debe promover una reconstrucción transaccional a producción: faltan coordinación de persistencia, generación/revisión de asientos, controles de cierres, reversión/rollback y validación de dependencia entre documentos.
+
+
+## Auditoría del flujo operativo de costos de inventario entre reconversiones (23-11-2026)
+
+Esta comprobación amplía la revisión del replay aislado y rastrea también funciones operativas del `AccountingContext.tsx`:
+
+- Las compras operativas calculan el costo Bs. de entrada (incluidos costos aterrizados) y llaman a `calculateWeightedAverageCostDual`, que suma `existingQuantity × existingUnitCostBs` con `incomingQuantity × incomingUnitCostBs`. No realiza conversión por fecha ni escala monetaria en ese helper.
+- El flujo operativo de venta consume el costo promedio Bs. almacenado o capas PEPS reconstruidas de movimientos; la tasa de la venta no reexpresa el costo Bs. del inventario existente. El comentario de código explícitamente preserva la valoración USD histórica.
+- La reconstrucción de capas PEPS ordena movimientos por fecha y consume cantidades, pero los valores unitarios Bs./USD se toman de cada movimiento y no se convierten por reconversión dentro de esa función.
+- La importación de movimientos permite cargar historial de fechas pasadas; debe verificarse la validación de orden/escala y la conciliación contra saldos antes de considerar segura su entrada a operaciones.
+
+**Riesgo operativo confirmado:** el promedio Bs. operativo puede combinar costos nominales de entradas que pertenezcan a escalas monetarias distintas. En PEPS, el valor Bs. de capas históricas también puede sumar importes nominales de escalas diferentes. Esto no es sólo un defecto del replay aislado: los helpers de costeo usados por operaciones normales no aplican conversión de escala por fecha. La magnitud del impacto depende de fechas, movimientos y política de valoración, por lo que no se propone conversión automática aún.
+
+**Acción técnica requerida antes de corregir:** diseñar un modelo explícito que preserve costos originales Bs., fecha y tasa BCV de cada movimiento; determine la escala contable de comparación para cada período; reexpresar valores Bs. de capas/saldos/costo de venta cuando proceda sin alterar USD históricos; y garantizar que importación, compras, ajustes, devoluciones, producción, venta, Kardex, journals y reportes compartan la misma política. Crear tests cronológicos con movimientos a ambos lados de cada reconversión y conciliaciones de cantidad, costo Bs. comparable, USD y asientos. No alterar los controles de períodos cerrados ni las regresiones contables existentes.
