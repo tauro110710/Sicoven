@@ -2403,7 +2403,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           ? bsBalanced && usdBalanced
           : bsBalanced;
     if (!currencyPolicyValid) {
-      throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': ' + (historicalBsOnly ? 'no cuadra en Bs.' : 'no cuadra simultáneamente en Bs. y USD.') + ' Política monetaria para la fecha ' + entryDate + '.');
+      throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': ' + (historicalBsOnly ? 'no cuadra en Bs.' : 'no cuadra simultáneamente en Bs. y USD.') + ' Política de cuadre monetario para la fecha ' + entryDate + '.');
     }
     if (entry.type === 'CIERRE') {
       const company = asArray(nextState.companies).find(item => String(item.id) === String(entry.companyId));
