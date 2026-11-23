@@ -9,6 +9,7 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaAr
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
