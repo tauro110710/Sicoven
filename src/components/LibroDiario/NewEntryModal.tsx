@@ -579,10 +579,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                         />
                       </td>
                       <td className="p-2 text-right font-mono text-slate-600 bg-slate-50/50">
-                        {hasValidBcvRate && item.debitUsd > 0 ? formatUsd(item.debitUsd) : '-}
+                        {hasValidBcvRate && item.debitUsd > 0 ? formatUsd(item.debitUsd) : '-'}
                       </td>
                       <td className="p-2 text-right font-mono text-slate-600 bg-slate-50/50">
-                        {item.creditUsd > 0 ? formatUsd(item.creditUsd) : '-'}
+                        {hasValidBcvRate && item.creditUsd > 0 ? formatUsd(item.creditUsd) : '-'}
                       </td>
                       <td className="p-2 text-center">
                         <button
