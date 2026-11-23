@@ -319,21 +319,28 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
       const rateRecord = [...(currentCompany.accountingBcvRateHistory || [])]
         .filter(item => item.effectiveDate <= run.periodEnd && Number.isFinite(Number(item.rate)) && Number(item.rate) > 0)
         .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.recordedAt.localeCompare(a.recordedAt))[0];
-      if (!rateRecord) throw new Error('No existe una tasa BCV del historial contable con vigencia igual o anterior al cierre del período. Registre la tasa desde el módulo contable; no se utilizará la tasa de Inventario.');
-      const ageDays = Math.floor((Date.parse(run.periodEnd + 'T00:00:00Z') - Date.parse(rateRecord.effectiveDate + 'T00:00:00Z')) / 86400000);
-      if (ageDays < 0 || ageDays > 7 || !Number.isFinite(rateRecord.rate) || rateRecord.rate <= 0) {
-        throw new Error('La última tasa contable BCV disponible (' + rateRecord.effectiveDate + ') no es suficientemente próxima al período de nómina. Verifique el historial antes de contabilizar.');
+      const requiresBcvRate = isBcvRateRequiredForDate(run.periodEnd);
+      if (requiresBcvRate && !rateRecord) throw new Error('No existe una tasa BCV del historial contable con vigencia igual o anterior al cierre del período. Registre la tasa desde el módulo contable; no se utilizará la tasa de Inventario.');
+      if (rateRecord) {
+        const ageDays = Math.floor((Date.parse(run.periodEnd + 'T00:00:00Z') - Date.parse(rateRecord.effectiveDate + 'T00:00:00Z')) / 86400000);
+        if (ageDays < 0 || ageDays > 7 || !Number.isFinite(rateRecord.rate) || rateRecord.rate <= 0) {
+          throw new Error('La última tasa contable BCV disponible (' + rateRecord.effectiveDate + ') no es suficientemente próxima al período de nómina. Verifique el historial antes de contabilizar.');
+        }
       }
+      const postingRate = rateRecord?.rate || 0;
       const journalItems = buildPayrollJournalItems(run.totals as {
         grossEarnings: number; workerLegalDeductions: number; otherDeductions: number;
         employerContributions: number; netPay: number;
-      }, accounts, rateRecord.rate);
+      }, accounts, postingRate);
+      const rateWorkpaper = rateRecord
+        ? 'Tasa BCV ' + rateRecord.rate + ' Bs/USD, vigente ' + rateRecord.effectiveDate + '. Fuente: ' + rateRecord.source + (rateRecord.note ? ' · ' + rateRecord.note : '') + '. '
+        : 'Nómina histórica sin equivalencia USD; tasa BCV pendiente a criterio del contador. ';
       const journal = existingEntry || addJournalEntry({
         entryNumber: 0, date: run.periodEnd,
         description: 'Nómina ' + (run.frequency === 'WEEKLY' ? 'semanal' : 'quincenal') + ' ' + run.periodStart + ' al ' + run.periodEnd,
-        type: 'MANUAL', bcvRate: rateRecord.rate, items: journalItems,
+        type: 'MANUAL', bcvRate: postingRate, items: journalItems,
         referenceDoc: 'NOM-' + run.id,
-        workpaperNote: 'Tasa BCV ' + rateRecord.rate + ' Bs/USD, vigente ' + rateRecord.effectiveDate + '. Fuente: ' + rateRecord.source + (rateRecord.note ? ' · ' + rateRecord.note : '') + '. Nómina ' + run.id + '.'
+        workpaperNote: rateWorkpaper + 'Nómina ' + run.id + '.'
       }, accounts, currentCompany.id);
       if (!existingEntry) await waitForPersistence();
       await window.sicovenStore.confirmPayrollRun(token, run.id, journal.id);
