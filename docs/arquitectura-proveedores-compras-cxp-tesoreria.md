@@ -627,3 +627,10 @@ El formulario de liquidación de anticipos interpretaba los importes con coma de
 
 ### Estado de validación
 La corrección y sus pruebas fueron incorporadas a la rama de auditoría, pero no se ejecutaron localmente. Pendiente ejecutar `npm test`, `npm run check:types` y build, y revisar integración de UI/SQLite.
+
+
+### Hallazgo adicional: parser acepta texto vacío como cero (23-11-2026)
+Al verificar el parser común, se detectó que `Number('')` devuelve `0` en JavaScript; por tanto, el helper sin guardia transformaba campos vacíos (y espacios) en cero en lugar de `NaN`, contradici su prueba existente y la expectativa de rechazo de entradas vacías.
+- Se añadió una guardia de cadena vacía tras el trim y se devuelve `Number.NaN`.
+- Se amplió la prueba con entrada de espacios.
+- Pruebas no ejecutadas en este entorno; queda pendiente validar suite y build.
