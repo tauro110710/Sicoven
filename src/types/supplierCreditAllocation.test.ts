@@ -20,7 +20,7 @@ test('separa el excedente de la nota como anticipo a favor del comprador', () =>
 
 test('rechaza importes o tasas inválidos', () => {
   assert.throws(() => allocateSupplierCredit(-1, 100, 50, 100), /importes, saldo o tasa inválidos/);
-  assert.throws(() => allocateSupplierCredit(10, 1000, 5, 0), /importes, saldo o tasa inválidos/);
+  assert.throws(() => allocateSupplierCredit(10, 1000, 5, -1), /importes, saldo o tasa inválidos/);
   assert.throws(() => allocateSupplierCredit(10, 900, 5, 100), /no concilia entre Bs. y USD/);
 });
 
@@ -29,4 +29,20 @@ test('conserva precisión USD suficiente para conciliar notas con tasa BCV y Bs.
   assert.equal(result.appliedToPayableUsd, 0);
   assert.equal(result.supplierAdvanceUsd, 1.0648);
   assert.equal(result.supplierAdvanceBs, 106.48);
+});
+
+test('distributes historical Bs-only supplier credit without forcing USD or BCV', () => {
+  const result = allocateSupplierCredit(0, 1000, 0, 0, 600);
+  assert.equal(result.appliedToPayableUsd, 0);
+  assert.equal(result.appliedToPayableBs, 600);
+  assert.equal(result.supplierAdvanceUsd, 0);
+  assert.equal(result.supplierAdvanceBs, 400);
+});
+
+test('distributes historical independent currency balances when no BCV snapshot exists', () => {
+  const result = allocateSupplierCredit(5, 1000, 3, 0, 600);
+  assert.equal(result.appliedToPayableUsd, 3);
+  assert.equal(result.appliedToPayableBs, 600);
+  assert.equal(result.supplierAdvanceUsd, 2);
+  assert.equal(result.supplierAdvanceBs, 400);
 });
