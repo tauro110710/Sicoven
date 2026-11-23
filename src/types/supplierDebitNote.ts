@@ -1,5 +1,6 @@
 import type { PurchaseRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 /**
  * Economic cause selected by the accounting professional.
@@ -109,8 +110,8 @@ export function validateSupplierDebitNotePreflight(
   const totalAmountBs = Number(draft.totalAmountBs);
   const bcvRate = Number(draft.bcvRate);
   if (!Number.isFinite(totalAmountBs) || totalAmountBs <= 0 ||
-      !Number.isFinite(bcvRate) || bcvRate <= 0) {
-    throw new Error('El importe de la nota y la tasa BCV deben ser valores numéricos positivos.');
+      !Number.isFinite(bcvRate) || bcvRate < 0 || (isBcvRateRequiredForDate(draft.recognitionDate) && bcvRate <= 0)) {
+    throw new Error('El importe de la nota debe ser positivo; la tasa BCV solo es obligatoria desde 2018.');
   }
 
   const allowedCauses: SupplierDebitNoteEconomicCause[] = [
