@@ -154,7 +154,10 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
     if (source.type === 'ENTRADA') {
       let entryUnitCostBs = effectiveUnitCostBs;
-      let entryUnitCostUsd = roundUsd(effectiveUnitCostBs / rate);
+      // Preserve the original recorded USD unit cost. Only the additional landed
+      // costs are translated at this movement's BCV rate; deriving the whole
+      // historical USD cost from Bs can silently overwrite source valuation.
+      let entryUnitCostUsd = roundUsd(requestedUnitCostUsd + landedCostsBs / (rate * requestedQuantity));
       if (source.concept === 'DEVOLUCION_CLIENTE') {
         const original = source.correctionForMovementId ? replayedById.get(source.correctionForMovementId) : undefined;
         if (!original || original.type !== 'SALIDA' || original.concept !== 'VENTA' ||
