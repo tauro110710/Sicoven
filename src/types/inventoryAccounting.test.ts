@@ -6,6 +6,7 @@ import {
   calculateFifoIssue,
   applyFifoAdjustment,
   reconstructFifoLayers,
+  normalizeFifoLayersToDate,
   validateInventoryMovement,
   normalizeProductionRecipe,
   getDefaultInventoryAccountCode,
@@ -99,6 +100,24 @@ describe('motor de inventario contable', () => {
     assert.throws(() => reconstructFifoLayers([
       { type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 3 }
     ], 3), /saldo de Kardex no concilia/);
+  });
+
+  it('normaliza costos Bs. de capas PEPS a la fecha de operación sin modificar USD ni capas originales', () => {
+    const historicalLayers = [
+      { quantity: 2, unitCostBs: 100000000000000, unitCostUsd: 1.25, date: '2007-12-31', documentRef: 'OPEN-OLD' },
+      { quantity: 3, unitCostBs: 2000000, unitCostUsd: 2.5, date: '2019-01-01', documentRef: 'OPEN-2019' }
+    ];
+    const normalized = normalizeFifoLayersToDate(historicalLayers, '2021-10-01');
+    assert.deepEqual(normalized.map(layer => layer.unitCostBs), [1, 2]);
+    assert.deepEqual(normalized.map(layer => layer.unitCostUsd), [1.25, 2.5]);
+    assert.deepEqual(normalized.map(layer => layer.date), ['2007-12-31', '2019-01-01']);
+    assert.deepEqual(historicalLayers.map(layer => layer.unitCostBs), [100000000000000, 2000000]);
+  });
+
+  it('rechaza reexpresar capas PEPS sin fecha verificable', () => {
+    assert.throws(() => normalizeFifoLayersToDate([
+      { quantity: 1, unitCostBs: 100, unitCostUsd: 1 }
+    ], '2021-10-01'), /sin fecha histórica verificable/);
   });
 
   it('PEPS consume primero las capas más antiguas', () => {
