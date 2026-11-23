@@ -49,6 +49,10 @@ export const LibroComprasView: React.FC = () => {
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  const [monthEndFilter, setMonthEndFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const normalizePurchaseSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const purchaseSuppliers = Array.from(new Map(filterCompanyFiscalDocuments(purchases, currentCompany.id).map(p => [String(p.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase(), { rif: p.supplierRif, name: p.supplierName }])).values()).filter(s => s.rif).sort((a,b)=>a.name.localeCompare(b.name));
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleExportPdf = async () => {
@@ -65,16 +69,14 @@ export const LibroComprasView: React.FC = () => {
 
   const filteredPurchases = filterCompanyFiscalDocuments(purchases, currentCompany.id)
     .filter(p => {
-      if (monthFilter && !p.invoiceDate.startsWith(monthFilter)) return false;
+      const period = p.invoiceDate.slice(0, 7);
+      if (monthFilter && period < monthFilter) return false;
+      if (monthEndFilter && period > monthEndFilter) return false;
+      if (supplierFilter && String(p.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() !== supplierFilter) return false;
       if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase();
-        return (
-          p.supplierName.toLowerCase().includes(term) ||
-          p.supplierRif.toLowerCase().includes(term) ||
-          p.invoiceNumber.toLowerCase().includes(term) ||
-          p.controlNumber.toLowerCase().includes(term) ||
-          (p.voucherNumber && p.voucherNumber.toLowerCase().includes(term))
-        );
+        const searchable = [p.supplierName, p.supplierRif, p.invoiceNumber, p.controlNumber, p.voucherNumber, p.documentType, p.opNumber].map(normalizePurchaseSearch).join(' ');
+        const tokens = normalizePurchaseSearch(searchTerm).split(/\\s+/).filter(Boolean);
+        if (!tokens.every(token => searchable.includes(token))) return false;
       }
       return true;
     })
@@ -181,30 +183,28 @@ export const LibroComprasView: React.FC = () => {
         </div>
 
         {/* Toolbar (no-print) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 no-print">
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 no-print">
+          <div className="relative sm:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Buscar por RIF, proveedor, factura o comprobante..."
+              placeholder="Búsqueda inteligente: proveedor, RIF, factura, control, comprobante..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
-
-          <div>
-            <input
-              type="month"
-              value={monthFilter}
-              onChange={e => setMonthFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-              title="Filtrar por período mensual (AAAA-MM)"
-            />
+          <select value={supplierFilter} onChange={e=>setSupplierFilter(e.target.value)} className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white" title="Filtrar por proveedor">
+            <option value="">Todos los proveedores</option>
+            {purchaseSuppliers.map(s=><option key={String(s.rif).replace(/[^A-Z0-9]/gi,'').toUpperCase()} value={String(s.rif).replace(/[^A-Z0-9]/gi,'').toUpperCase()}>{s.name} · {s.rif}</option>)}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="month" value={monthFilter} onChange={e=>setMonthFilter(e.target.value)} className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none" title="Período desde" aria-label="Período desde" />
+            <input type="month" value={monthEndFilter} min={monthFilter || undefined} onChange={e=>setMonthEndFilter(e.target.value)} className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none" title="Período hasta" aria-label="Período hasta" />
           </div>
-
-          <div className="flex items-center justify-end text-xs text-slate-500">
-            <span>Facturas Registradas: <strong className="text-slate-800">{filteredPurchases.length}</strong></span>
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span>Documentos: <strong className="text-slate-800">{filteredPurchases.length}</strong></span>
+            {(searchTerm || supplierFilter || monthFilter || monthEndFilter) && <button type="button" onClick={()=>{setSearchTerm('');setSupplierFilter('');setMonthFilter('');setMonthEndFilter('');}} className="text-emerald-700 hover:underline">Limpiar filtros</button>}
           </div>
         </div>
       </div>
