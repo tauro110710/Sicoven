@@ -314,3 +314,30 @@ En `BalancesView.tsx`, los acumuladores de movimientos regulares y ajustes suman
 6. Validar cuadre por cuenta, empresa, año/período y movimientos incluidos/excluidos.
 
 **Conclusión de cobertura:** la divergencia monetaria identificada en las vistas no está protegida por tests de componentes específicos localizados. La matriz de pruebas debe cubrir cálculo, integración de apertura/cierre y presentación/exportación antes de decidir si se cambia el cálculo nominal del Balance General o se incorpora un modo de presentación reexpresada. Mantener separados el valor nominal fuente y cualquier valor derivado de comparación.
+
+
+## Auditoría del ciclo de cierre/apertura anual y reapertura (23-11-2026)
+
+Se inspeccionaron `src/types/accountingYearClosing.ts`, `src/types/accountingYearOpening.ts` y los flujos `closeAccountingYear`, `reopenAccountingYear`, `reopenAccountingPeriod` y `reverseJournalEntry` en `src/context/AccountingContext.tsx`.
+
+### Hallazgos verificados en el código
+
+- El cierre anual transforma cada línea de INGRESOS/COSTOS/GASTOS desde la fecha del asiento hasta el cierre (`periodEndDate`) con `convertVenezuelanAmountBetweenDates`, y mantiene los USD tal como están registrados. Los totales de cada asiento original se validan antes de generar el cierre.
+- La apertura reexpresa líneas de balance desde la fecha del asiento hasta `openingDate`, conserva USD nominales y agrega el resultado del período desde `periodStartDate`. Excluye ingresos/costos/gastos del traslado de balance y los incorpora al patrimonio mediante cuenta configurada.
+- El proceso orquestador exige SQLite listo, bloquea cierres/reaperturas concurrentes, espera escrituras pendientes, valida facturas sin asiento, registra depreciación antes del cierre y usa snapshot persistido para calcular cierre. Requiere ejercicio calendario completo, fecha no futura y tasas BCV solo si aplican por fecha.
+- Cierre y apertura se agregan al estado y se actualiza el calendario fiscal antes de esperar la confirmación de persistencia. En el bloque de error, si la persistencia no quedó marcada como fallida, se retiran los IDs de cierre/apertura de `journalEntries`; **no se restaura explícitamente el estado `companies` que ya actualizó `closedThroughDate`, `fiscalYear` y `fiscalExercises`**. Si la confirmación falla después de ese cambio, existe riesgo de estado UI/calendario desincronizado respecto de los asientos retirados. La ruta de recuperación debe verificarse y corregirse con rollback simétrico o bloqueo/recarga segura.
+- La reapertura anual delega la reversión conjunta de los dos asientos a SQLite y exige dos contra-asientos confirmados; luego actualiza empresa y libro en estado UI y espera persistencia. Si esa espera falla, no hay rollback explícito de esas actualizaciones locales en el bloque mostrado; requiere comprobar el comportamiento del pump y la estrategia de recuperación antes de asumir atomicidad en UI.
+- La reapertura parcial detecta cierres automáticos por referencia y fuerza reapertura anual completa; no permite fecha parcial. Para períodos no anuales, valida fecha anterior al cierre, motivo, y delega en SQLite.
+- La reversión ordinaria preserva el original, exige fecha válida posterior al original y posterior al cierre vigente, rechaza contra-asientos y duplicados, usa análisis integral, y valida balance Bs/USD y contrapartida bancaria. Para asientos de período cerrado exige AIA; el flujo de reapertura anual tiene ruta separada.
+
+### Riesgos y casos de prueba que quedan pendientes
+
+1. Simular rechazo/fallo de persistencia después de actualizar `companies`: verificar coherencia de `closedThroughDate`, `fiscalYear`, `fiscalExercises`, cierre/apertura en libro y bloqueo de operaciones; no permitir UI como confirmación de cierre.
+2. Simular fallo en la confirmación de reapertura: comprobar que SQLite, estado React, calendario y dos reversos no diverjan y que no se permita operar sobre estado incierto.
+3. Reabrir ciclo anual con movimientos posteriores al cierre, verificar restauración completa y consecutivos, referencias, auditoría y efectos dependientes.
+4. Reapertura y reversión en fechas distintas de cierre: comprobar que entradas posteriores no reescriban la historia y que los saldos se trasladen correctamente a ciclos subsiguientes.
+5. Cadena de varios ejercicios con reconversiones 2008/2018/2021 y diferencias de escala: comparar saldos nominales fuente, cierre, apertura y balances derivados.
+6. Verificar cierre con cuentas patrimoniales inactivas: la habilitación usada en el asiento debe ser transitoria y no alterar el catálogo persistente.
+7. Pruebas de concurrencia y doble ejecución con bloqueo real de SQLite, además de fallos entre la creación del cierre y la apertura.
+
+**Conclusión:** los builders contienen conversiones por fecha, pero los puntos de riesgo del ciclo completo son la confirmación/rollback de estado local y la coherencia entre snapshots persistidos y UI. Este hallazgo se documenta como riesgo de integración, no como pérdida de datos demostrada; no se ejecutaron pruebas locales.
