@@ -31,7 +31,7 @@ const originalMovement: InventoryMovement = {
 const draft = (options: {
   quantity?: number; previouslyReturnedQuantity?: number; currentStock?: number;
   currentAverageCostBs?: number; product?: InventoryProduct; closedThroughDate?: string;
-  purchase?: PurchaseRecord; lines?: PurchaseCreditNoteDraftLine[];
+  purchase?: PurchaseRecord; lines?: PurchaseCreditNoteDraftLine[]; returnDate?: string;
 } = {}) => ({
   purchase: options.purchase || purchase, products: [options.product || product],
   lines: options.lines || [{
@@ -39,7 +39,7 @@ const draft = (options: {
     quantity: options.quantity ?? 1, previouslyReturnedQuantity: options.previouslyReturnedQuantity ?? 0,
     currentStock: options.currentStock ?? 2, currentAverageCostBs: options.currentAverageCostBs ?? 100
   }],
-  returnDate: '2026-10-10', creditNoteNumber: 'NC-001',
+  returnDate: options.returnDate ?? '2026-10-10', creditNoteNumber: 'NC-001',
   controlNumber: '00-NC-001', reason: 'Mercancía defectuosa devuelta',
   fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true,
   closedThroughDate: options.closedThroughDate
