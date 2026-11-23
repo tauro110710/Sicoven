@@ -167,3 +167,23 @@ El catálogo estándar distingue cuentas de inventario de mercancías (1.1.4.01)
 Los controles actuales verifican cuadratura de asientos, selección temporal y cantidades PEPS. La auditoría no ha encontrado evidencia en estas funciones de una conciliación monetaria independiente que compare, por artículo/fecha/cuenta, valor de Kardex normalizado, saldo mayor de inventario, movimientos y costo de ventas. La ausencia de esa comprobación en los módulos inspeccionados no se debe extrapolar como ausencia total en toda la interfaz.
 
 **Próximo paso de auditoría:** localizar los reportes UI que consumen estos cálculos, identificar su fuente de valor (mayor, auxiliar o producto/costo), y diseñar una conciliación de inventario por cuenta que explicite fecha de referencia y escala Bs., preserve USD y valores nominales originales, y detecte diferencias sin modificar registros históricos.
+
+
+
+## Auditoría de reportes UI: Balance General, Balances Históricos y Reporte Anual (23-11-2026)
+
+### Diferencias verificadas entre fuentes de Bs.
+
+**`src/components/Balances/BalancesView.tsx` (balance de comprobación, ajustado y general):** las líneas de los asientos seleccionados se suman en Bs. nominales directamente (`regDebitBs/regCreditBs/adjDebitBs/adjCreditBs`); este cálculo no llama a `normalizeVenezuelanAmountToCurrentScale`. El Balance General usa esos saldos para activo, pasivo y patrimonio, y para el resultado sin cerrar. La selección temporal se limita por la última apertura anual, pero eso no asegura que el período posterior a esa apertura no cruce una reconversión. El reporte puede por tanto combinar importes Bs. de escalas distintas dentro de esa ventana.
+
+**`src/components/Balances/HistoricalBalancesView.tsx` (balances históricos comparativos):** cada línea Bs. se normaliza con `normalizeVenezuelanAmountToCurrentScale(..., entry.date)` antes de acumularla. La interfaz declara explícitamente presentación en escala vigente 2021+ y preserva asientos originales. Esto es un tratamiento distinto al Balance General de `BalancesView`.
+
+**`src/components/Balances/AnnualReportsView.tsx` (reportes anuales):** normaliza importes Bs. por fecha para el ejercicio, pero el conjunto de cuentas del reporte de resultados excluye ACTIVO. No es una conciliación ni una presentación del inventario en el mayor; el anexo cuantitativo por cuentas se calcula desde movimientos contables del ejercicio.
+
+### Conclusión técnica puntual
+
+Queda confirmada una divergencia de presentación: balances actuales agregan Bs. nominales, balances históricos reexpresan a escala vigente y reportes anuales reexpresan movimientos por fecha. No se debe tratar como equivalentes ni comparar sus Bs. sin indicar la escala y el método. La diferencia es especialmente crítica en las cuentas de inventario, porque la cuenta del mayor en Balance General usa movimientos nominales mientras el Kardex/costo auxiliar puede contener costos de diferentes reconversiones.
+
+### Siguiente verificación
+
+Trazar el generador de PDF del Balance General y las funciones auxiliares que alimentan el detalle de cuentas, para comprobar que la exportación usa exactamente los mismos saldos que la pantalla. Después identificar un punto común de cálculo/normalización y definir explícitamente cuál es el método correcto para cada reporte, antes de implementar cambios. No modificar los registros ni normalizar balances de comprobación sin una política de presentación contable acordada.
