@@ -7960,7 +7960,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       for (const entry of data.journalEntries as JournalEntry[]) {
         if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
             !isValidIsoDate(entry.date) ||
-            !Number.isFinite(entry.bcvRate) || entry.bcvRate <= 0 || entry.items.length < 2) {
+            !Number.isFinite(entry.bcvRate) || entry.bcvRate < 0 ||
+            (isBcvRateRequiredForDate(entry.date) && entry.bcvRate <= 0) || entry.items.length < 2) {
           throw new Error('Hay asientos con empresa, fecha, tasa BCV o líneas inválidas.');
         }
         let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
@@ -7975,7 +7976,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
           debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
         }
-        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || debitBs <= 0 || debitUsd <= 0) {
+        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || debitBs <= 0 || (isBcvRateRequiredForDate(entry.date) && debitUsd <= 0)) {
           throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
         }
       }
