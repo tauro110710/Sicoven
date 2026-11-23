@@ -104,3 +104,22 @@ Esta comprobación amplía la revisión del replay aislado y rastrea también fu
 **Riesgo operativo confirmado:** el promedio Bs. operativo puede combinar costos nominales de entradas que pertenezcan a escalas monetarias distintas. En PEPS, el valor Bs. de capas históricas también puede sumar importes nominales de escalas diferentes. Esto no es sólo un defecto del replay aislado: los helpers de costeo usados por operaciones normales no aplican conversión de escala por fecha. La magnitud del impacto depende de fechas, movimientos y política de valoración, por lo que no se propone conversión automática aún.
 
 **Acción técnica requerida antes de corregir:** diseñar un modelo explícito que preserve costos originales Bs., fecha y tasa BCV de cada movimiento; determine la escala contable de comparación para cada período; reexpresar valores Bs. de capas/saldos/costo de venta cuando proceda sin alterar USD históricos; y garantizar que importación, compras, ajustes, devoluciones, producción, venta, Kardex, journals y reportes compartan la misma política. Crear tests cronológicos con movimientos a ambos lados de cada reconversión y conciliaciones de cantidad, costo Bs. comparable, USD y asientos. No alterar los controles de períodos cerrados ni las regresiones contables existentes.
+
+
+## Seguimiento: producción y entrada histórica de Kardex (23-11-2026)
+
+Se rastreó el flujo operativo de `executeProduction` en `AccountingContext.tsx`:
+
+- La producción consume componentes mediante promedio ponderado o capas PEPS, toma `avgCostBs/avgCostUsd` o los valores Bs/USD de las capas reconstruidas, y registra salidas y entrada del producto terminado.
+- El costo de producción Bs. se calcula sumando los costos Bs. de los componentes. El costo unitario del producto terminado se incorpora al promedio dual existente usando `calculateWeightedAverageCostDual`.
+- La función valida fecha, inicio contable, tasa requerida según período, stock disponible, referencia única y orden cronológico contra los movimientos existentes. Estos controles deben preservarse.
+- La revisión no encontró una conversión de escala monetaria por reconversión dentro del costeo de componentes PEPS ni promedio ponderado del bloque inspeccionado. Por tanto, la producción también puede propagar costos Bs. nominales no comparables a producto en proceso/terminado si la materia prima cruza reconversiones.
+
+Se inspeccionó además `importInventoryMovements`:
+- Requiere persistencia SQLite y valida fecha de inicio y cierre, referencias duplicadas, orden cronológico, costos, cantidades y existencia.
+- En importación, el promedio ponderado usa `calculateWeightedAverageCost` cuando hay tasa, o `calculateWeightedAverageCostDual` cuando no; las salidas PEPS consumen las capas reconstruidas.
+- La ruta de importación calcula y prepara movimientos y asientos en memoria; queda pendiente rastrear la fase completa de persistencia para comprobar rollback ante fallo parcial y validar importaciones que cruzan reconversiones.
+
+**Impacto ampliado:** el problema de comparabilidad de Bs. puede propagarse desde materia prima hacia producción en proceso, producto terminado, costo de ventas y reportes. No se concluye que todas las rutas operativas sean incorrectas; la política contable de referencia y pruebas de extremo a extremo siguen pendientes.
+
+**Siguiente etapa de auditoría:** revisar orden cronológico de Kardex, importaciones y restauración, cierres/reaperturas, generación y persistencia de asientos y movimientos; construir una matriz de pruebas que cubra períodos de reconversión, promedio, PEPS, producción, devolución, merma y ajustes; cuantificar discrepancias sin alterar datos existentes.
