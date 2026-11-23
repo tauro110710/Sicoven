@@ -1,5 +1,6 @@
 import type { Account, BankAccount, JournalEntry } from './accounting';
 import { buildCashFlowReport, type CashFlowReport } from './cashFlowStatement';
+import { normalizeVenezuelanAmountToCurrentScale } from './historicalAccountingCalendar';
 
 export type CashFlowIndirectTreatment =
   | 'NON_CASH_EXPENSE_ADD_BACK'
@@ -68,9 +69,7 @@ const isLinkedAnnualOpening = (entry: JournalEntry) =>
 const isExcludedFromIncome = (entry: JournalEntry) => entry.type === 'APERTURA' || entry.type === 'CIERRE';
 const balanceMovement = (entry: JournalEntry, code: string, normal: 'DEBIT' | 'CREDIT') =>
   entry.items.filter(item => item.accountCode === code).reduce((sum, item) => ({
-    bs: sum.bs + (normal === 'DEBIT'
-      ? finite(item.debitBs) - finite(item.creditBs)
-      : finite(item.creditBs) - finite(item.debitBs)),
+    bs: sum.bs + Number(normalizeVenezuelanAmountToCurrentScale(String(normal === 'DEBIT' ? finite(item.debitBs) - finite(item.creditBs) : finite(item.creditBs) - finite(item.debitBs)), entry.date)),
     usd: sum.usd + (normal === 'DEBIT'
       ? finite(item.debitUsd) - finite(item.creditUsd)
       : finite(item.creditUsd) - finite(item.debitUsd))

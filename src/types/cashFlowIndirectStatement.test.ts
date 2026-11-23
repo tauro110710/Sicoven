@@ -156,4 +156,27 @@ describe('cash flow indirect method', () => {
     ], incomplete, banks, 'co-1', 2026);
     assert.equal(report.isFullyClassified, false);
   });
+  it('normalizes historical Bs in indirect cash-flow income and balance movements', () => {
+    const entries = [
+      entry('opening-2013', '2013-01-01', [
+        line('1.1.1.01', 200000000000, 0, 2, 0),
+        line('3.1.1', 0, 200000000000, 0, 2)
+      ], 'APERTURA'),
+      entry('receipt-2014', '2014-02-01', [
+        line('1.1.1.01', 100000000000, 0, 1, 0),
+        line('4.1.1', 0, 100000000000, 0, 1)
+      ], 'VENTA')
+    ];
+    const report = buildCashFlowIndirectReport(entries, accounts, banks, 'co-1', 2014);
+    assert.equal(report.netIncomeBs, 1);
+    assert.equal(report.operatingCashFlowBs, 1);
+    assert.equal(report.openingCashBs, 2);
+    assert.equal(report.closingCashBs, 3);
+    assert.equal(report.ledgerClosingCashBs, 3);
+    assert.equal(report.reconciliationDifferenceBs, 0);
+    assert.equal(report.netIncomeUsd, 1);
+    assert.equal(report.operatingCashFlowUsd, 1);
+    assert.equal(report.isReconciled, true);
+  });
+
 });
