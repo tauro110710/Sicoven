@@ -203,13 +203,16 @@ export function reconstructFifoLayers(
  * Una capa sin fecha se rechaza: no es posible inferir su escala monetaria.
  */
 export function normalizeFifoLayersToDate(layersInput: CostLayer[], targetDate: string): CostLayer[] {
-  if (!Array.isArray(layersInput) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(targetDate) ||
-      new Date(targetDate + 'T00:00:00Z').toISOString().slice(0, 10) !== targetDate) {
+  const parsedTargetDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(targetDate) ? new Date(targetDate + 'T00:00:00Z') : null;
+  if (!Array.isArray(layersInput) || !parsedTargetDate || !Number.isFinite(parsedTargetDate.getTime()) ||
+      parsedTargetDate.toISOString().slice(0, 10) !== targetDate) {
     throw new Error('La fecha de reexpresión de capas PEPS no es válida.');
   }
   return layersInput.map(layer => {
-    if (!layer.date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(layer.date) ||
-        new Date(layer.date + 'T00:00:00Z').toISOString().slice(0, 10) !== layer.date) {
+    const parsedLayerDate = layer.date && /^\\d{4}-\\d{2}-\\d{2}$/.test(layer.date)
+      ? new Date(layer.date + 'T00:00:00Z') : null;
+    if (!parsedLayerDate || !Number.isFinite(parsedLayerDate.getTime()) ||
+        parsedLayerDate.toISOString().slice(0, 10) !== layer.date) {
       throw new Error('Una capa PEPS sin fecha histórica verificable no puede reexpresarse.');
     }
     return {
