@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Pencil,
+  Eye,
   FileUp
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
@@ -53,17 +54,14 @@ export const InventarioView: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
   const effectiveSelectedProductId = companyProducts.some(product => product.id === selectedProductId) ? selectedProductId : 'ALL';
 
-  // Filter companyProducts
+  const normalizeInventorySearch = (value: string) => value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  // Search across code, name, category and unit; accent-insensitive and multi-term.
   const filteredProducts = companyProducts.filter(p => {
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      return (
-        p.code.toLowerCase().includes(term) ||
-        p.name.toLowerCase().includes(term) ||
-        p.category.toLowerCase().includes(term)
-      );
-    }
-    return true;
+    const query = normalizeInventorySearch(searchTerm);
+    if (!query) return true;
+    const tokens = query.split(/\\s+/).filter(Boolean);
+    const searchable = [p.code, p.name, p.category, p.unit].map(normalizeInventorySearch);
+    return tokens.every(token => searchable.some(value => value.includes(token)));
   });
 
   // Filter companyMovements
@@ -333,10 +331,16 @@ export const InventarioView: React.FC = () => {
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <button type="button" onClick={() => { setProductToEdit(prod); setIsProductModalOpen(true); }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">
-                            <Pencil className="h-3 w-3" /> Corregir
-                          </button>
+                          <div className="flex justify-center gap-1.5">
+                            <button type="button" onClick={() => { setSelectedProductId(prod.id); setSearchTerm(''); setActiveTab('KARDEX'); }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] font-semibold text-blue-800 hover:bg-blue-100" title="Ver movimientos de este artículo">
+                              <Eye className="h-3 w-3" /> Kardex
+                            </button>
+                            <button type="button" onClick={() => { setProductToEdit(prod); setIsProductModalOpen(true); }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100" title="Editar ficha">
+                              <Pencil className="h-3 w-3" /> Editar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
