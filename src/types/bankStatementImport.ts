@@ -1,5 +1,6 @@
 import type { BankMovementType } from './accounting';
 import { validateBankMovementFxSnapshot } from './bankStatementMatching';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 export type BankStatementCurrency = 'BS' | 'USD';
 export interface BankStatementImportCandidate {
@@ -92,7 +93,8 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const currencyRaw=normalizeHeader(hasCurrency?rawCurrencyValue:defaultCurrency).toUpperCase();
     const currency:BankStatementCurrency=/^(USD|US|DOLAR|DOLARES)$/.test(currencyRaw)?'USD':'BS';
     if(hasCurrency&&!/^(USD|US|DOLAR|DOLARES|BS|VES|VEF|BOLIVAR|BOLIVARES)$/.test(currencyRaw))errors.push('Moneda no reconocida.');
-    const rate=decimal(pick(row,'bcvRate'));
+    const rawRate=decimal(pick(row,'bcvRate'));
+    const rate=Number.isFinite(rawRate)&&rawRate>0?rawRate:0;
     const rateDate=isoDate(pick(row,'bcvRateEffectiveDate'));
     const debitType=/^(DEBIT|DEBITO|D|DB|PAYMENT|WITHDRAWAL|CARGO|EGRESO|SALIDA|CHECK|FEE)$/.test(rawType);
     const creditType=/^(CREDIT|CREDITO|C|CR|DEPOSITO|ABONO|INGRESO|DIRECTDEP)$/.test(rawType);
@@ -105,9 +107,10 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     if(!reference)errors.push('Falta la referencia.');
     if(!description)errors.push('Falta la descripción.');
     if(!Number.isFinite(rawAmount)||amount<=0)errors.push('Importe inválido o no positivo.');
-    if(!Number.isFinite(rate)||rate<=0)errors.push('Falta una tasa BCV positiva por movimiento.');
-    if(!validDate(rateDate)||rateDate>date)errors.push('Fecha de vigencia BCV inválida o posterior al movimiento.');
-    const amountBs=currency==='USD'?Math.round(amount*rate*100)/100:Math.round(amount*100)/100;
+    if(rate<=0&&isBcvRateRequiredForDate(date))errors.push('Falta una tasa BCV positiva para movimientos desde 2018.');
+    if(rate>0&&(!validDate(rateDate)||rateDate>date))errors.push('Fecha de vigencia BCV inválida o posterior al movimiento.');
+    if(rate<=0&&rateDate)errors.push('No indique fecha de vigencia BCV sin una tasa.');
+    const amountBs=currency==='USD'?(rate>0?Math.round(amount*rate*100)/100:0):Math.round(amount*100)/100;
     const amountUsd=currency==='USD'?Math.round(amount*1_000_000)/1_000_000:(rate>0?Math.round(amount/rate*1_000_000)/1_000_000:0);
     if(errors.length===0){
       try{validateBankMovementFxSnapshot({date,amountBs,amountUsd,bcvRate:rate,bcvRateEffectiveDate:rateDate});}
