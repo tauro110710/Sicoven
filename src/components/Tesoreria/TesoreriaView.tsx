@@ -84,10 +84,6 @@ export const TesoreriaView: React.FC = () => {
       setMessage('Ingrese la tasa BCV para movimientos desde 2018. Antes de 2018 puede dejarla pendiente o registrarla según su criterio.');
       return;
     }
-    if (!isUsdAccount && resolvedBcvRate <= 0) {
-      setMessage('No se encontró tasa BCV registrada para esta fecha. Registre la tasa BCV en el módulo de configuración o ingrésela manualmente.');
-      return;
-    }
     savingRef.current = true;
     setSaving(true);
     setMessage('Guardando movimiento en SQLite...');
@@ -165,7 +161,7 @@ export const TesoreriaView: React.FC = () => {
               value={bcvRateInput}
               onChange={e=>setBcvRateInput(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-              placeholder={activeBank?.currency === 'USD' ? 'Obligatorio para USD' : 'Dejar vacío para usar tasa histórica registrada'}
+              placeholder={rateRequired ? 'Obligatoria desde 2018' : 'Opcional antes de 2018'}
             />
             {activeBank?.currency !== 'USD' && (() => {
               const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
