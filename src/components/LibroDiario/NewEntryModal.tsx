@@ -213,7 +213,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const totalCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
   const diffBs = Math.abs(totalDebitBs - totalCreditBs);
   const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
-  const isBalanced = diffBs < 0.01 && (!bcvRate.trim() || (hasValidBcvRate && diffUsd < 0.000001)) && totalDebitBs > 0;
+  const currencyTotalsBalanced = rateRequired
+    ? hasValidBcvRate && totalDebitUsd > 0 && totalCreditUsd > 0 && diffUsd < 0.000001
+    : (!bcvRate.trim() || (hasValidBcvRate && diffUsd < 0.000001));
+  const isBalanced = diffBs < 0.01 && currencyTotalsBalanced && totalDebitBs > 0;
   const isZeroTotal = totalDebitBs === 0 && totalCreditBs === 0 && totalDebitUsd === 0 && totalCreditUsd === 0;
 
   // Lado que falta para cuadrar
@@ -308,6 +311,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     const bcvExplicitlyInvalid = bcvRate.trim().length > 0 && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0);
     if (bcvExplicitlyInvalid) {
       setSubmitError('La tasa BCV ingresada no es válida. Corríjala o bórrela si el asiento no requiere equivalencia USD.');
+      return;
+    }
+    if (rateRequired && !hasValidBcvRate) {
+      setSubmitError('Para asientos desde el 01-01-2018 debe indicar la tasa BCV de la fecha y registrar equivalencias en Bs. y USD.');
       return;
     }
     const normalizedItems = hasValidBcvRate
