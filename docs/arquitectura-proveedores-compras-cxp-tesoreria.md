@@ -207,3 +207,27 @@ La divergencia documentada no se origina por una diferencia de fórmula entre pa
 ### Próximo paso
 
 Auditar los reportes de flujo de efectivo y cambios en patrimonio, así como sus impresiones/exportaciones, para determinar si normalizan por fecha, convierten con tasas o agregan Bs nominales; registrar diferencias antes de proponer un cálculo común.
+
+
+## Auditoría de flujo de efectivo y cambios en patrimonio (23-11-2026)
+
+### Estado de flujos de efectivo — método directo
+
+`src/types/cashFlowStatement.ts` aplica `normalizeVenezuelanAmountToCurrentScale` a los importes Bs. de contrapartidas y a los movimientos de efectivo por fecha de asiento. Los USD se acumulan sin conversión. El saldo inicial se construye desde la última apertura anual vinculada válida, más movimientos posteriores a esa apertura y anteriores al inicio del ejercicio; si no hay apertura, acumula movimientos anteriores. La conciliación compara el efectivo inicial + variación anual con el saldo del mayor calculado usando la misma función de reexpresión Bs. por fecha. La vista `CashFlowStatementView.tsx` imprime desde la vista (`window.print()`) y presenta método directo en Bs/USD; no se identificó un exportador PDF con cálculo separado.
+
+### Estado de flujos de efectivo — método indirecto
+
+`src/types/cashFlowIndirectStatement.ts` reexpresa en Bs. por fecha el resultado, variaciones de cuentas clasificadas y saldos iniciales/finales de esas cuentas; mantiene USD nominal contabilizado. Inversión y financiación reutilizan flujos del método directo. La conciliación del indirecto compara con el saldo final de mayor del reporte directo. Esta implementación comparte la normalización temporal con los reportes directos, aunque depende de clasificación explícita por cuenta y del tratamiento de las cuentas seleccionadas.
+
+
+### Cambios en patrimonio
+
+`src/types/equityChanges.ts` normaliza Bs. por fecha para saldos de apertura vinculados, movimientos de patrimonio y resultado del ejercicio cuando no ha sido transferido a patrimonio; USD permanece como registrado. Los movimientos mantienen ID/fecha/número y referencia del asiento fuente. La vista anual exporta CSV desde el resultado calculado, por lo que no se observa una capa de reexpresión distinta en la exportación.
+
+### Conclusión
+
+En los flujos de efectivo y cambios en patrimonio sí está implementada la reexpresión Bs. por fecha, a diferencia del Balance General nominal descrito anteriormente. Directo e indirecto usan la misma normalización temporal para Bs. y dejan USD contabilizado sin recálculo; los cambios patrimoniales también reexpresan Bs. El principal riesgo que queda es de **coherencia entre reportes y auxiliares**: Balance General nominal frente a reportes normalizados, y la necesidad de comprobar que las bases de apertura, cuentas clasificadas y saldo final de mayor representan la misma escala/política y se reconcilian con inventario auxiliar y cierres. La vista de flujo directo tiene controles de conciliación/clasificación, pero esos controles aritméticos no prueban que sus cifras Bs. sean comparables con el Balance General.
+
+### Próximo paso de auditoría
+
+Inspeccionar los tests de flujo directo/indirecto y cambios patrimoniales, revisar qué casos de reconversiones cubren y qué escenarios de aperturas vinculadas, anulaciones y saldos iniciales entre períodos faltan. No cambiar cálculos hasta definir la política común de presentación y su matriz de regresión.
