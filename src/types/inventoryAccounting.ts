@@ -1,4 +1,5 @@
 import { addDecimal, decimalToNumber, decimalToString, divideDecimal, multiplyDecimal, parseDecimal, roundDecimal } from './exactDecimal';
+import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 
 export interface VnrProvisionLedgerBalance {
   provisionBs: number;
@@ -195,6 +196,27 @@ export function reconstructFifoLayers(
     throw new Error('Las capas PEPS reconstruidas (' + runningQuantity + ') no coinciden con la existencia actual (' + currentStock + '). No se crearán capas de costo estimadas.');
   }
   return layers.filter(layer => layer.quantity > 1e-8);
+}
+
+/** Reexpresa únicamente el costo nominal en Bs. de capas PEPS a la escala de la fecha operativa.
+ * Las capas originales no se modifican y la valoración USD permanece intacta.
+ * Una capa sin fecha se rechaza: no es posible inferir su escala monetaria.
+ */
+export function normalizeFifoLayersToDate(layersInput: CostLayer[], targetDate: string): CostLayer[] {
+  if (!Array.isArray(layersInput) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(targetDate) ||
+      new Date(targetDate + 'T00:00:00Z').toISOString().slice(0, 10) !== targetDate) {
+    throw new Error('La fecha de reexpresión de capas PEPS no es válida.');
+  }
+  return layersInput.map(layer => {
+    if (!layer.date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(layer.date) ||
+        new Date(layer.date + 'T00:00:00Z').toISOString().slice(0, 10) !== layer.date) {
+      throw new Error('Una capa PEPS sin fecha histórica verificable no puede reexpresarse.');
+    }
+    return {
+      ...layer,
+      unitCostBs: Number(convertVenezuelanAmountBetweenDates(layer.unitCostBs, layer.date, targetDate))
+    };
+  });
 }
 
 const cents = (value: number): number => decimalToNumber(roundDecimal(value, 2));
