@@ -15,6 +15,7 @@ import {
   Info
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewEntryModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<EntryType>('MANUAL');
   const [bcvRate, setBcvRate] = useState<string>('');
+  const rateRequired = isBcvRateRequiredForDate(date);
   const parsedBcvRate = (() => {
     const raw = bcvRate.trim();
     if (!raw) return 0;
@@ -448,14 +450,15 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tasa Oficial BCV ($)
-                <span className="ml-1 text-slate-400 font-normal">(opcional en Bs.)</span>
+                Tasa Oficial BCV ($) {rateRequired ? '*' : ''}
+                <span className="ml-1 text-slate-400 font-normal">{rateRequired ? '(obligatoria desde 2018)' : '(opcional antes de 2018)'}</span>
               </label>
               <input
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="Ej: 889,67"
+                placeholder={rateRequired ? "Ej: 889,67 (obligatoria)" : "Ej: 889,67 (opcional)"}
+                required={rateRequired}
                 value={bcvRate}
                 onChange={e => setBcvRate(e.target.value)}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
