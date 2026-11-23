@@ -48,3 +48,15 @@
 7. Añadir pruebas unitarias, integración SQLite, rollback, importación y concurrencia.
 8. Ejecutar CI y build Windows; revisar los cuatro fallos contables preexistentes y mantenerlos como pendientes hasta que se resuelvan y pasen.
 
+
+## Auditoría de implementación existente (23-11-2026)
+
+- El tipo `Supplier` y el estado `suppliers` existen en `src/types/accounting.ts` y `src/context/AccountingContext.tsx`; también existen `addSupplier` e `importSuppliers`, con validación de identificación fiscal y empresa.
+- La compra (`addPurchase`) actualmente conserva `supplierRif`, `supplierName` y snapshot de proveedor en los comprobantes de retención; sin embargo, no se observa una vinculación por `supplierId` en el registro de compra, ni la creación/actualización automática del maestro dentro del flujo.
+- `CuentasPorPagarView` construye su lista de proveedores desde compras activas y anticipos directos, agrupando por RIF. Por eso el flujo actual puede mostrar proveedores para pagos/anticipos sin que el maestro de proveedores sea la fuente de esa lista.
+- `CreditSettlementModal` permite aplicar pagos a una factura/documento individual. La integración a nivel de estado de cuenta de proveedor y distribución de un pago entre varias facturas requiere revisión adicional antes de implementarse.
+- No se ha implementado todavía la alta/selección inline en el modal de compras. Tampoco se ha probado una operación transaccional que incluya compra, maestro, asiento, Kardex y pagos.
+
+## Estado de implementación
+
+Esta directiva es diseño y auditoría, no evidencia de que todas sus funcionalidades estén desarrolladas. Los siguientes trabajos deben implementarse y probarse por separado: (1) alta/selección inline del proveedor con deduplicación por RIF, (2) asociación estable por `supplierId` conservando snapshots históricos, (3) revisión y unificación de CxP y pagos con distribución segura, (4) estado de cuenta por proveedor, (5) pruebas SQLite de atomicidad, rollback, importación y reconstrucción cronológica. No relajar validaciones contables ni fiscales.
