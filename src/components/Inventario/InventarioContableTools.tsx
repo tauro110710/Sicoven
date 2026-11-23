@@ -34,7 +34,7 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products: allProducts, movements: allMovements, accounts, journalEntries: allJournalEntries, importInventoryProducts, importInventoryMovements, prepareInventoryProductsForHistoricalReconstruction, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
+  const { currentCompany, products: allProducts, movements: allMovements, accounts, journalEntries: allJournalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
   const companyProducts = filterEntriesByCompany(allProducts, currentCompany.id);
   const companyMovements = filterEntriesByCompany(allMovements, currentCompany.id);
   const companyJournalEntries = filterEntriesByCompany(allJournalEntries, currentCompany.id);
