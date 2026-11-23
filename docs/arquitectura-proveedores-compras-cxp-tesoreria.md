@@ -598,3 +598,18 @@ En `approveInflationIndexSeries`, el código exige actor con rol contable, decis
 
 ### Alcance
 Revisión estática de preload, `operation-receipts.cjs`, sus pruebas y registro en `main.cjs`. No se ejecutaron pruebas localmente ni simulaciones de renderer/IPC.
+
+
+## Revisión funcional: captura de asientos y tasa BCV obligatoria por fecha (23-11-2026)
+
+### Defecto funcional confirmado
+En `NewEntryModal.tsx`, la interfaz ya calculaba `rateRequired` mediante la política por fecha, pero el criterio de cuadre (`isBalanced`) permitía guardar un asiento desde 2018 en adelante con la tasa BCV vacía y sin equivalencia USD. La validación de política de moneda existente en `journalEntryValidation.ts` no se aplicaba a este criterio de UI. Por tanto, la regla temporal quedaba sin efecto en este flujo de captura manual.
+
+### Corrección aplicada
+- El cuadre ahora exige, cuando la fecha requiere BCV, tasa válida, totales de débito/crédito USD positivos y cuadre USD dentro de tolerancia.
+- Al guardar, se muestra un mensaje directo si falta BCV en operaciones fechadas desde 2018-01-01.
+- Se conserva la flexibilidad histórica de asientos sin BCV para períodos en los que no es obligatorio, y no se cambia ni normaliza ningún asiento existente.
+
+### Validación pendiente
+- No se ejecutó suite/build en entorno local; la corrección queda pendiente de CI y pruebas de interfaz.
+- Próximo trabajo funcional: revisar la entrada manual y los servicios de contabilización para asegurar que reglas de fecha, moneda, balance, cuentas de movimiento y persistencia sean consistentes en todos los puntos de registro, no solo en el modal.
