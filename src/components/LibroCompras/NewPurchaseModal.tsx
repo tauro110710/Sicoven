@@ -36,6 +36,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   }, [currentCompany.id, currentCompany.accountingStartDate]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
+  const [supplierSearch, setSupplierSearch] = useState<string>('');
+  const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+  const normalizeSupplierSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const knownSuppliers = Array.from(new Map(purchases.filter(item => item.companyId === currentCompany.id && item.supplierRif).map(item => [String(item.supplierRif).replace(/[^A-Z0-9]/gi, '').toUpperCase(), item])).values()).sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
+  const supplierSuggestions = knownSuppliers.filter(item => { const q=normalizeSupplierSearch(supplierSearch); return !q || q.split(/\\s+/).filter(Boolean).every(token => normalizeSupplierSearch(item.supplierName+' '+item.supplierRif).includes(token)); }).slice(0,12);
   const [supplierAddress, setSupplierAddress] = useState<string>('');
   const [supplierEmail, setSupplierEmail] = useState<string>('');
   const [supplierTaxStatus, setSupplierTaxStatus] = useState<'AUTO' | IvaSupplierTaxStatus>('AUTO');
@@ -407,16 +412,21 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 relative">
                 <label className="block font-semibold text-slate-700 mb-1">Nombre / Razón Social *</label>
                 <input
                   type="text"
                   required
-                  placeholder="PROVEEDOR NACIONAL, C.A."
+                  placeholder="Escribe para buscar proveedores existentes o ingresa uno nuevo…"
                   value={supplierName}
-                  onChange={e => setSupplierName(e.target.value)}
+                  autoComplete="off"
+                  onFocus={()=>{setSupplierSearch(supplierName);setShowSupplierSuggestions(true);}}
+                  onChange={e=>{setSupplierName(e.target.value);setSupplierSearch(e.target.value);setShowSupplierSuggestions(true);}}
+                  onBlur={()=>setTimeout(()=>setShowSupplierSuggestions(false),150)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
+                {showSupplierSuggestions && supplierSuggestions.length>0 && <div className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-xl">{supplierSuggestions.map(item=><button key={String(item.supplierRif).replace(/[^A-Z0-9]/gi,'').toUpperCase()} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{setSupplierRif(item.supplierRif);setSupplierName(item.supplierName);setSupplierAddress(item.supplierAddress||'');setSupplierEmail(item.supplierEmail||'');setSupplierTaxStatus(item.supplierTaxStatus||'AUTO');setSupplierSearch(item.supplierName);setShowSupplierSuggestions(false);setArticle3Exclusion('');setPortalArticle3ExclusionConfirmed(false);setSupplierImportPerceptionConfirmed(false);setArticle2Transaction(false);setInvoiceFormalDefect(false);setPortalRetentionRate('');}} className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-emerald-50"><span className="block font-semibold text-slate-800">{item.supplierName}</span><span className="text-[10px] text-slate-500">RIF {item.supplierRif}{item.supplierEmail?` · ${item.supplierEmail}`:''}</span></button>)}</div>}
+                <p className="mt-1 text-[10px] text-slate-500">Selecciona un proveedor para reutilizar sus datos o registra uno nuevo.</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
