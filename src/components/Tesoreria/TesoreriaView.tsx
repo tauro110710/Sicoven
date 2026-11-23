@@ -60,10 +60,8 @@ export const TesoreriaView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingRef.current) return;
-    // Para cuentas USD la tasa BCV es siempre obligatoria (hay conversión real).
-    // Para cuentas BS es obligatoria solo si el contador la ingresó; si no,
-    // se intenta resolver del historial de la empresa y, si tampoco existe,
-    // se bloquea con mensaje claro en lugar de usar la tasa actual.
+    // La tasa es obligatoria desde 2018, independientemente de la cuenta.
+    // Antes de 2018 se permite movimiento nominal sin equivalencia USD.
     const isUsdAccount = activeBank?.currency === 'USD';
     const resolvedBcvRate = (() => {
       if (parsedBcvRate > 0) return parsedBcvRate;
