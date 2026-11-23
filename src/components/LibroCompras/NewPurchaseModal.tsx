@@ -38,9 +38,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierSearch, setSupplierSearch] = useState<string>('');
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
-  const normalizeSupplierSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const normalizeSupplierSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const knownSuppliers = Array.from(new Map(purchases.filter(item => item.companyId === currentCompany.id && item.supplierRif).map(item => [String(item.supplierRif).replace(/[^A-Z0-9]/gi, '').toUpperCase(), item])).values()).sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
-  const supplierSuggestions = knownSuppliers.filter(item => { const q=normalizeSupplierSearch(supplierSearch); return !q || q.split(/\\s+/).filter(Boolean).every(token => normalizeSupplierSearch(item.supplierName+' '+item.supplierRif).includes(token)); }).slice(0,12);
+  const supplierSuggestions = knownSuppliers.filter(item => { const q=normalizeSupplierSearch(supplierSearch); return !q || q.split(/\s+/).filter(Boolean).every(token => normalizeSupplierSearch(item.supplierName+' '+item.supplierRif).includes(token)); }).slice(0,12);
   const [supplierAddress, setSupplierAddress] = useState<string>('');
   const [supplierEmail, setSupplierEmail] = useState<string>('');
   const [supplierTaxStatus, setSupplierTaxStatus] = useState<'AUTO' | IvaSupplierTaxStatus>('AUTO');
