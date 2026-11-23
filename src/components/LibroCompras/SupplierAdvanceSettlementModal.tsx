@@ -3,6 +3,7 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { allocateSupplierAdvanceCreditNotes } from '../../types/supplierAdvanceSettlement';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { parseVenezuelanAmount as parseAmount } from '../../utils/parseVenezuelanAmount';
 
 interface Props { onClose: () => void; }
 
@@ -41,7 +42,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id && a.currency === 'BS');
-  const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
+
   const rate = parseAmount(bcvRate);
   const usd = parseAmount(amountUsd);
   const rateRequired = isBcvRateRequiredForDate(date);
