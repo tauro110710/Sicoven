@@ -341,3 +341,31 @@ Se inspeccionaron `src/types/accountingYearClosing.ts`, `src/types/accountingYea
 7. Pruebas de concurrencia y doble ejecución con bloqueo real de SQLite, además de fallos entre la creación del cierre y la apertura.
 
 **Conclusión:** los builders contienen conversiones por fecha, pero los puntos de riesgo del ciclo completo son la confirmación/rollback de estado local y la coherencia entre snapshots persistidos y UI. Este hallazgo se documenta como riesgo de integración, no como pérdida de datos demostrada; no se ejecutaron pruebas locales.
+
+
+## Auditoría del motor de reversos y AIA (23-11-2026)
+
+Se inspeccionó `src/types/journalReversal.ts` y su invocación desde `AccountingContext.tsx`.
+
+
+### Defecto confirmado: reversión genérica exige USD incluso para registros Bs-only
+
+En `buildReversalItems`, la validación del asiento original exige simultáneamente cuadre Bs/USD y `totals.debitBs > 0` **y** `totals.debitUsd > 0`. El flujo de reversión ordinaria, por su parte, solo exige tasa BCV y revisión de moneda para fechas en las que la política la exige (desde 2018). Esta contradicción bloquea reversos de asientos válidos exclusivamente en Bs. de períodos anteriores a 2018, aunque la política de SICOVEN permite operación Bs-only antes de ese umbral. La validación del reverso debe respetar la política monetaria/fecha del asiento fuente y no imponer USD universalmente.
+
+### Hallazgos de alcance
+
+- AIA cambia las líneas de INGRESOS/COSTOS/GASTOS a una cuenta de patrimonio seleccionada y mantiene las cuentas de balance en su código original. El helper valida que la cuenta de patrimonio exista y sea de movimiento, pero la selección no comprueba `isActive !== false`; en el orquestador de reversión se valida el resultado y la política de fecha por separado. Debe añadirse una prueba para cuenta patrimonial inactiva y confirmar si la validación del posting la bloquea.
+- El helper intercambia lados Bs/USD de las líneas fuente. No reexpresa el monto Bs por la fecha original y la fecha efectiva de reversión; eso conserva la cantidad nominal, por lo que el tratamiento monetario de reversos/AIA entre escalas necesita política explícita y pruebas de límites 2008, 2018 y 2021. No cambiarlo hasta establecer la base de reversión.
+- El preflight bloquea operaciones comerciales con vínculos auxiliares incompletos o incompatibles: notas de crédito, inventario, Kardex, cobros/pagos, anticipos y conciliación bancaria. Es una salvaguarda importante; las pruebas deben confirmar que todos esos bloqueos también se repiten en la persistencia SQLite y son atómicos.
+- `assessJournalReversal` ejecuta `buildReversalItems` para calcular el preflight. El requisito universal de USD puede hacer que la evaluación no llegue a ofrecer reversión para asientos históricos Bs-only, aunque no se requiera BCV/USD por fecha.
+
+### Regresiones prioritarias
+
+1. Reversión Bs-only anterior a 2008 y entre 2008–2017, equilibrada, válida y sin BCV, con fecha efectiva posterior.
+2. Reversión dual de 2018 y posteriores; BCV requerido según política de fecha, balance en ambas monedas.
+3. AIA Bs-only de período cerrado con cuenta de patrimonio activa; prueba de cuenta inactiva.
+4. Reversos y AIA que cruzan límites monetarios: confirmar conservación de nominal, conversiones y base contable aprobada, sin modificar asientos fuente.
+5. Reversión duplicada, reversión de contra-asiento, reversión de asiento con Z, activos fijos, notas de crédito, inventario y cobros/pagos vinculados.
+6. Confirmación SQLite y evento final de auditoría: fallo de persistencia no debe dejar el usuario con una reversión presentada como completada; la auditoría final fallida debe informar que el contra-asiento ya está persistido y evitar duplicación.
+
+**Conclusión:** el requisito de USD en `buildReversalItems` contradice el tratamiento Bs-only de períodos previos a 2018 y es un bloqueo lógico verificable por inspección. Se documenta para corrección posterior; no se alteró código operacional ni se ejecutaron pruebas locales.
