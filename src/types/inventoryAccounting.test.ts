@@ -114,6 +114,10 @@ describe('motor de inventario contable', () => {
     assert.deepEqual(historicalLayers.map(layer => layer.unitCostBs), [100000000000000, 2000000]);
   });
 
+  it('rechaza fechas imposibles para normalización PEPS', () => {
+    assert.throws(() => normalizeFifoLayersToDate([], '2026-02-30'), /fecha de reexpresión.*no es válida/);
+  });
+
   it('rechaza reexpresar capas PEPS sin fecha verificable', () => {
     assert.throws(() => normalizeFifoLayersToDate([
       { quantity: 1, unitCostBs: 100, unitCostUsd: 1 }
