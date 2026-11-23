@@ -7970,8 +7970,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       for (const entry of data.journalEntries as JournalEntry[]) {
         if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
             !isValidIsoDate(entry.date) ||
-            !Number.isFinite(entry.bcvRate) || entry.bcvRate < 0 ||
-            (isBcvRateRequiredForDate(entry.date) && entry.bcvRate <= 0) || entry.items.length < 2) {
+            !Number.isFinite(Number(entry.bcvRate ?? 0)) || Number(entry.bcvRate ?? 0) < 0 ||
+            (isBcvRateRequiredForDate(entry.date) && Number(entry.bcvRate ?? 0) <= 0) || entry.items.length < 2) {
           throw new Error('Hay asientos con empresa, fecha, tasa BCV o líneas inválidas.');
         }
         let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
@@ -7986,7 +7986,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
           debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
         }
-        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || !isJournalEntryCurrencyPolicySatisfied({ date: entry.date, bcvRate: Number(entry.bcvRate), debitBs, debitUsd })) {
+        if (!isJournalEntryBalanced({ debitBs, creditBs, debitUsd, creditUsd }) || !isJournalEntryCurrencyPolicySatisfied({ date: entry.date, bcvRate: Number(entry.bcvRate ?? 0), debitBs, debitUsd })) {
           throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
         }
       }
@@ -8029,7 +8029,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           !companyIds.has(item.companyId) || typeof item.supplierRif !== 'string' || !item.supplierRif.trim() ||
           !isValidIsoDate(item.date) || !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
           !Number.isFinite(item.bookValueBs) || item.bookValueBs <= 0 ||
-          !Number.isFinite(item.bcvRate) || item.bcvRate < 0 || (isBcvRateRequiredForDate(item.date) && item.bcvRate <= 0) ||
+          !Number.isFinite(Number(item.bcvRate ?? 0)) || Number(item.bcvRate ?? 0) < 0 || (isBcvRateRequiredForDate(item.date) && Number(item.bcvRate ?? 0) <= 0) ||
           !['BS', 'USD'].includes(item.paymentCurrency) || !Number.isFinite(item.paidAmount) || item.paidAmount <= 0 ||
           !String(item.reference || '').trim() || !String(item.support || '').trim() || !account || account.type !== 'ACTIVO' || !account.isMovement ||
           !account.code.startsWith('1.1.1.') || !journal || journal.companyId !== item.companyId ||
@@ -8044,7 +8044,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (!item || typeof item.id !== 'string' || !item.id.trim() || advanceIds.has(item.id) ||
             !companyIds.has(item.companyId) || !['REFUND_RECEIVED','APPLIED_TO_PURCHASE'].includes(item.kind) ||
             !Number.isFinite(item.amountBs) || item.amountBs <= 0 || !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
-            !Number.isFinite(item.bcvRate) || item.bcvRate < 0 || (isBcvRateRequiredForDate(item.date) && item.bcvRate <= 0) || !Array.isArray(item.sourceCreditNoteIds) ||
+            !Number.isFinite(Number(item.bcvRate ?? 0)) || Number(item.bcvRate ?? 0) < 0 || (isBcvRateRequiredForDate(item.date) && Number(item.bcvRate ?? 0) <= 0) || !Array.isArray(item.sourceCreditNoteIds) ||
             !data.journalEntries.some((j: any) => j.id === item.journalEntryId && j.companyId === item.companyId)) return true;
         advanceIds.add(item.id);
         if (item.kind === 'APPLIED_TO_PURCHASE') {
@@ -8146,7 +8146,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             !['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(s.kind) ||
             !Number.isFinite(s.amountUsd) || s.amountUsd <= 0 ||
             !Number.isFinite(s.amountBs) || s.amountBs <= 0 ||
-            !Number.isFinite(s.bcvRate) || s.bcvRate < 0 || (isBcvRateRequiredForDate(s.settlementDate) && s.bcvRate <= 0) ||
+            !Number.isFinite(Number(s.bcvRate ?? 0)) || Number(s.bcvRate ?? 0) < 0 || (isBcvRateRequiredForDate(s.settlementDate) && Number(s.bcvRate ?? 0) <= 0) ||
             !data.journalEntries.some((j: any) => j.id === s.journalEntryId && j.companyId === s.companyId)) return true;
         settlementIds.add(s.id);
         const source = s.kind === 'SALE_COLLECTION' ? salesById.get(s.documentId) : purchasesById.get(s.documentId);
