@@ -508,3 +508,34 @@ La secuencia de números está protegida por empresa y SQLite rechaza reutilizac
 - **Riesgo operativo:** antes de activar cualquier cálculo, se debe definir fórmula/criterio contable, fechas de origen, componentes monetarios y no monetarios, medición actual, índices aprobados, redondeo, contra cuenta, reversión, autorización, persistencia y reflejo en reportes. Activar solo porque el índice esté listo sería insuficiente.
 
 **Conclusión:** la capa de clasificación y calidad documental es robusta y la preparación del INPC está protegida por cobertura y aprobación. La función de cálculo contable está deliberadamente deshabilitada (`calculationEnabled=false`) en las pruebas inspeccionadas. No se debe interpretar la interfaz de inflación como AIA operativo hasta auditar/implementar el cálculo, asiento, persistencia, reversión y reconciliación.
+
+
+### Auditoría de independencia de revisión de índices y expedientes de fuentes (23-11-2026)
+
+**Archivos inspeccionados:** `electron/inflation-indexes.cjs`, `electron/inflation-indexes.test.cjs`, `electron/inflation-source-dossiers.cjs` y `electron/inflation-source-dossiers.test.cjs`.
+
+#### Controles presentes
+- Importación de índices exige sesión y rol contable; registra fuente y huella, versión de serie, observaciones y estado pendiente de revisión.
+- La revisión de series es append-only: una serie revisada no puede cambiar de decisión; se requiere importar nueva versión. Registra decisión y auditoría.
+- Los expedientes de fuentes alternativas tienen evidencia adjunta o referencia HTTPS con hash, validación de requisitos por tipo de fuente, límites de tamaño, empresa/ejercicio/período/marco/finalidad, versiones y revisión.
+- La revisión de expediente exige que el revisor no sea el importador, y tampoco sea la misma persona declarada responsable del estudio. Los tests ejercitan revisión independiente.
+- La IPC de expediente vincula operaciones a base de datos/empresa seleccionada, y los tests comprueban idempotencia y separación entre base de control y tenant.
+
+#### Hallazgo de seguridad de revisión (índices oficiales/históricos)
+
+En `approveInflationIndexSeries`, el código exige actor con rol contable, decisión permitida, justificación, serie existente y que no tenga decisión previa. **No verifica que el actor revisor sea distinto de `imported_by` de esa serie.** En contraste, `reviewInflationSourceDossier` sí impide que quien importó el expediente lo revise. La batería de tests de índices no incluye una prueba negativa de autoaprobación del importador. Por tanto, un mismo administrador/contador podría importar una serie y aprobar su propia importación, si dispone del permiso. Es una brecha de independencia del control, no evidencia de que haya ocurrido una aprobación indebida.
+
+#### Limitaciones de autenticidad
+
+- Para evidencia adjunta, el SHA-256 identifica exactamente los bytes guardados, pero no certifica autoría o autenticidad del emisor.
+- Para evidencia basada en URL, se almacena la URL HTTPS y el hash declarado; el código no descarga y compara automáticamente el documento remoto en el momento de la revisión. La verificación humana contra la fuente original es esencial y está contemplada en la documentación.
+- Los controles de readiness aplican una exigencia de emisor/dominio BCV a las series seleccionadas, pero el propio diseño documenta que esa exigencia no prueba la procedencia histórica del IPC-AMC. Requiere resolver y documentar fuente primaria específica de esa familia antes de usarla.
+
+#### Correcciones recomendadas para una fase de implementación autorizada
+
+1. Aplicar al proceso de aprobación de series la misma separación de responsabilidades que en expedientes: impedir aprobación por el usuario que importó, salvo excepción profesional explícita y auditada si el marco de gobierno la admite.
+2. Añadir test negativo de autoaprobación y test positivo de revisor distinto, en los canales IPC y función de dominio.
+3. Guardar evidencia de cotejo original del archivo, no solo metadatos/hash, y mantener claro el estado de verificación humana.
+4. Definir un flujo de procedencia específico para IPC-AMC; no reutilizar automáticamente las reglas de autenticidad del INPC-BCV.
+
+**Conclusión:** la revisión independiente está protegida en expedientes alternativos, pero la aprobación de series de índices no aplica el mismo control de independencia. El hallazgo queda documentado; no se modificó el código en esta fase de auditoría.
