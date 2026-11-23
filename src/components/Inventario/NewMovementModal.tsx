@@ -104,7 +104,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const unitCostBs = parseDecimalInput(unitCostInput);
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
-  const rateRequired = isBcvRateRequiredForDate(date) && type !== 'SALIDA';
+  const rateRequired = isBcvRateRequiredForDate(date) && type !== 'SALIDA' && unitCostBs > 0;
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const fifoPreview = React.useMemo(() => {
     if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
