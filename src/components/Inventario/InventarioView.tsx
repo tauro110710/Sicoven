@@ -68,15 +68,12 @@ export const InventarioView: React.FC = () => {
   const filteredMovements = companyMovements
     .filter(m => {
       if (effectiveSelectedProductId !== 'ALL' && m.productId !== effectiveSelectedProductId) return false;
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase();
-        return (
-          m.productName.toLowerCase().includes(term) ||
-          m.productCode.toLowerCase().includes(term) ||
-          m.documentRef.toLowerCase().includes(term)
-        );
-      }
-      return true;
+      const query = normalizeInventorySearch(searchTerm);
+      if (!query) return true;
+      const tokens = query.split(/\\s+/).filter(Boolean);
+      const searchable = [m.productName, m.productCode, m.documentRef, m.concept, m.type]
+        .map(normalizeInventorySearch);
+      return tokens.every(token => searchable.some(value => value.includes(token)));
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 
