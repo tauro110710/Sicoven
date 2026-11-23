@@ -60,3 +60,11 @@
 ## Estado de implementación
 
 Esta directiva es diseño y auditoría, no evidencia de que todas sus funcionalidades estén desarrolladas. Los siguientes trabajos deben implementarse y probarse por separado: (1) alta/selección inline del proveedor con deduplicación por RIF, (2) asociación estable por `supplierId` conservando snapshots históricos, (3) revisión y unificación de CxP y pagos con distribución segura, (4) estado de cuenta por proveedor, (5) pruebas SQLite de atomicidad, rollback, importación y reconstrucción cronológica. No relajar validaciones contables ni fiscales.
+
+## Auditoría adicional: reconstrucción de inventario PEPS (23-11-2026)
+
+- El replay histórico cronológico tiene guardas explícitas: rechaza devoluciones de proveedor que requerirían el flujo atómico de nota de crédito/CxP y bloquea devoluciones de clientes bajo PEPS cuando no se conserva la capa consumida. No se deben retirar esas guardas como solución rápida.
+- El motor reconstruye capas PEPS a partir del historial, pero el detalle de las capas consumidas en cada venta no queda materializado en la salida del replay; el test existente confirma que la devolución PEPS de cliente se rechaza en lugar de estimar un costo.
+- Se debe investigar y probar un flujo seguro para devolución de cliente PEPS que reconstruya las capas al momento de la venta y revierta exactamente las capas afectadas, respetando devoluciones acumuladas, cronología y persistencia.
+- El replay también recalcula promedio ponderado/PEPS con costos Bs. nominales de los movimientos. Al abarcar fechas de reconversiones monetarias, esto requiere pruebas específicas para determinar si todos los costos Bs. se llevan a una escala comparable antes de agregarlos. Esta observación es una hipótesis de auditoría pendiente, no un defecto confirmado; no alterar costos históricos ni conversiones hasta definir y validar la política.
+- Próximas verificaciones: escenarios de inventario antes/después de cada reconversión; promedio ponderado y PEPS; entrada con costos aterrizados; devolución de venta y proveedor; ajuste; ventas que cruzan capas; conciliación de cantidad y valorización contra el Kardex fuente.
