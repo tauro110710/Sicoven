@@ -166,7 +166,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) {rateRequired ? '*' : '(opcional)' }</label>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) {rateRequired ? '*' : '(opcional antes de 2018)' }</label>
               <input type="text" inputMode="decimal" required={rateRequired} placeholder="Ej.: 889,67" value={movementBcvRate}
                 onChange={e => setMovementBcvRate(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
