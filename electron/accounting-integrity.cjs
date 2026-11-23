@@ -2694,6 +2694,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) ||
         !Array.isArray(purchase.inventoryLines) || purchase.inventoryLines.length === 0) continue;
     const lines = purchase.inventoryLines;
+    const invoiceRate = Number(purchase.bcvRate || 0);
+    const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && invoiceRate <= 0;
     const productIds = new Set();
     let lineTotal = 0;
     for (const line of lines) {
@@ -2735,10 +2737,8 @@ function validateAccountingSnapshot(previousState, nextState) {
       const movementCostBs = Number(movement.totalCostBs);
       const movementCostUsd = Number(movement.totalCostUsd);
       const movementRate = Number(movement.bcvRate);
-      const invoiceRate = Number(purchase.bcvRate || 0);
       const supplierRif = normalizeRif(purchase.supplierRif);
       const movementRif = normalizeRif(movement.counterpartyRif);
-      const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && invoiceRate <= 0;
       const optionalUsdValid = historicalBsOnly || (Number.isFinite(invoiceRate) && invoiceRate > 0 &&
         Number.isFinite(movementRate) && Math.abs(movementRate - invoiceRate) <= 0.000001 &&
         Number.isFinite(movementUnitCostUsd) && Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) <= 0.0001 &&
