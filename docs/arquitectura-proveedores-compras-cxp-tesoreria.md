@@ -559,3 +559,23 @@ En `approveInflationIndexSeries`, el código exige actor con rol contable, decis
 3. La persistencia de `active_company_preference` es una preferencia, no autoridad de acceso; al restaurarla debe exigirse sesión y autorización frescas. No se debe confiar en el valor guardado para abrir una empresa.
 
 **Conclusión:** los controles revisados de aislamiento de empresa son defensivos y revalidan autorización en el proceso principal; no se encontró evidencia en estos archivos de que el renderer pueda elegir una ruta de SQLite para operar. La revisión permanece estática y parcial: requiere rastrear todos los IPC contables/exportación y validar con pruebas de concurrencia y ciclo de vida de Electron.
+
+
+## Auditoría de exportaciones de empresa y descargas de texto (23-11-2026)
+
+**Controles verificados en revisión estática:**
+
+- `company-export-ipc.cjs` exige licencia vigente, sesión con acceso completo y empresa activa; tras esperar el bloqueo de mantenimiento vuelve a validar licencia, usuario, empresa seleccionada e identidad/RIF antes de abrir la base de datos y exportar.
+- Exportación SQLite/JSON queda limitada a la empresa seleccionada; registra inicio, éxito y fallo con ID de exportación. Mantiene el bloqueo en `finally`.
+- `company-data-export.cjs` verifica integridad SQLite, identidad de la empresa en metadatos y snapshot, RIF, filas con company_id ajeno, documentos adjuntos (clave, tamaño, hash) y rutas sin symlinks. JSON incluye un límite de 250 MB. SQLite se entrega mediante paquete con manifiesto y hash.
+- Tests existentes cubren exportación SQLite/JSON, inclusión de adjuntos, detección de datos de otra empresa, fallo auditado, expiración de sesión tras el drenaje y liberación del bloqueo.
+- `text-download.cjs` limita extensiones/MIME/codificación, sanitiza nombre de archivo y limita contenido a 10 MB. `text-download-ipc.cjs` verifica el origen del renderer antes de abrir el diálogo y escribir.
+
+**Observaciones para seguimiento, sin vulnerabilidad demostrada:**
+
+1. La validación del origen de descarga de texto usa prefijos (`file://`, `http://localhost:`, `http://127.0.0.1:`) en lugar de comparar una URL de origen normalizada con una lista exacta de ventanas/orígenes autorizados. Revisar el modelo de ventanas y el ciclo de vida para confirmar que no hay renderer no confiable con acceso a este canal; endurecer a allowlist exacta si aplica.
+2. La exportación registra la ruta de destino en los eventos de auditoría. Revisar la política de privacidad/retención de auditoría y si basta con registrar el nombre del paquete o una ruta reducida.
+3. La prueba de aislamiento de exportación detecta tablas con `company_id` y valida identidad/snapshot, pero conviene verificar que tablas relacionales sin columna `company_id` estén cubiertas por claves/relaciones y no puedan contener datos multiempresa ajenos.
+4. Confirmar por pruebas de integración que la exportación no se ejecuta concurrentemente con escrituras contables no drenadas, especialmente ante fallo de persistencia.
+
+**Conclusión:** la exportación de empresa tiene una cadena de revalidación, controles de identidad/aislamiento, hashes de artefactos y registro de auditoría. La descarga de texto está acotada por origen, tipo, tamaño y nombre; la revisión de allowlist de origen y cobertura de tablas sin `company_id` queda pendiente.
