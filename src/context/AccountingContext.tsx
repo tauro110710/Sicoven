@@ -755,7 +755,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (!window.sicovenStore || !storageReady) throw new Error('La apertura contable solo puede registrarse cuando SQLite de escritorio esté disponible.');
     if (!currentCompany.id) throw new Error('Seleccione una empresa antes de preparar la apertura.');
-    if (!Number.isFinite(Number(input.bcvRate)) || Number(input.bcvRate) <= 0) throw new Error('Ingrese la tasa BCV aplicable al asiento de apertura.');
+    if (isBcvRateRequiredForDate(input.openingDate) && (!Number.isFinite(Number(input.bcvRate)) || Number(input.bcvRate) <= 0)) throw new Error('Ingrese la tasa BCV aplicable al asiento de apertura desde 2018.');
     if (!currentCompany.closedThroughDate || currentCompany.closedThroughDate !== input.periodEndDate) {
       throw new Error('El ejercicio debe estar cerrado exactamente hasta la fecha final indicada antes de registrar su apertura.');
     }
@@ -880,9 +880,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !entry.reversedByEntryId && entry.isAdjusted !== true)) {
       throw new Error('Ya existe un asiento de apertura vigente para el ejercicio siguiente. No se ejecutará un segundo ciclo.');
     }
-    if (!Number.isFinite(Number(input.closingBcvRate)) || Number(input.closingBcvRate) <= 0 ||
-        !Number.isFinite(Number(input.openingBcvRate)) || Number(input.openingBcvRate) <= 0) {
-      throw new Error('Indique las tasas BCV históricas válidas para el cierre y la apertura.');
+    if ((isBcvRateRequiredForDate(input.periodEndDate) && (!Number.isFinite(Number(input.closingBcvRate)) || Number(input.closingBcvRate) <= 0)) ||
+        (isBcvRateRequiredForDate(openingDate) && (!Number.isFinite(Number(input.openingBcvRate)) || Number(input.openingBcvRate) <= 0))) {
+      throw new Error('Indique las tasas BCV válidas para las fechas que desde 2018 las requieren.');
     }
 
     yearClosingInFlightRef.current = true;
@@ -1123,7 +1123,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (fixedAssets.some(asset => asset.companyId === currentCompany.id && asset.sourceJournalEntryId === source.id)) {
       throw new Error('No se puede revertir directamente la adquisición de un activo fijo registrado. La baja y venta de activos fijos no está habilitada en esta versión; no se puede revertir desde el Libro Diario.');
     }
-    if (!Number.isFinite(Number(source.bcvRate)) || Number(source.bcvRate) <= 0) throw new Error('El asiento original no conserva una tasa BCV histórica válida. Corrija primero la tasa del documento antes de reversarlo.');
+    if (isBcvRateRequiredForDate(source.date) && (!Number.isFinite(Number(source.bcvRate)) || Number(source.bcvRate) <= 0)) throw new Error('El asiento original requiere una tasa BCV histórica válida desde 2018. Corrija primero la tasa del documento antes de reversarlo.'];
     const vatPaymentReversalBlocker = getVatPaymentJournalReversalBlocker(
       vatWithholdingDeclarationEvents, source.id
     );
