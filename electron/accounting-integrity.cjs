@@ -81,13 +81,14 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
   const igtf = Number(purchase.igtfAmountBs ?? 0);
   const total = Number(purchase.totalAmountBs);
-  const rate = Number(purchase.bcvRate);
+  const rate = Number(purchase.bcvRate || 0);
+  const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && rate <= 0;
   const taxRate = Number(purchase.taxRate);
   const base = taxableBase + exemptBase;
   const payable = total - vatWithheld - islrWithheld;
-  const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate, taxRate];
+  const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, taxRate];
   if (!values.every(value => Number.isFinite(value) && value >= 0) ||
-      rate <= 0 || taxRate > 100 || payable <= 0 ||
+      (!historicalBsOnly && (!Number.isFinite(rate) || rate <= 0)) || taxRate > 100 || payable <= 0 ||
       Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
       Math.abs(total - (base + vat + igtf)) > 0.02) return false;
 
@@ -157,21 +158,22 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
     if (Math.abs(actual.debitBs - amount.debitBs) > 0.02 ||
         Math.abs(actual.creditBs - amount.creditBs) > 0.02 ||
-        Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
-        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001) return false;
+        (!historicalBsOnly && (Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
+        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001))) return false;
   }
   const debitBs = items.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
   const creditBs = items.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
   const debitUsd = items.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
   const creditUsd = items.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
-  return Math.abs(debitBs - creditBs) <= 0.02 && Math.abs(debitUsd - creditUsd) <= 0.0001 &&
+  return Math.abs(debitBs - creditBs) <= 0.02 && (historicalBsOnly ||
+    (Math.abs(debitUsd - creditUsd) <= 0.0001 &&
     Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001 &&
-    Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001;
+    Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001));
 }
 
 const ROOT_ACCOUNT_TYPES = {

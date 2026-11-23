@@ -4240,3 +4240,34 @@ test('SQLite still requires dual currency balance for entries dated 2018 onward'
     items: [line(630, 0, 100, 0), line(0, 630, 0, 99.99)] };
   assert.throws(() => validateAccountingSnapshot(emptyState(), emptyState([modern])), /política de cuadre monetario/);
 });
+
+
+test('SQLite accepts a pre-2018 inventory purchase in Bs. without BCV or USD Kardex amounts', () => {
+  const purchase = {
+    id: 'purchase-historical-2014', companyId: 'company-1', invoiceDate: '2014-06-30',
+    supplierRif: 'J-12345678-9', invoiceNumber: '2014-1', documentType: '01',
+    totalAmountBs: 50, taxableBaseBs: 50, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 0,
+    totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-entry-historical-2014',
+    inventoryLines: [{ productId: 'p-1', quantity: 1, unitCostBs: 50 }]
+  };
+  const entry = {
+    id: 'purchase-entry-historical-2014', companyId: 'company-1', entryNumber: 1,
+    date: '2014-06-30', description: 'Compra histórica', type: 'COMPRA', bcvRate: 0, referenceDoc: 'FAC-2014-1',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 50, creditBs: 0, debitUsd: 0, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'Cuentas por pagar', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0 }
+    ], createdAt: '2014-06-30T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-historical-2014', companyId: 'company-1', productId: 'p-1',
+    date: '2014-06-30', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-2014-1', counterpartyRif: 'J-12345678-9',
+    quantity: 1, unitCostBs: 50, totalCostBs: 50, bcvRate: 0
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), {
+    ...emptyState([entry]), purchases: [purchase], movements: [movement],
+    products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }]
+  }));
+});
