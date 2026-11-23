@@ -129,7 +129,7 @@ test('rechaza importes y tasas inválidos', () => {
   })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     totalAmountBs: Number.NaN
-  })), /valores numéricos positivos/);
+  })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     bcvRate: -1
   })), /valores numéricos positivos/);
