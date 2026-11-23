@@ -4227,3 +4227,16 @@ test('SQLite accepts only the linked and balanced automatic year-end closing ent
     ...next, journalEntries: [ordinaryEntry]
   }), /período cerrado/);
 });
+
+
+test('SQLite accepts 2014 historical entries balanced in Bs. without USD validation', () => {
+  const historical = { ...sourceEntry(), date: '2014-06-30', bcvRate: 0,
+    items: [line(1120000, 0, 0, 0), line(0, 1120000, 0, 0)] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), emptyState([historical])));
+});
+
+test('SQLite still requires dual currency balance for entries dated 2018 onward', () => {
+  const modern = { ...sourceEntry(), date: '2018-01-01', bcvRate: 6.3,
+    items: [line(630, 0, 100, 0), line(0, 630, 0, 99.99)] };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), emptyState([modern])), /política de cuadre monetario/);
+});
