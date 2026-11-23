@@ -43,6 +43,17 @@ test('reconstruye promedio ponderado cronológicamente aunque las fuentes llegue
   assert.equal(source[0].balanceQty, 0, 'no modifica los documentos fuente');
 });
 
+test('conserva USD de costo original y convierte solo fletes al BCV histórico durante replay', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-source-cost', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 100, unitCostUsd: 1, bcvRate: 50, additionalLandedCostsBs: 20 })
+  ]);
+  assert.equal(result.movements[0].unitCostBs, 110);
+  assert.equal(result.movements[0].unitCostUsd, 1.2);
+  assert.equal(result.movements[0].totalCostBs, 220);
+  assert.equal(result.movements[0].totalCostUsd, 2.4);
+  assert.equal(result.products[0].avgCostUsd, 1.2);
+});
+
 test('capitaliza fletes de entrada y recalcula el costo promedio', () => {
   const result = replay([makeProduct()], [
     movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, additionalLandedCostsBs: 4 })
