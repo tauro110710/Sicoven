@@ -213,4 +213,30 @@ describe('cash flow statement', () => {
     other.companyId = 'co-2';
     assert.equal(buildCashFlowReport([other], accounts, banks, 'co-1', 2026).closingCashBs, 0);
   });
+  it('normalizes historical Bs opening cash and direct cash flows to the current monetary scale', () => {
+    const entries = [
+      entry('opening-2013', '2013-01-01', 'APERTURA', [
+        line('1.1.1.01', 'Caja principal', 200000000000, 0, 2, 0),
+        line('3.1', 'Capital social', 0, 200000000000, 0, 2)
+      ]),
+      entry('receipt-2014', '2014-02-01', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 100000000000, 0, 1, 0),
+        line('4.1', 'Ingresos operacionales', 0, 100000000000, 0, 1)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2014);
+    assert.equal(report.openingCashBs, 2);
+    assert.equal(report.netChangeBs, 1);
+    assert.equal(report.closingCashBs, 3);
+    assert.equal(report.ledgerClosingCashBs, 3);
+    assert.equal(report.reconciliationDifferenceBs, 0);
+    assert.equal(report.activities.OPERACION.receiptsBs, 1);
+    assert.equal(report.activities.OPERACION.netBs, 1);
+    assert.equal(report.openingCashUsd, 2);
+    assert.equal(report.netChangeUsd, 1);
+    assert.equal(report.closingCashUsd, 3);
+    assert.equal(report.isReconciled, true);
+    assert.equal(report.isFullyClassified, true);
+  });
+
 });

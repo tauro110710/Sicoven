@@ -1,5 +1,6 @@
 import type { Account, BankAccount, CashFlowActivity, JournalEntry } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
+import { normalizeVenezuelanAmountToCurrentScale } from './historicalAccountingCalendar';
 
 export type CashFlowSection = 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'SIN_CLASIFICAR';
 
@@ -72,15 +73,19 @@ const isAnnualOpening = (entry: JournalEntry, year: number) =>
 const counterpartAmount = (
   item: JournalEntry['items'][number],
   side: 'credit' | 'debit',
-  currency: 'bs' | 'usd'
+  currency: 'bs' | 'usd',
+  effectiveDate: string
 ): number => {
-  if (currency === 'bs') return side === 'credit' ? amount(item.creditBs) : amount(item.debitBs);
+  if (currency === 'bs') {
+    const nominal = side === 'credit' ? amount(item.creditBs) : amount(item.debitBs);
+    return Number(normalizeVenezuelanAmountToCurrentScale(String(nominal), effectiveDate));
+  }
   return side === 'credit' ? amount(item.creditUsd) : amount(item.debitUsd);
 };
 const cashNet = (entry: JournalEntry, cashCodes: Set<string>) =>
   entry.items.reduce((sum, item) => cashCodes.has(item.accountCode)
     ? {
-        bs: sum.bs + amount(item.debitBs) - amount(item.creditBs),
+        bs: sum.bs + Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.debitBs)), entry.date)) - Number(normalizeVenezuelanAmountToCurrentScale(String(amount(item.creditBs)), entry.date)),
         usd: sum.usd + amount(item.debitUsd) - amount(item.creditUsd)
       }
     : sum, { bs: 0, usd: 0 });
@@ -199,10 +204,10 @@ export function buildCashFlowReport(
     if (Math.abs(net) <= tolerance) return;
     const side: 'credit' | 'debit' = net > 0 ? 'credit' : 'debit';
     const counterpartLines = entry.items.filter(item =>
-      !cashCodes.has(item.accountCode) && counterpartAmount(item, side, currency) > 0
+      !cashCodes.has(item.accountCode) && counterpartAmount(item, side, currency, entry.date) > 0
     );
     const counterpartTotal = counterpartLines.reduce((sum, item) =>
-      sum + counterpartAmount(item, side, currency), 0
+      sum + counterpartAmount(item, side, currency, entry.date), 0
     );
     if (Math.abs(counterpartTotal - Math.abs(net)) > tolerance || counterpartLines.length === 0) {
       recordUnclassified(net, currency);
@@ -225,7 +230,7 @@ export function buildCashFlowReport(
         activity === 'OPERACION' || activity === 'INVERSION' || activity === 'FINANCIACION'
           ? activity
           : 'SIN_CLASIFICAR';
-      const value = counterpartAmount(item, side, currency);
+      const value = counterpartAmount(item, side, currency, entry.date)
       if (section === 'SIN_CLASIFICAR') {
         const signedValue = net > 0 ? value : -value;
         recordUnclassified(signedValue, currency);
