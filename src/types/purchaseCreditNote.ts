@@ -1,5 +1,6 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 export interface PurchaseCreditNoteLineRequest {
   productId: string;
