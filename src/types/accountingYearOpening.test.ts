@@ -180,7 +180,7 @@ test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al result
 
 test('normaliza balances históricos a la escala de la fecha de apertura', () => {
   const journal = [
-    entry('legacy-2018', '2018-08-19', [line('1.1.1', 100000000000000, 0, 1, 0), line('2.1.1', 0, 100000000000000, 0, 1)]),
+    entry('legacy-2018', '2018-08-19', [line('1.1.1', 100000000000, 0, 1, 0), line('2.1.1', 0, 100000000000, 0, 1)]),
     entry('post-2018', '2018-08-20', [line('1.1.1', 1000000, 0, 1, 0), line('2.1.1', 0, 1000000, 0, 1)])
   ];
   const items = buildOpeningEntryItems({
