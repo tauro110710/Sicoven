@@ -88,10 +88,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [purchaseDebitAccountCode, setPurchaseDebitAccountCode] = useState('');
   const nonInventoryDebitAccounts = accounts.filter(account => account.isMovement && (account.type === 'GASTOS' || account.type === 'COSTOS' || (account.type === 'ACTIVO' && account.code.startsWith('1.2.')))).sort((x,y)=>x.code.localeCompare(y.code,undefined,{numeric:true}));
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string; searchText:string}>>([{productId:'',quantity:'1',unitCostBs:'',searchText:''}]);
-  const normalizeProductSearch = (value: string) => value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const normalizeProductSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const getPurchaseProductMatches = (search: string) => {
     const query = normalizeProductSearch(search);
-    const tokens = query.split(/\\s+/).filter(Boolean);
+    const tokens = query.split(/\s+/).filter(Boolean);
     return products.filter(p => p.companyId === currentCompany.id && (!query || [p.code,p.name,p.category,p.unit].some(value => tokens.every(token => normalizeProductSearch(value).includes(token))))).slice(0,30);
   };
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
