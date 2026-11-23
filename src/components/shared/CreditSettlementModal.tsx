@@ -26,7 +26,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
   const [date, setDate] = useState(today());
   const [rate, setRate] = useState('');
   const [usd, setUsd] = useState(balance.outstandingUsd.toFixed(2));
-  const [manualBs, setManualBs] = useState(balance.outstandingBsAtInvoiceRate.toFixed(2));
+  const [manualBs, setManualBs] = useState('0.00');
   const [method, setMethod] = useState<SettlementMethod>('CASH_BS');
   const [bankAccountId, setBankAccountId] = useState('');
   const [reference, setReference] = useState('');
@@ -117,7 +117,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
       <label className="block text-xs font-semibold text-slate-700">Notas<input value={notes} onChange={e=>setNotes(e.target.value)} maxLength={500} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
       <p className="text-xs text-amber-800 bg-amber-50 rounded-lg p-3">El sistema conserva la tasa original de la factura y registra automáticamente la ganancia o pérdida cambiaria del cobro/pago en Bs. Esta liquidación no emite por sí sola notas de débito/crédito ni modifica el IVA; cualquier ajuste fiscal debe documentarse según el caso y validarse con el contador.</p>
       {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-      <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={saving || (isBsOnly ? parsedManualBs <= 0 : parsedUsd <= 0) || (rateRequired && parsedRate <= 0) || (isBankTransfer && (!bankAccountId || !reference.trim()))} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button></div>
+      <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={saving || (isBsOnly ? parsedManualBs <= 0 : parsedUsd <= 0) || (rateRequired && parsedRate <= 0) || (parsedRate <= 0 && bs <= 0) || (isBankTransfer && (!bankAccountId || !reference.trim()))} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button></div>
     </form>
   </div>;
 };
