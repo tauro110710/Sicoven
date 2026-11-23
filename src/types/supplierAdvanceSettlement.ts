@@ -1,3 +1,5 @@
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+
 export type SupplierAdvanceSettlementKind = 'REFUND_RECEIVED' | 'APPLIED_TO_PURCHASE';
 
 export interface SupplierAdvanceCreditNoteAllocation {
@@ -85,8 +87,8 @@ export function validateSupplierAdvanceSettlementDraft(
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return 'La fecha de liquidación no es válida.';
   if (![draft.amountUsd, draft.amountBs, draft.bcvRate, availableUsd].every(Number.isFinite) ||
-      draft.amountUsd <= 0 || draft.amountBs <= 0 || draft.bcvRate <= 0 || availableUsd < 0) {
-    return 'Importes, saldo y tasa deben ser válidos y mayores que cero.';
+      draft.amountUsd <= 0 || draft.amountBs <= 0 || draft.bcvRate < 0 || (isBcvRateRequiredForDate(draft.date) && draft.bcvRate <= 0) || availableUsd < 0) {
+    return 'Importes y saldo deben ser positivos; la tasa BCV solo es obligatoria desde 2018.';
   }
   if (draft.amountUsd > availableUsd + 0.000005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
   if (draft.kind === 'REFUND_RECEIVED' && (!Number.isFinite(draft.cashReceivedBs ?? draft.amountBs) || (draft.cashReceivedBs ?? draft.amountBs) <= 0)) return 'El importe efectivamente recibido en Bs debe ser válido.';
