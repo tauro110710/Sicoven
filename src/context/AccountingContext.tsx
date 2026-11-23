@@ -7059,7 +7059,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const hasOpeningBalance = bankData.currency === 'USD' ? rawUsd > 0 : rawBs > 0;
     const rate = Number(bankData.bcvRate);
-    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta.');
+    if (hasOpeningBalance && isBcvRateRequiredForDate(bankData.openingDate || new Date().toISOString().slice(0, 10)) && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta desde 2018.');
 
     // El importe introducido en la moneda de la cuenta es la autoridad; la otra
     // moneda se calcula con la tasa BCV para evitar saldos de apertura incoherentes.
