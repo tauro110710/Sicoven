@@ -37,6 +37,7 @@ export const TesoreriaView: React.FC = () => {
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedAmount = parseAmount(amount);
   const parsedBcvRate = parseAmount(bcvRateInput);
+  const rateRequired = isBcvRateRequiredForDate(date);
   const [counterpartCode, setCounterpartCode] = useState('');
   const [destinationBankId, setDestinationBankId] = useState('');
   const [message, setMessage] = useState('');
@@ -64,7 +65,6 @@ export const TesoreriaView: React.FC = () => {
     // se intenta resolver del historial de la empresa y, si tampoco existe,
     // se bloquea con mensaje claro en lugar de usar la tasa actual.
     const isUsdAccount = activeBank?.currency === 'USD';
-    const rateRequired = isBcvRateRequiredForDate(date);
     const resolvedBcvRate = (() => {
       if (parsedBcvRate > 0) return parsedBcvRate;
       if (!isUsdAccount) {
