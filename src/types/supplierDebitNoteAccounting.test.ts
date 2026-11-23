@@ -166,7 +166,7 @@ test('blocks a price difference on an inventory invoice until item-level revalua
 test('posts a historical supplier debit note in Bs only when no BCV rate is supplied', () => {
   const historicalSource = { ...source, invoiceDate: '2014-01-01', accountCreditDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0 };
   const historicalEntry = { ...sourceEntry, date: '2014-01-01', bcvRate: 0, items: sourceEntry.items.map(item => ({ ...item, debitUsd: 0, creditUsd: 0 })) };
-  const plan = build(draft({ issueDate: '2014-02-01', recognitionDate: '2014-02-01', bcvRate: 0 }), historicalSource, historicalEntry);
+  const plan = build(draft({ issueDate: '2014-02-01', recognitionDate: '2014-02-01', bcvRate: 0 }), historicalSource, historicalEntry, accounts, [historicalSource]);
   assert.equal(plan.totalAmountBs, 29);
   assert.equal(plan.totalAmountUsd, 0);
   assert.equal(plan.items.reduce((sum, item) => sum + item.debitBs, 0), 29);
