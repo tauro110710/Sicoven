@@ -138,7 +138,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
     if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculationError)) { setError(pricingCalculationError || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
     if (!product && currentStock > 0 && avgCostBs <= 0) { setError(openingDate < '2018-01-01' && bcvRate <= 0 ? 'Ingrese el costo histórico unitario en Bs. del inventario inicial; la tasa BCV antes de 2018 es opcional.' : 'Ingrese el costo histórico unitario del inventario inicial.'); return; }
-    if (!product && currentStock > 0 && isBcvRateRequiredForDate(openingDate) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial desde 2018.'); return; }
+    if (!product && (currentStock > 0 || avgCostBs > 0) && isBcvRateRequiredForDate(openingDate) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial desde 2018.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
