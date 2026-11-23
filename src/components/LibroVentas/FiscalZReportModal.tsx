@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
@@ -51,6 +52,12 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [saving, setSaving] = useState(false);
   const savingRef = React.useRef(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], date);
+    setRateInput(historicalRate === undefined ? '' : String(historicalRate).replace('.', ','));
+  }, [currentCompany.accountingBcvRateHistory, date]);
+
 
   const movementAccounts = useMemo(() => accounts.filter(account => account.isMovement), [accounts]);
   const assetAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
