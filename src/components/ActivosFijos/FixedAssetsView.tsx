@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft, type FixedAssetDepreciationMethod } from '../../types/fixedAssets';
 
 const parseAmount = (value: string): number => {
@@ -47,7 +48,7 @@ export const FixedAssetsView: React.FC = () => {
       );
       if (!account || account.type !== 'ACTIVO' || !account.isMovement ||
           !account.code.startsWith('1.2.') || /DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name) ||
-          Number(line.debitBs) <= 0 || Number(line.debitUsd) <= 0 ||
+          Number(line.debitBs) <= 0 || Number(line.debitUsd) < 0 || (isBcvRateRequiredForDate(entry.date) && Number(line.debitUsd) <= 0 || Number(line.debitBs) <= 0) ||
           Number(line.creditBs || 0) > 0 || Number(line.creditUsd || 0) > 0 || alreadyRegistered) return [];
       return [{ key: entry.id + '|' + index, entry, line, index, account }];
     });
@@ -190,7 +191,7 @@ export const FixedAssetsView: React.FC = () => {
       </section>
       <section className="rounded-xl border bg-white p-4 shadow-sm">
         <h2 className="font-semibold text-slate-900">Registrar activo existente</h2>
-        <p className="mt-1 text-xs text-slate-500">Seleccione la línea de adquisición ya contabilizada. El costo en Bs. y USD se toma directamente de ese asiento.</p>
+        <p className="mt-1 text-xs text-slate-500">Seleccione la línea de adquisición ya contabilizada. El costo en Bs. y, cuando exista, USD se toma directamente de ese asiento.</p>
         {sourceOptions.length === 0 ? (
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
             No hay líneas de adquisición pendientes en cuentas 1.2. Registre primero la capitalización contable correcta en el Libro Diario.
