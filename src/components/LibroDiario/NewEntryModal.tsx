@@ -104,10 +104,20 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     }
   ]);
 
-  // Si la tasa cambia después de capturar los importes, recalcular los equivalentes
-  // sin alterar los importes originales en Bs. ni redondear cada renglón a centavos.
+  const hasValidBcvRate = Number.isFinite(parsedBcvRate) && parsedBcvRate > 0;
+
+  // Recalcula USD cuando hay tasa; al borrarla, limpia equivalencias para no
+  // mantener conversiones obsoletas ni asumir una tasa ficticia.
   useEffect(() => {
-    if (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0) return;
+    if (!hasValidBcvRate) {
+      setItems(prev => {
+        const next = prev.map(item => item.debitUsd === 0 && item.creditUsd === 0
+          ? item
+          : { ...item, debitUsd: 0, creditUsd: 0 });
+        return next.some((item, index) => item !== prev[index]) ? next : prev;
+      });
+      return;
+    }
     setItems(prev => {
       let changed = false;
       const next = prev.map(item => {
@@ -118,7 +128,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       });
       return changed ? next : prev;
     });
-  }, [parsedBcvRate]);
+  }, [parsedBcvRate, hasValidBcvRate]);
 
   if (!isOpen) return null;
 
@@ -138,7 +148,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleDebitChange = (index: number, val: number) => {
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = hasValidBcvRate ? parsedBcvRate : 0;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -146,7 +156,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
           ? {
               ...item,
               debitBs: val,
-              debitUsd: convertBsToUsdAmount(val, rate),
+              debitUsd: rate > 0 ? convertBsToUsdAmount(val, rate) : 0,
               creditBs: 0,
               creditUsd: 0
             }
@@ -156,7 +166,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   };
 
   const handleCreditChange = (index: number, val: number) => {
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = hasValidBcvRate ? parsedBcvRate : 0;
     setSubmitError(null);
     setItems(prev =>
       prev.map((item, i) =>
@@ -164,7 +174,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
           ? {
               ...item,
               creditBs: val,
-              creditUsd: convertBsToUsdAmount(val, rate),
+              creditUsd: rate > 0 ? convertBsToUsdAmount(val, rate) : 0,
               debitBs: 0,
               debitUsd: 0
             }
@@ -201,7 +211,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const totalCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
   const diffBs = Math.abs(totalDebitBs - totalCreditBs);
   const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
-  const isBalanced = diffBs < 0.01 && diffUsd < 0.000001 && totalDebitBs > 0 && totalDebitUsd > 0;
+  const isBalanced = diffBs < 0.01 && (!bcvRate.trim() || (hasValidBcvRate && diffUsd < 0.000001)) && totalDebitBs > 0;
   const isZeroTotal = totalDebitBs === 0 && totalCreditBs === 0 && totalDebitUsd === 0 && totalCreditUsd === 0;
 
   // Lado que falta para cuadrar
@@ -215,7 +225,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   // Reglas de Verificación de Asientos
   const rules = {
     partidaDoble: isBalanced,
-    montoMayorCero: totalDebitBs > 0 && totalDebitUsd > 0,
+    montoMayorCero: totalDebitBs > 0,
     minimoRenglones: items.length >= 2,
     cuentasValidas: items.every(it => !!it.accountCode && movementAccounts.some(a => a.code === it.accountCode)),
     sinDobleImputacion: items.every(it =>
@@ -240,7 +250,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
       }
       return;
     }
-    const rate = parsedBcvRate > 0 ? parsedBcvRate : 1;
+    const rate = hasValidBcvRate ? parsedBcvRate : 0;
     setSubmitError(null);
 
     if (totalDebitBs > totalCreditBs) {
@@ -259,7 +269,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             debitBs: 0,
             creditBs: missingCredit,
             debitUsd: 0,
-            creditUsd: convertBsToUsdAmount(missingCredit, rate),
+            creditUsd: rate > 0 ? convertBsToUsdAmount(missingCredit, rate) : 0,
             description: 'Contrapartida de cuadre'
           }
         ]);
@@ -279,7 +289,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
             accountName: defaultAcc?.name || 'Caja Principal',
             debitBs: missingDebit,
             creditBs: 0,
-            debitUsd: convertBsToUsdAmount(missingDebit, rate),
+            debitUsd: rate > 0 ? convertBsToUsdAmount(missingDebit, rate) : 0,
             creditUsd: 0,
             description: 'Contrapartida de cuadre'
           }
@@ -291,21 +301,16 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // La tasa BCV es obligatoria cuando el asiento incluye columnas USD (debitUsd/creditUsd > 0).
-    // Para asientos contables en bolívares puros sin equivalencia en divisas se acepta bcvRate = 0;
-    // la equivalencia USD quedará como pendiente hasta que el contador registre la tasa.
-    const entryHasUsdAmounts = items.some(
-      item => (Number(item.debitUsd) || 0) > 0 || (Number(item.creditUsd) || 0) > 0
-    );
+    // La tasa es opcional para asientos en Bs. puros. Si se deja vacía,
+    // normaliza USD a cero para descartar equivalencias antiguas u obsoletas.
     const bcvExplicitlyInvalid = bcvRate.trim().length > 0 && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0);
-    if (entryHasUsdAmounts && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0)) {
-      setSubmitError('La tasa BCV es obligatoria cuando el asiento incluye montos en USD. Ingrese la tasa, por ejemplo 889,67.');
-      return;
-    }
     if (bcvExplicitlyInvalid) {
-      setSubmitError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente (0).');
+      setSubmitError('La tasa BCV ingresada no es válida. Corríjala o bórrela si el asiento no requiere equivalencia USD.');
       return;
     }
+    const normalizedItems = hasValidBcvRate
+      ? items
+      : items.map(item => ({ ...item, debitUsd: 0, creditUsd: 0 }));
 
     // Verificación estricta de cuadre antes de guardar
     if (!isBalanced) {
@@ -342,7 +347,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
         description: description.trim(),
         type,
         bcvRate: parsedBcvRate,
-        items,
+        items: normalizedItems,
         isAdjusted: type === 'AJUSTE' || isAdjusted,
         referenceDoc: referenceDoc.trim() || undefined,
         adjustmentForEntryId: type === 'AJUSTE' ? adjustmentForEntryId || undefined : undefined,
@@ -574,7 +579,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                         />
                       </td>
                       <td className="p-2 text-right font-mono text-slate-600 bg-slate-50/50">
-                        {item.debitUsd > 0 ? formatUsd(item.debitUsd) : '-'}
+                        {hasValidBcvRate && item.debitUsd > 0 ? formatUsd(item.debitUsd) : '-}
                       </td>
                       <td className="p-2 text-right font-mono text-slate-600 bg-slate-50/50">
                         {item.creditUsd > 0 ? formatUsd(item.creditUsd) : '-'}
@@ -605,10 +610,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       {formatBs(totalCreditBs)}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalDebitBs / (parsedBcvRate || 1))}
+                      {hasValidBcvRate ? formatUsd(totalDebitBs / parsedBcvRate) : '—'}
                     </td>
                     <td className="p-3 text-right font-mono text-slate-600">
-                      {formatUsd(totalCreditBs / (parsedBcvRate || 1))}
+                      {hasValidBcvRate ? formatUsd(totalCreditBs / parsedBcvRate) : '—'}
                     </td>
                     <td></td>
                   </tr>
@@ -691,7 +696,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                       ? 'Los débitos y créditos son idénticos. La partida doble se cumple rigurosamente.'
                       : isZeroTotal
                       ? 'Ingrese los montos en los renglones correspondientes para validar la partida doble.'
-                      : `Diferencia pendiente: Bs. ${formatBs(diffBs)} / USD ${formatUsd(diffUsd)}. El asiento debe cuadrar en ambas monedas.`}
+                      : `Diferencia pendiente: Bs. ${formatBs(diffBs)}${hasValidBcvRate ? ' / USD ' + formatUsd(diffUsd) : ''}. El asiento debe cuadrar en las monedas aplicables.`}
                   </p>
                 </div>
               </div>
