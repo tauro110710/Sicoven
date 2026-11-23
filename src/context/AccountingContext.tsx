@@ -6144,9 +6144,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La existencia o el costo promedio del producto terminado no son válidos.');
     }
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
-    if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    if (!Number.isFinite(bcvRateInput) || bcvRateInput < 0 || (isBcvRateRequiredForDate(date) && bcvRateInput <= 0)) throw new Error('La tasa BCV es obligatoria para producción desde 2018; antes de 2018 puede quedar pendiente.');
     if (!isOperationDateWithinAccountingStart(date, currentCompany.accountingStartDate)) throw new Error('La fecha de producción es inválida o anterior al inicio contable de la empresa (' + (currentCompany.accountingStartDate || 'no definido') + ').');
     const recipe = normalizeProductionRecipe(finished.bomComponents || [], finishedProductId);
     const productionReference = String(documentRef || '').trim();
@@ -6172,6 +6172,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const journalItems: JournalEntryItem[] = [];
     const productUpdates = new Map<string, InventoryProduct>();
     let totalProductionCostBs = 0;
+    let totalProductionCostUsd = 0;
     for (const line of recipe) {
       const component = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
       if (!component) throw new Error('Un componente de la matriz ya no existe en la empresa activa.');
@@ -6186,6 +6187,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!Number.isFinite(requiredQuantity) || requiredQuantity <= 0) throw new Error('La cantidad requerida para ' + component.code + ' no es válida.');
       if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
       let totalBs = 0;
+      let totalUsd = 0;
       let componentNewAverageBs = component.avgCostBs;
       let componentNewAverageUsd = component.avgCostUsd;
       if (component.costingMethod === 'PEPS') {
@@ -6193,16 +6195,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const layers = reconstructFifoLayers(history, component.currentStock);
         const availableLayers = layers.reduce((sum, layer) => sum + layer.quantity, 0);
         if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
-        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
-        totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
+        const fifoLayerValueBs = layers.reduce((sum, layer) => layer.quantity > 0 ? sum + layer.quantity * layer.unitCostBs : sum, 0);
+        const fifoLayerValueUsd = layers.reduce((sum, layer) => layer.quantity > 0 ? sum + layer.quantity * layer.unitCostUsd : sum, 0);
+        const fifoIssue = calculateFifoIssue(layers, requiredQuantity);
+        totalBs = fifoIssue.totalCostBs;
+        totalUsd = fifoIssue.totalCostUsd;
         const remainingQuantity = Math.max(0, component.currentStock - requiredQuantity);
-        componentNewAverageBs = remainingQuantity > 0 ? Math.max(0, fifoLayerValue - totalBs) / remainingQuantity : 0;
-        componentNewAverageUsd = componentNewAverageBs / rate;
+        componentNewAverageBs = remainingQuantity > 0 ? Math.max(0, fifoLayerValueBs - totalBs) / remainingQuantity : 0;
+        componentNewAverageUsd = remainingQuantity > 0 ? Math.max(0, fifoLayerValueUsd - totalUsd) / remainingQuantity : 0;
       } else {
         totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
+        totalUsd = Math.round(requiredQuantity * Number(component.avgCostUsd || 0) * 1000000) / 1000000;
       }
       const unitCostBs = totalBs / requiredQuantity;
+      const unitCostUsd = totalUsd / requiredQuantity;
       totalProductionCostBs += totalBs;
+      totalProductionCostUsd += totalUsd;
       const inventoryCode = component.inventoryAccountCode || getDefaultInventoryAccountCode(component.itemType);
       const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
       if (!inventoryAccount) throw new Error('La cuenta de inventario del componente ' + component.code + ' no es válida.');
@@ -6210,7 +6218,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const outMovement: InventoryMovement = {
         id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
         date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
-        quantity: requiredQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalBs / rate,
+        quantity: requiredQuantity, unitCostBs, unitCostUsd, totalCostBs: totalBs, totalCostUsd: totalUsd,
         balanceQty: Math.max(0, component.currentStock - requiredQuantity),
         balanceTotalBs: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageUsd * 1000000) / 1000000,
@@ -6218,14 +6226,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       };
       movementsToAdd.push(outMovement);
       journalItems.push(
-        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalBs / rate, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
-        { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalBs / rate, description: 'Salida de materia prima: ' + component.code }
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalUsd, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
+        { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Salida de materia prima: ' + component.code }
       );
       productUpdates.set(component.id, { ...component, currentStock: Math.max(0, component.currentStock - requiredQuantity), avgCostBs: componentNewAverageBs, avgCostUsd: componentNewAverageUsd });
     }
     totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
     const productionUnitCostBs = totalProductionCostBs / outputQuantity;
-    const weightedFinished = calculateWeightedAverageCost(finished.currentStock, finished.avgCostBs, outputQuantity, productionUnitCostBs, rate);
+    const productionUnitCostUsd = totalProductionCostUsd / outputQuantity;
+    const weightedFinished = calculateWeightedAverageCostDual(
+      finished.currentStock, finished.avgCostBs, Number(finished.avgCostUsd || 0),
+      outputQuantity, productionUnitCostBs, productionUnitCostUsd
+    );
     const finishedInventoryCode = finished.inventoryAccountCode || getDefaultInventoryAccountCode(finished.itemType);
     const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
     if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
@@ -6233,8 +6245,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
     if (finished.itemType !== 'PRODUCTO_EN_PROCESO') {
       journalItems.push(
-        { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: totalFinishedBs / rate, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
-        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: totalFinishedBs / rate, description: 'Transferencia de producción terminada: ' + finished.code }
+        { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000, description: 'Transferencia de producción terminada: ' + finished.code }
       );
     }
     const entry = addJournalEntry({
@@ -6245,15 +6257,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const finishedMovement: InventoryMovement = {
       id: 'mov-prod-finished-' + Date.now(), companyId: currentCompany.id, productId: finished.id, productName: finished.name, productCode: finished.code,
       date, type: 'ENTRADA', concept: 'PRODUCCION', documentRef: entry.referenceDoc || '', documentType: 'Orden de producción',
-      quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostBs / rate,
-      totalCostBs: totalFinishedBs, totalCostUsd: totalFinishedBs / rate, balanceQty: weightedFinished.quantity,
+      quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostUsd,
+      totalCostBs: totalFinishedBs, totalCostUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000, balanceQty: weightedFinished.quantity,
       balanceTotalBs: weightedFinished.totalCostBs, balanceTotalUsd: weightedFinished.totalCostUsd,
       bcvRate: rate, costingMethod: finished.costingMethod, journalEntryId: entry.id
     };
     movementsToAdd.push(finishedMovement);
     productUpdates.set(finished.id, {
       ...finished, currentStock: weightedFinished.quantity, avgCostBs: weightedFinished.unitCostBs,
-      avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostBs / rate
+      avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostUsd
     });
     const persistenceConfirmation = waitForPersistence();
     setProducts(prev => prev.map(product => productUpdates.get(product.id) || product));
