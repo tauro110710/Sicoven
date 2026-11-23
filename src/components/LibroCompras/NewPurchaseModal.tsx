@@ -92,7 +92,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const getPurchaseProductMatches = (search: string) => {
     const query = normalizeProductSearch(search);
     const tokens = query.split(/\s+/).filter(Boolean);
-    return products.filter(p => p.companyId === currentCompany.id && (!query || [p.code,p.name,p.category,p.unit].some(value => tokens.every(token => normalizeProductSearch(value).includes(token))))).slice(0,30);
+    return products.filter(p => p.companyId === currentCompany.id && (!query || tokens.every(token => [p.code,p.name,p.category,p.unit].some(value => normalizeProductSearch(value).includes(token))))).slice(0,30);
   };
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
