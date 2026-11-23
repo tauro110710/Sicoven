@@ -81,3 +81,12 @@ La revisión directa de `src/types/historicalInventoryReplay.ts` confirma que el
 - PEPS: el replay calcula capas, consumo y valoración de saldo usando costos Bs. de movimientos, sin conversión monetaria por fecha.
 
 Esta evidencia confirma una **inconsistencia algorítmica potencial cuando el historial cruza reconversiones**; aún debe comprobarse la magnitud e impacto mediante casos de prueba, y definir si las salidas deben conservar costo Bs. nominal por fecha o expresar costo/valor de capas en una escala contable de referencia. No modificar el origen documental ni normalizar USD por este mismo procedimiento. La solución debe conservar trazabilidad de costos originales, tasa y fecha, y separar el costo nominal del valor comparable. Antes de corregir, crear tests de promedio y PEPS que atraviesen cada reconversión y prueben devolución, ajuste, landed costs y costo de ventas.
+
+
+## Verificación de integración del replay histórico de inventario (23-11-2026)
+
+- Se inspeccionó el `AccountingContext.tsx` completo a través de su fuente GitHub: importa `prepareProductsForHistoricalReconstruction`, pero no importa ni invoca `replayHistoricalInventory`.
+- El panel `HistoricalAccountingReplayPanel.tsx` ejecuta `prepareHistoricalAccountingReplayPlan`, un plan de lectura de dependencias contables; no ejecuta el replay del Kardex.
+- La preparación de artículos es restrictiva y protege contra datos existentes: requiere existencia cero, ningún movimiento, compras, ventas o asientos de inventario, y registra auditoría. No debe usarse para borrar o reemplazar historia.
+- Conclusión: `replayHistoricalInventory` es un módulo aislado con pruebas unitarias, no una reconstrucción operativa integrada a SQLite/contabilidad. Los hallazgos de escala en ese módulo deben tratarse como defectos de su algoritmo aislado, pero su impacto en flujo real aún requiere rastrear todos los usos/importaciones y definir la integración autorizada.
+- No se debe promover una reconstrucción transaccional a producción: faltan coordinación de persistencia, generación/revisión de asientos, controles de cierres, reversión/rollback y validación de dependencia entre documentos.
