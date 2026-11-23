@@ -6849,7 +6849,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           items.push({
             accountCode: account.code, accountName: account.name,
             debitBs: debit, creditBs: credit,
-            debitUsd: debit / Number(draft.bcvRate), creditUsd: credit / Number(draft.bcvRate),
+            debitUsd: Number(draft.bcvRate) > 0 ? debit / Number(draft.bcvRate) : 0, creditUsd: Number(draft.bcvRate) > 0 ? credit / Number(draft.bcvRate) : 0,
             description
           });
         };
@@ -6896,21 +6896,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const amountBs = Number(draft.amountBs || 0);
         const rate = Number(draft.bcvRate || 0);
         const paymentDate = draft.occurredAt.slice(0,10);
+        const rateRequired = isBcvRateRequiredForDate(paymentDate);
         const officialPaymentRate = resolveVatOwnPaymentBcvRate(
           currentCompany.accountingBcvRateHistory || [], paymentDate
         );
-        if (officialPaymentRate === null) {
-          throw new Error('No existe una tasa BCV histórica registrada y vigente para la fecha del pago. Registre o corrija primero la tasa contable de ese día.');
+        if (rateRequired && officialPaymentRate === null) {
+          throw new Error('No existe una tasa BCV histórica registrada y vigente para la fecha del pago desde 2018. Registre o corrija primero la tasa contable de ese día.');
         }
-        if (Math.abs(rate - officialPaymentRate) > 0.000001) {
+        if (!Number.isFinite(rate) || rate < 0 || (rateRequired && rate <= 0)) {
+          throw new Error('La tasa BCV es obligatoria para pagos de IVA desde 2018; antes de 2018 puede quedar pendiente según criterio del contador.');
+        }
+        if (rateRequired && Math.abs(rate - Number(officialPaymentRate)) > 0.000001) {
           throw new Error('La tasa indicada no coincide con la tasa BCV histórica efectiva para la fecha del pago (' + officialPaymentRate + ' Bs/USD).');
         }
         const treasury = accounts.find(item => item.code === draft.treasuryAccountCode &&
           item.type === 'ACTIVO' && item.isMovement && item.code.startsWith('1.1.1.'));
         const liability = accounts.find(item => item.code === '2.1.2.09' && item.type === 'PASIVO' && item.isMovement);
-        if (!treasury || !liability || !Number.isFinite(rate) || rate <= 0) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV del pago.');
-        const declarationRate = Number(declaration.bcvRate);
-        if (!Number.isFinite(declarationRate) || declarationRate <= 0) throw new Error('La declaración no conserva una tasa BCV válida para valorar el pasivo.');
+        if (!treasury || !liability || !Number.isFinite(rate) || rate < 0 || (rateRequired && rate <= 0) || ((treasury.code === '1.1.1.02') && rate <= 0)) throw new Error('Seleccione una cuenta de tesorería válida e indique la tasa BCV cuando sea obligatoria o la cuenta esté en USD.');
+        const declarationRate = Number(declaration.bcvRate || 0);
+        if (!Number.isFinite(declarationRate) || declarationRate < 0 || (isBcvRateRequiredForDate(declaration.period + '-01') && declarationRate <= 0)) throw new Error('La declaración debe conservar una tasa BCV desde 2018; antes de 2018 puede quedar pendiente.');
         const bankAccount = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === treasury.code);
         if (bankAccount) {
           const availableBalance = calculateBankAvailableBalance({
@@ -6932,9 +6936,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         } else {
           throw new Error('La cuenta bancaria seleccionada no tiene una ficha de cuenta bancaria asociada. Configure su auxiliar antes de registrar el pago.');
         }
-        const historicalUsd = amountBs / declarationRate;
-        const paymentUsd = amountBs / rate;
-        const fx = historicalUsd - paymentUsd;
+        const paymentUsd = rate > 0 ? amountBs / rate : 0;
+        // Si el pasivo histórico no tiene USD, se valora por primera vez al tipo de pago sin inventar una diferencia cambiaria.
+        const historicalUsd = declarationRate > 0 ? amountBs / declarationRate : paymentUsd;
+        const fx = declarationRate > 0 && rate > 0 ? historicalUsd - paymentUsd : 0;
         const items: JournalEntryItem[] = [
           { accountCode: liability.code, accountName: liability.name, debitBs: amountBs, creditBs: 0,
             debitUsd: historicalUsd, creditUsd: 0, description: 'Aplicación de pago a IVA mensual ' + declaration.period },
