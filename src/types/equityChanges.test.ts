@@ -43,6 +43,9 @@ describe('equity changes report', () => {
         { accountCode: '4.1', accountName: 'Ingresos', debitBs: 500, creditBs: 0, debitUsd: 50, creditUsd: 0 },
         { accountCode: '5.1', accountName: 'Gastos', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 10 },
         { accountCode: '3.2', accountName: 'Resultados acumulados', debitBs: 0, creditBs: 400, debitUsd: 0, creditUsd: 40 }
+      ]),
+      entry('next-year-capital', '2027-01-01', 'MANUAL', [
+        { accountCode: '3.1', accountName: 'Capital social', debitBs: 0, creditBs: 500, debitUsd: 0, creditUsd: 50 }
       ])
     ] as JournalEntry[];
     const report = buildEquityChangesReport(entries, accounts, 'co-1', 2026);
@@ -52,7 +55,8 @@ describe('equity changes report', () => {
     assert.equal(report.closingTotalUsd, 160);
     assert.equal(report.resultTransferredToEquity, true);
     assert.equal(report.periodResultBs, 0);
-    assert.equal(report.movements.length, 2);
+    assert.equal(report.movements.length, 2); // 2027 movement must not enter the 2026 report
+    assert.equal(report.rows.find(row => row.accountCode === '3.1')?.movementBs, 200);
   });
 
   it('adds unclosed current-year result once and keeps an in-year bank opening as a movement', () => {
