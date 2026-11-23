@@ -71,6 +71,14 @@ test('una NC emitida después del cambio de régimen conserva la tasa y retencio
   assert.equal(result.igtfAmountBs, 3.48);
 });
 
+test('la devolución de inventario conserva el costo USD de la entrada original aunque cambie la tasa de la nota', () => {
+  const result = calculatePurchaseCreditNote(draft({ purchase: { ...purchase, bcvRate: 200 } }));
+  assert.equal(result.lines[0].unitCostUsd, 1);
+  assert.equal(result.lines[0].inventoryCostUsd, 1);
+  assert.equal(result.inventoryCostUsd, 0.5); // valor contable de la nota al tipo de cambio de devolución
+});
+
+
 test('calcula nota de crédito parcial y revierte proporcionalmente IVA, retenciones e IGTF', () => {
   const result = calculatePurchaseCreditNote(draft());
   assert.equal(result.inventoryCostBs, 100);
