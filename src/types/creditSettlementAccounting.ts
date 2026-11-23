@@ -31,9 +31,9 @@ export function buildCreditSettlementJournalItems(input: CreditSettlementJournal
   if (!cashAccount?.code || !cashAccount.name || !controlAccount?.code || !controlAccount.name) {
     throw new Error('La liquidación requiere cuentas contables de tesorería y control verificables.');
   }
+  const actualAmountBs = Math.round(input.amountBs * 100) / 100;
   const amountAtInvoiceRate = input.amountUsd > 0 ? Math.round(input.amountUsd * input.invoiceRate * 100) / 100 : actualAmountBs;
   const amountAtSettlementRate = input.settlementRate > 0 ? Math.round(input.amountUsd * input.settlementRate * 100) / 100 : actualAmountBs;
-  const actualAmountBs = Math.round(input.amountBs * 100) / 100;
   if (input.amountUsd > 0 && input.settlementRate > 0 && Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
     throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación.');
   }
