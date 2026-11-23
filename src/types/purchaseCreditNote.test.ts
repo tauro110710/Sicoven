@@ -257,3 +257,15 @@ test('separates 16% recoverable VAT from the 15% luxury tax on 31% purchase invo
   assert.equal(result.totalAmountBs, 134.93);
   assert.equal(result.vatWithheldBs, 12);
 });
+
+test('calculates a pre-2018 inventory credit note in Bs only when source has no BCV rate', () => {
+  const historicalPurchase = { ...purchase, invoiceDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0, islrWithheldUsd: 0, igtfAmountUsd: 0 };
+  const historicalProduct = { ...product, avgCostUsd: 0, lastCostUsd: 0 };
+  const historicalMovement = { ...originalMovement, date: '2014-01-01', bcvRate: 0, unitCostUsd: 0, totalCostUsd: 0, balanceTotalUsd: 0 };
+  const result = calculatePurchaseCreditNote(draft({
+    purchase: historicalPurchase, product: historicalProduct, returnDate: '2014-02-01',
+    lines: [{ product: historicalProduct, originalMovement: historicalMovement, quantity: 1, previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100 }]
+  }));
+  assert.equal(result.totalAmountBs > 0, true);
+  assert.equal(result.totalAmountUsd, 0);
+});
