@@ -2738,20 +2738,21 @@ function validateAccountingSnapshot(previousState, nextState) {
       const invoiceRate = Number(purchase.bcvRate);
       const supplierRif = normalizeRif(purchase.supplierRif);
       const movementRif = normalizeRif(movement.counterpartyRif);
+      const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && invoiceRate <= 0;
+      const optionalUsdValid = historicalBsOnly || (Number.isFinite(invoiceRate) && invoiceRate > 0 &&
+        Number.isFinite(movementRate) && Math.abs(movementRate - invoiceRate) <= 0.000001 &&
+        Number.isFinite(movementUnitCostUsd) && Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) <= 0.0001 &&
+        Number.isFinite(movementCostUsd) && Math.abs(movementCostUsd - movementCostBs / invoiceRate) <= 0.0001);
       if (priorMovementIdsForIntegrity.has(String(movement.id)) ||
           movement.date !== purchase.invoiceDate ||
           !Number.isFinite(movementQuantity) ||
           Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
           !Number.isFinite(lineUnitCostBs) || !Number.isFinite(movementUnitCostBs) ||
           Math.abs(movementUnitCostBs - lineUnitCostBs) > 0.02 ||
-          !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
-          !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
-          !Number.isFinite(movementUnitCostUsd) ||
-          Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) > 0.0001 ||
+          (!historicalBsOnly && (!Number.isFinite(invoiceRate) || invoiceRate <= 0)) ||
+          !optionalUsdValid ||
           !Number.isFinite(movementCostBs) ||
           Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
-          !Number.isFinite(movementCostUsd) ||
-          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001 ||
           !supplierRif || !movementRif || movementRif !== supplierRif) {
         throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.');
       }
@@ -2776,8 +2777,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (!purchaseEntry || purchaseEntry.companyId !== purchase.companyId ||
         purchaseEntry.type !== 'COMPRA' ||
         !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
-        !Number.isFinite(Number(inventoryDebitUsd)) ||
-        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
+        (!historicalBsOnly && (!Number.isFinite(Number(inventoryDebitUsd)) ||
+        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001)) ||
         !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts, asArray(nextState.accounts))) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }
