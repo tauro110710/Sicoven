@@ -5,6 +5,7 @@ import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, Re
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -63,6 +64,7 @@ export const TesoreriaView: React.FC = () => {
     // se intenta resolver del historial de la empresa y, si tampoco existe,
     // se bloquea con mensaje claro en lugar de usar la tasa actual.
     const isUsdAccount = activeBank?.currency === 'USD';
+    const rateRequired = isBcvRateRequiredForDate(date);
     const resolvedBcvRate = (() => {
       if (parsedBcvRate > 0) return parsedBcvRate;
       if (!isUsdAccount) {
@@ -78,8 +80,8 @@ export const TesoreriaView: React.FC = () => {
       setMessage('Ingrese un monto positivo.');
       return;
     }
-    if (isUsdAccount && resolvedBcvRate <= 0) {
-      setMessage('La cuenta es en dólares: ingrese la tasa BCV histórica aplicable a esta fecha (Bs./USD).');
+    if (rateRequired && resolvedBcvRate <= 0) {
+      setMessage('Ingrese la tasa BCV para movimientos desde 2018. Antes de 2018 puede dejarla pendiente o registrarla según su criterio.');
       return;
     }
     if (!isUsdAccount && resolvedBcvRate <= 0) {
@@ -156,7 +158,7 @@ export const TesoreriaView: React.FC = () => {
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0,00"/></div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">
-              Tasa BCV aplicable (Bs./USD){activeBank?.currency === 'USD' ? ' *' : ' — opcional para cuentas Bs.'}
+              Tasa BCV aplicable (Bs./USD){rateRequired ? ' *' : ' — opcional antes de 2018'}
             </label>
             <input
               type="text" inputMode="decimal"
