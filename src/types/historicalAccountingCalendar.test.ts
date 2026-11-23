@@ -60,7 +60,7 @@ test('convierte escalas sin redondear ni perder precisión decimal de origen', (
 });
 
 test('converts values between operation-date and target-date scales', () => {
-  assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2018-08-19', '2018-08-20'), '1000');
+  assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2018-08-19', '2018-08-20'), '10');
   assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2018-08-20', '2021-10-01'), '1');
   assert.equal(convertVenezuelanAmountBetweenDates('1000000', '2021-09-30', '2021-10-01'), '1');
 });
