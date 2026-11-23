@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import { useAccounting } from '../../context/AccountingContext';
 
 import { buildPayrollJournalItems } from '../../utils/payrollAccounting';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText, Printer, BookCheck } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
