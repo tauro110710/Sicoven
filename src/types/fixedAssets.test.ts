@@ -114,3 +114,23 @@ test('registers land as a non-depreciable asset with full residual value and no 
   assert.equal(getNextFixedAssetDepreciationPeriod(land), null);
   assert.deepEqual(getFixedAssetDepreciationScheduleThrough(land, '2026-12-31'), []);
 });
+
+test('allows historical Bs-only fixed assets and depreciation without BCV before 2018', () => {
+  const historical = asset({
+    acquisitionDate:'2014-01-10',serviceDate:'2014-01-15',acquisitionCostBs:36500,acquisitionCostUsd:0,acquisitionBcvRate:0,
+    residualValueBs:3650,residualValueUsd:0
+  });
+  assert.equal(getNextFixedAssetDepreciationPeriod(historical),'2014-01');
+  const result = calculateFixedAssetDepreciation(historical,'2014-01');
+  assert.ok(result.amountBs>0);
+  assert.equal(result.amountUsd,0);
+  assert.equal(result.netBookValueUsdAfter,0);
+});
+
+test('requires BCV for fixed asset acquisition dated from 2018 when valuation is dual', () => {
+  const modernBsOnly = asset({
+    acquisitionDate:'2018-01-10',serviceDate:'2018-01-15',acquisitionCostBs:36500,acquisitionCostUsd:0,acquisitionBcvRate:0,
+    residualValueBs:3650,residualValueUsd:0
+  });
+  assert.throws(()=>getNextFixedAssetDepreciationPeriod(modernBsOnly),/tasa BCV es obligatoria desde 2018/);
+});
