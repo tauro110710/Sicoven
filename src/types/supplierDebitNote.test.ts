@@ -169,3 +169,11 @@ test('normaliza espacios en la referencia de la factura afectada', () => {
     affectedInvoiceNumber: ' FAC - 100 '
   })));
 });
+
+test('allows historical supplier debit note preflight without BCV rate before 2018', () => {
+  const historicalPurchase = { ...sourcePurchase, invoiceDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0 };
+  assert.doesNotThrow(() => validateSupplierDebitNotePreflight(draft({
+    issueDate: '2014-02-01', recognitionDate: '2014-02-01', bcvRate: 0,
+    purchases: [historicalPurchase]
+  })));
+});
