@@ -64,7 +64,7 @@ import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnD
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
+import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
@@ -88,7 +88,7 @@ import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
-import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
+
 import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
 import { getVenezuelanMonetaryEra } from '../types/historicalAccountingCalendar';
 
@@ -196,8 +196,6 @@ interface AccountingContextType {
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  prepareInventoryProductsForHistoricalReconstruction: (startDate: string) => Promise<number>;
-  prepareHistoricalAccountingReplayPlan: (startDate: string, throughDate?: string) => HistoricalAccountingReplayPlan;
   importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
@@ -5719,158 +5717,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const prepareHistoricalAccountingReplayPlan = (startDate: string, throughDate?: string): HistoricalAccountingReplayPlan => {
-    assertSQLitePersistenceReady('Preparar plan de reconstrucción histórica');
-    const companyId = currentCompany.id;
-    const withholdingDeclarationById = new Map<string, VatWithholdingDeclaration>(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration] as const));
-    const orphanedWithholdingEvents = findOrphanedVatWithholdingEvents(
-      vatWithholdingDeclarationEvents as unknown as HistoricalReplayRecord[],
-      vatWithholdingDeclarations as unknown as HistoricalReplayRecord[],
-      companyId
-    );
-    const crossCompanyWithholdingEvents = findCrossCompanyVatWithholdingEvents(
-      vatWithholdingDeclarationEvents as unknown as HistoricalReplayRecord[],
-      vatWithholdingDeclarations as unknown as HistoricalReplayRecord[],
-      companyId
-    );
-    const verifiedLegacyFiscalDateByVoucherId = new Map<string, string>();
-    const conflictingLegacyVoucherDates = new Set<string>();
-    for (const declaration of vatWithholdingDeclarations) {
-      if (declaration.companyId !== companyId) continue;
-      for (const assignment of declaration.legacyDateAssignments || []) {
-        if (!declaration.voucherIds.includes(assignment.voucherId) ||
-            !isValidIsoDate(assignment.confirmedFiscalDate) ||
-            String(assignment.note || '').trim().length < 10) continue;
-        const priorDate = verifiedLegacyFiscalDateByVoucherId.get(assignment.voucherId);
-        if (priorDate && priorDate !== assignment.confirmedFiscalDate) conflictingLegacyVoucherDates.add(assignment.voucherId);
-        else verifiedLegacyFiscalDateByVoucherId.set(assignment.voucherId, assignment.confirmedFiscalDate);
-      }
-    }
-    const monthEnd = (period: string): string => {
-      const match = /^(\d{4})-?(\d{2})$/.exec(String(period || ''));
-      if (!match) return '';
-      const year = Number(match[1]);
-      const month = Number(match[2]);
-      if (month < 1 || month > 12) return '';
-      return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-    };
-    const replayRecords = (records: unknown[]): HistoricalReplayRecord[] =>
-      records as HistoricalReplayRecord[];
-    const plan = buildHistoricalAccountingReplayPlan({
-      companyId,
-      company: currentCompany as unknown as HistoricalReplayRecord,
-      accounts: replayRecords(accounts),
-      products: replayRecords(products),
-      bankAccounts: replayRecords(bankAccounts),
-      customers: replayRecords(customers),
-      suppliers: replayRecords(suppliers),
-      financialDisclosures: replayRecords(financialDisclosures),
-      startDate,
-      ...(throughDate ? { throughDate } : {}),
-      purchases: replayRecords(purchases),
-      sales: replayRecords(sales),
-      movements: replayRecords(movements),
-      bankStatementMovements: replayRecords(bankStatementMovements.map(movement => ({
-        ...movement,
-        journalEntryId: movement.isReconciled ? movement.reconciledWithJournalEntryId : undefined
-      }))),
-      creditSettlements: replayRecords(creditSettlements),
-      supplierAdvanceSettlements: replayRecords(supplierAdvanceSettlements),
-      supplierDirectAdvances: replayRecords(supplierDirectAdvances),
-      fixedAssets: replayRecords(fixedAssets),
-      vatVouchers: replayRecords(vatVouchers.map(voucher => ({
-        ...voucher,
-        fiscalDate: voucher.fiscalDate || verifiedLegacyFiscalDateByVoucherId.get(voucher.id)
-      }))),
-      islrVouchers: replayRecords(islrVouchers),
-      vatWithholdingDeclarations: replayRecords(vatWithholdingDeclarations),
-      vatWithholdingDeclarationEvents: replayRecords(vatWithholdingDeclarationEvents.map(event => ({
-        ...event,
-        companyId: event.companyId || withholdingDeclarationById.get(event.declarationId)?.companyId || ''
-      }))),
-      vatOwnDeclarations: replayRecords(vatOwnDeclarations.map(declaration => ({
-        ...declaration,
-        endDate: monthEnd(declaration.period)
-      }))),
-      vatOwnDeclarationEvents: replayRecords(vatOwnDeclarationEvents),
-      islrFiscalEvents: replayRecords(islrFiscalEvents),
-      journalEntries: replayRecords(journalEntries)
-    });
-    if (orphanedWithholdingEvents.length) {
-      plan.blockers.push('Hay ' + orphanedWithholdingEvents.length +
-        ' evento(s) de declaración de retenciones IVA sin declaración de origen; deben resolverse antes de reconstruir.');
-    }
-    if (crossCompanyWithholdingEvents.length) {
-      plan.blockers.push('Hay ' + crossCompanyWithholdingEvents.length +
-        ' evento(s) de retenciones IVA vinculados a declaraciones de otra empresa; deben corregirse los vínculos entre empresas antes de reconstruir: ' +
-        crossCompanyWithholdingEvents.map(event => String(event.id || 'sin-id')).join(', ') + '.');
-    }
-    if (conflictingLegacyVoucherDates.size) {
-      plan.blockers.push('Hay comprobantes de retención IVA con fechas fiscales históricas verificadas contradictorias: ' +
-        [...conflictingLegacyVoucherDates].join(', ') + '.');
-    }
-    if (plan.blockers.length) plan.canProceedToTransactionalReplay = false;
-    return plan;
-  };
-
-  const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): Promise<number> => {
-    assertSQLitePersistenceReady('Preparar productos para reconstrucción histórica');
-    if (!isValidIsoDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
-    const companyId = currentCompany.id;
-    const companyProducts = products.filter(product => product.companyId === companyId);
-    if (!companyProducts.length) throw new Error('La empresa no tiene artículos de inventario para preparar.');
-    if (companyProducts.some(product => Number(product.currentStock) !== 0)) {
-      throw new Error('La preparación exige que todos los artículos tengan existencia cero. No se modificó ningún producto.');
-    }
-    if (movements.some(movement => movement.companyId === companyId)) {
-      throw new Error('La empresa ya tiene movimientos de Kardex. No se borrarán ni alterarán; primero debe resolverse su historial.');
-    }
-    if (purchases.some(purchase => purchase.companyId === companyId) || sales.some(sale => sale.companyId === companyId)) {
-      throw new Error('La empresa ya tiene compras o ventas registradas. La preparación no puede borrar sus efectos históricos.');
-    }
-    const inventoryLedgerExists = journalEntries.some(entry => entry.companyId === companyId &&
-      entry.items.some(item => /^1\.1\.4\./.test(item.accountCode) &&
-        [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => Number(value || 0) !== 0)));
-    if (inventoryLedgerExists) {
-      throw new Error('La empresa ya tiene asientos con saldos de inventario. No se modificó ningún dato.');
-    }
-    if (currentCompany.closedThroughDate && currentCompany.closedThroughDate >= startDate) {
-      throw new Error('La fecha inicial seleccionada pertenece a un período contable cerrado. No se modificó ningún dato.');
-    }
-    const preparedProducts = prepareProductsForHistoricalReconstruction(companyProducts, startDate);
-    const preparedById = new Map(preparedProducts.map(product => [product.id, product]));
-    const reason = 'Preparación autorizada para reconstrucción histórica desde ' + startDate;
-    const workpaperNote = 'Se ponen en cero los costos actuales y se limpia la fecha/tasa BCV de apertura del producto. Se conservan código, nombre, existencia cero, precios comerciales, cuentas y demás datos maestros. No se elimina el historial general de tasas BCV.';
-    for (const original of companyProducts) {
-      const prepared = preparedById.get(original.id)!;
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_requested', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    setProducts(prev => prev.map(product => product.companyId === companyId
-      ? (preparedById.get(product.id) || product) : product));
-    try {
-      await waitForPersistence();
-    } catch (error) {
-      throw new Error('SQLite no confirmó la preparación de los artículos. No continúe con la reconstrucción hasta verificar el estado de la empresa. ' +
-        (error instanceof Error ? error.message : 'Error de persistencia.'));
-    }
-    for (const original of companyProducts) {
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_executed', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    return preparedProducts.length;
-  };
-
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
   const journalCorrectionAuthorizationRef = useRef<string | null>(null);
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
@@ -8354,8 +8200,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getCompanyInventoryProducts,
         getCompanyInventoryMovements,
         importInventoryProducts,
-        prepareInventoryProductsForHistoricalReconstruction,
-        prepareHistoricalAccountingReplayPlan,
         importInventoryMovements,
         executeProduction,
         updateProduct,
