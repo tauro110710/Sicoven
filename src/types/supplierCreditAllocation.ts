@@ -16,18 +16,24 @@ export function allocateSupplierCredit(
   requestedCreditUsd: number,
   requestedCreditBs: number,
   outstandingPayableUsd: number,
-  invoiceRate: number
+  invoiceRate: number,
+  outstandingPayableBs = 0
 ): SupplierCreditAllocation {
-  const values = [requestedCreditUsd, requestedCreditBs, outstandingPayableUsd, invoiceRate];
-  if (values.some(value => !Number.isFinite(value) || value < 0) || invoiceRate <= 0) {
+  const values = [requestedCreditUsd, requestedCreditBs, outstandingPayableUsd, invoiceRate, outstandingPayableBs];
+  if (values.some(value => !Number.isFinite(value) || value < 0)) {
     throw new Error('No se puede distribuir el crédito del proveedor: importes, saldo o tasa inválidos.');
   }
-  if (Math.abs(requestedCreditBs - requestedCreditUsd * invoiceRate) > 0.02) {
+  if (invoiceRate > 0 && Math.abs(requestedCreditBs - requestedCreditUsd * invoiceRate) > 0.02) {
     throw new Error('El crédito del proveedor no concilia entre Bs. y USD. Revise la tasa y el cálculo fiscal de la nota.');
+  }
+  if (invoiceRate === 0 && requestedCreditUsd <= 0 && requestedCreditBs <= 0) {
+    throw new Error('No se puede distribuir un crédito vacío.');
   }
   const appliedToPayableUsd = Math.round(Math.min(requestedCreditUsd, outstandingPayableUsd) * 1000000) / 1000000;
   const supplierAdvanceUsd = Math.round(Math.max(0, requestedCreditUsd - appliedToPayableUsd) * 1000000) / 1000000;
-  const appliedToPayableBs = Math.round(appliedToPayableUsd * invoiceRate * 100) / 100;
+  const appliedToPayableBs = invoiceRate > 0
+    ? Math.round(appliedToPayableUsd * invoiceRate * 100) / 100
+    : Math.round(Math.min(requestedCreditBs, outstandingPayableBs) * 100) / 100;
   const supplierAdvanceBs = Math.round(Math.max(0, requestedCreditBs - appliedToPayableBs) * 100) / 100;
   if (Math.abs(appliedToPayableBs + supplierAdvanceBs - requestedCreditBs) > 0.02) {
     throw new Error('La distribución del crédito del proveedor no concilia en Bs. y USD.');
