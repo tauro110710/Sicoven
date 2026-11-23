@@ -2335,24 +2335,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }, accounts, targetCompanyId);
       const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
       let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
-      try {
-        if (draft.amountUsd <= 0 || invoiceRate <= 0 || draft.bcvRate <= 0) throw new Error('No hay equivalencia USD suficiente para proponer ajuste fiscal.');
-      fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
-          totalAmountUsd: Number(document.totalAmountUsd || 0),
-          taxableBaseUsd: Number(document.taxableBaseUsd || 0),
-          vatAmountUsd: Number(document.vatAmountUsd || 0),
-          exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0) - Number(document.igtfAmountUsd || 0)),
-          invoiceRate,
-          settlementRate,
-          settledAmountUsd: amountUsd,
-          mode: fiscalMode
-        });
-      } catch {
-        fxFiscalAdjustmentProposal = {
-          direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
-          deltaExemptBs: 0, deltaTotalBs: 0,
-          explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
-        };
+      if (draft.amountUsd <= 0 || invoiceRate <= 0 || draft.bcvRate <= 0) {
+        fxFiscalAdjustmentProposal = undefined;
+      } else {
+        try {
+          fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+            totalAmountUsd: Number(document.totalAmountUsd || 0),
+            taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+            vatAmountUsd: Number(document.vatAmountUsd || 0),
+            exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0) - Number(document.igtfAmountUsd || 0)),
+            invoiceRate,
+            settlementRate,
+            settledAmountUsd: amountUsd,
+            mode: fiscalMode
+          });
+        } catch {
+          fxFiscalAdjustmentProposal = {
+            direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
+            deltaExemptBs: 0, deltaTotalBs: 0,
+            explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
+          };
+        }
       }
       const settlement: CreditSettlement = {
         id: 'credit-settlement-' + targetCompanyId + '-' + Date.now() + '-' + index,
