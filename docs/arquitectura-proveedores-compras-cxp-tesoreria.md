@@ -68,3 +68,16 @@ Esta directiva es diseño y auditoría, no evidencia de que todas sus funcionali
 - Se debe investigar y probar un flujo seguro para devolución de cliente PEPS que reconstruya las capas al momento de la venta y revierta exactamente las capas afectadas, respetando devoluciones acumuladas, cronología y persistencia.
 - El replay también recalcula promedio ponderado/PEPS con costos Bs. nominales de los movimientos. Al abarcar fechas de reconversiones monetarias, esto requiere pruebas específicas para determinar si todos los costos Bs. se llevan a una escala comparable antes de agregarlos. Esta observación es una hipótesis de auditoría pendiente, no un defecto confirmado; no alterar costos históricos ni conversiones hasta definir y validar la política.
 - Próximas verificaciones: escenarios de inventario antes/después de cada reconversión; promedio ponderado y PEPS; entrada con costos aterrizados; devolución de venta y proveedor; ajuste; ventas que cruzan capas; conciliación de cantidad y valorización contra el Kardex fuente.
+
+
+## Auditoría adicional: costos Bs. entre reconversiones — evidencia de código (23-11-2026)
+
+La revisión directa de `src/types/historicalInventoryReplay.ts` confirma que el replay combina importes Bs. de distintas fechas sin conversión entre escalas en los pasos de valoración:
+
+- Entrada de mercancía: el costo Bs. solicitado, incluyendo costos aterrizados por unidad, se incorpora al promedio ponderado y al valor de las capas PEPS; los costos Bs. anteriores se suman directamente.
+- Salida bajo promedio ponderado: se usa el promedio Bs. acumulado como costo de salida.
+- Devolución de cliente bajo promedio ponderado: la entrada toma `unitCostBs` de la venta original, directamente, y lo incorpora al promedio actual; si venta y devolución están separadas por reconversiones, ambas escalas pueden no ser comparables.
+- Ajustes positivos bajo promedio ponderado: se incorpora el costo Bs. del ajuste a los saldos Bs. acumulados.
+- PEPS: el replay calcula capas, consumo y valoración de saldo usando costos Bs. de movimientos, sin conversión monetaria por fecha.
+
+Esta evidencia confirma una **inconsistencia algorítmica potencial cuando el historial cruza reconversiones**; aún debe comprobarse la magnitud e impacto mediante casos de prueba, y definir si las salidas deben conservar costo Bs. nominal por fecha o expresar costo/valor de capas en una escala contable de referencia. No modificar el origen documental ni normalizar USD por este mismo procedimiento. La solución debe conservar trazabilidad de costos originales, tasa y fecha, y separar el costo nominal del valor comparable. Antes de corregir, crear tests de promedio y PEPS que atraviesen cada reconversión y prueben devolución, ajuste, landed costs y costo de ventas.
