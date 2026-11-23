@@ -1,4 +1,5 @@
 import type { BankStatementMovement } from './accounting';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 /**
  * Matches one bank-statement row to the bank-account line of a journal entry.
@@ -38,10 +39,22 @@ export function validateBankMovementFxSnapshot(input: {
     throw new Error('La fecha del movimiento bancario no es válida.');
   }
   const values = [input.amountBs, input.amountUsd, input.bcvRate].map(Number);
-  if (values.some(value => !Number.isFinite(value) || value <= 0)) {
-    throw new Error('El movimiento y la tasa BCV deben tener importes positivos y válidos en ambas monedas.');
+  if (values.some(value => !Number.isFinite(value) || value < 0) ||
+      (Number(input.amountBs) <= 0 && Number(input.amountUsd) <= 0)) {
+    throw new Error('El movimiento debe contener al menos un importe positivo y no admite importes negativos o inválidos.');
   }
+  const rate = Number(input.bcvRate);
   const rateDate = String(input.bcvRateEffectiveDate || '');
+  if (rate <= 0) {
+    if (isBcvRateRequiredForDate(input.date)) {
+      throw new Error('La tasa BCV es obligatoria para movimientos bancarios desde 2018.');
+    }
+    if (rateDate) throw new Error('No se puede indicar una fecha de tasa BCV si la tasa no fue ingresada.');
+    return; // Antes de 2018 se admite movimiento en una sola moneda, sin equivalencia ficticia.
+  }
+  if (Number(input.amountBs) <= 0 || Number(input.amountUsd) <= 0) {
+    throw new Error('Cuando se registra una tasa BCV, deben existir importes positivos en ambas monedas.');
+  }
   const parsedRateDate = new Date(rateDate + 'T00:00:00.000Z');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(rateDate) ||
       !Number.isFinite(parsedRateDate.getTime()) ||
@@ -50,7 +63,7 @@ export function validateBankMovementFxSnapshot(input: {
     throw new Error('La fecha de vigencia de la tasa BCV debe ser válida y no puede ser posterior al movimiento bancario.');
   }
   if (Math.abs(Math.round(Number(input.amountBs) * 100) / 100 -
-      Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0.01) {
+      Math.round(Number(input.amountUsd) * rate * 100) / 100) > 0.01) {
     throw new Error('Los importes Bs. y USD del movimiento no concilian con la tasa BCV efectiva en esa fecha.');
   }
 }
@@ -65,6 +78,18 @@ export function matchesBankStatementDualCurrency(input: {
   debitUsd: number;
   creditUsd: number;
 }): boolean {
+  if (Number(input.amountBs) === 0 && Number(input.amountUsd) > 0) {
+    return input.debitBs === 0 && input.creditBs === 0 && matchesBankStatementLine({
+      currency: 'USD', movementType: input.movementType, statementAmount: input.amountUsd,
+      debit: input.debitUsd, credit: input.creditUsd
+    });
+  }
+  if (Number(input.amountUsd) === 0 && Number(input.amountBs) > 0) {
+    return input.debitUsd === 0 && input.creditUsd === 0 && matchesBankStatementLine({
+      currency: 'BS', movementType: input.movementType, statementAmount: input.amountBs,
+      debit: input.debitBs, credit: input.creditBs
+    });
+  }
   return matchesBankStatementLine({
     currency: 'BS',
     movementType: input.movementType,

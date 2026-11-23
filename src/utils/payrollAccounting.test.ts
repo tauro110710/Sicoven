@@ -39,5 +39,15 @@ test('rejects inconsistent totals and invalid exchange rates', () => {
   assert.throws(() => buildPayrollJournalItems({
     grossEarnings: 1000, workerLegalDeductions: 40, otherDeductions: 20,
     employerContributions: 90, netPay: 940
-  }, accounts, 0), /tasa BCV/);
+  }, accounts, -1), /negativa/);
+});
+
+test('allows historical payroll in Bs-only mode without a BCV rate', () => {
+  const items = buildPayrollJournalItems({
+    grossEarnings: 1000, workerLegalDeductions: 40, otherDeductions: 20,
+    employerContributions: 90, netPay: 940
+  }, accounts, 0);
+  assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), 1090);
+  assert.equal(items.reduce((sum, item) => sum + item.creditBs, 0), 1090);
+  assert.equal(items.reduce((sum, item) => sum + item.debitUsd + item.creditUsd, 0), 0);
 });

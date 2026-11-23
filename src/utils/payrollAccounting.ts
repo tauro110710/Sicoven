@@ -17,7 +17,7 @@ export function buildPayrollJournalItems(
   accounts: PayrollPostingAccount[],
   bcvRate: number
 ): JournalEntryItem[] {
-  if (!Number.isFinite(bcvRate) || bcvRate <= 0) throw new Error('La tasa BCV debe ser mayor que cero.');
+  if (!Number.isFinite(bcvRate) || bcvRate < 0) throw new Error('La tasa BCV no puede ser negativa ni inválida.');
   const values = Object.entries(totals);
   if (values.some(([, value]) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
     throw new Error('La nómina contiene totales inválidos.');
@@ -36,10 +36,11 @@ export function buildPayrollJournalItems(
     return {
       accountCode: account.code, accountName: account.name,
       debitBs: roundMoney(row.debit), creditBs: roundMoney(row.credit),
-      debitUsd: roundMoney(row.debit / bcvRate), creditUsd: roundMoney(row.credit / bcvRate),
+      debitUsd: bcvRate > 0 ? roundMoney(row.debit / bcvRate) : 0, creditUsd: bcvRate > 0 ? roundMoney(row.credit / bcvRate) : 0,
       description: row.description
     };
   });
+  if (bcvRate <= 0) return items; // Nómina histórica sin equivalencia USD: conserva importes nominales en Bs.
   const sum = (key: keyof JournalEntryItem) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
   const debitBs = sum('debitBs'), creditBs = sum('creditBs');
   if (debitBs <= 0 || Math.abs(debitBs - creditBs) > 0.01) {

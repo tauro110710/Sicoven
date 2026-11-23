@@ -87,7 +87,7 @@ export const BankStatementImportModal: React.FC<Props> = ({ isOpen, onClose, ban
       </header>
       <div className="space-y-4 overflow-y-auto p-5">
         <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-          Cargue un archivo TXT delimitado, CSV, Excel (.xlsx) u OFX. Cada movimiento debe contener fecha, referencia, descripción, naturaleza, importe, tasa BCV histórica y fecha de vigencia de esa tasa. En OFX se leen las extensiones EXCHANGERATE y EXCHANGERATEDATE. No se inventan tasas faltantes.
+          Cargue un archivo TXT delimitado, CSV, Excel (.xlsx) u OFX. Cada movimiento debe contener fecha, referencia, descripción, naturaleza e importe. Desde 2018 la tasa BCV y su fecha valor son obligatorias; antes de 2018 pueden omitirse si el contador no requiere equivalencia USD. No se inventan tasas faltantes.
         </div>
         <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-sky-400">
           <Upload className="h-7 w-7 text-slate-500"/>

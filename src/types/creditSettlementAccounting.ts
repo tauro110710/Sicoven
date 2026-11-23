@@ -22,20 +22,23 @@ export interface CreditSettlementJournalPlanInput {
 export function buildCreditSettlementJournalItems(input: CreditSettlementJournalPlanInput): JournalEntryItem[] {
   const { kind, method, cashAccount, controlAccount } = input;
   const values = [input.amountBs, input.amountUsd, input.invoiceRate, input.settlementRate];
+  const isUsdMethod = method === 'CASH_USD' || method === 'BANK_TRANSFER_USD';
   if (!['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(kind) ||
-      values.some(value => !Number.isFinite(value) || value <= 0)) {
-    throw new Error('Los importes y las tasas de la liquidación deben ser válidos y mayores que cero.');
+      values.some(value => !Number.isFinite(value) || value < 0) ||
+      input.amountBs <= 0 || input.amountUsd < 0 ||
+      (input.amountUsd > 0 && input.invoiceRate <= 0) || (isUsdMethod && input.settlementRate <= 0)) {
+    throw new Error('Los importes deben ser válidos; las tasas no pueden ser negativas y se requieren cuando hay equivalencia USD.');
   }
   if (!cashAccount?.code || !cashAccount.name || !controlAccount?.code || !controlAccount.name) {
     throw new Error('La liquidación requiere cuentas contables de tesorería y control verificables.');
   }
-  const amountAtInvoiceRate = Math.round(input.amountUsd * input.invoiceRate * 100) / 100;
-  const amountAtSettlementRate = Math.round(input.amountUsd * input.settlementRate * 100) / 100;
   const actualAmountBs = Math.round(input.amountBs * 100) / 100;
-  if (Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
+  const amountAtInvoiceRate = input.amountUsd > 0 ? Math.round(input.amountUsd * input.invoiceRate * 100) / 100 : actualAmountBs;
+  const amountAtSettlementRate = input.settlementRate > 0 ? Math.round(input.amountUsd * input.settlementRate * 100) / 100 : actualAmountBs;
+  if (input.amountUsd > 0 && input.settlementRate > 0 && Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
     throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación.');
   }
-  const fxDifferenceBs = Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100;
+  const fxDifferenceBs = input.amountUsd > 0 ? Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100 : 0;
   const isTransfer = method === 'BANK_TRANSFER_BS' || method === 'BANK_TRANSFER_USD';
   const baseItems: JournalEntryItem[] = kind === 'SALE_COLLECTION' ? [
     { accountCode: cashAccount.code, accountName: cashAccount.name, debitBs: actualAmountBs, creditBs: 0, debitUsd: input.amountUsd, creditUsd: 0, description: isTransfer ? 'Cobro de factura de crédito por transferencia bancaria' : 'Cobro de factura de crédito' },

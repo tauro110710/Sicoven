@@ -181,3 +181,13 @@ test('reconstruye el FIFO de notas junto con liquidaciones mixtas y directas pre
     [directOnly, mixed], 'company-1', 'J-12345678-9', 8
   ), [{ creditNoteId: 'nc-1', amountUsd: 8, bookValueBs: 800 }]);
 });
+
+test('allows a historical supplier advance settlement without BCV before 2018', () => {
+  const historical = { ...base, date: '2014-01-01', bcvRate: 0 };
+  assert.equal(validateSupplierAdvanceSettlementDraft(historical, 30, undefined, ['1.1.1.03']), null);
+});
+
+test('requires BCV for supplier advance settlements dated from 2018', () => {
+  const modern = { ...base, date: '2018-01-01', bcvRate: 0 };
+  assert.match(validateSupplierAdvanceSettlementDraft(modern, 30, undefined, ['1.1.1.03']) || '', /tasa BCV solo es obligatoria desde 2018/);
+});

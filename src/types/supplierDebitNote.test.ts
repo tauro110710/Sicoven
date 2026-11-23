@@ -126,13 +126,13 @@ test('rechaza fechas imposibles, cronología invertida y períodos cerrados', ()
 test('rechaza importes y tasas inválidos', () => {
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     totalAmountBs: 0
-  })), /valores numéricos positivos/);
+  })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     totalAmountBs: Number.NaN
-  })), /valores numéricos positivos/);
+  })), /importe de la nota debe ser positivo/);
   assert.throws(() => validateSupplierDebitNotePreflight(draft({
     bcvRate: -1
-  })), /valores numéricos positivos/);
+  })), /importe de la nota debe ser positivo; la tasa BCV solo es obligatoria desde 2018/);
 });
 
 test('exige causa económica explícita y justificación suficiente', () => {
@@ -167,5 +167,13 @@ test('la clasificación no autoriza movimiento de inventario ni tratamiento fisc
 test('normaliza espacios en la referencia de la factura afectada', () => {
   assert.doesNotThrow(() => validateSupplierDebitNotePreflight(draft({
     affectedInvoiceNumber: ' FAC - 100 '
+  })));
+});
+
+test('allows historical supplier debit note preflight without BCV rate before 2018', () => {
+  const historicalPurchase = { ...sourcePurchase, invoiceDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0 };
+  assert.doesNotThrow(() => validateSupplierDebitNotePreflight(draft({
+    issueDate: '2014-02-01', recognitionDate: '2014-02-01', bcvRate: 0,
+    purchases: [historicalPurchase]
   })));
 });

@@ -1,4 +1,5 @@
 import type { PurchaseRecord } from './accounting';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import { isValidIsoDate } from './migrationParsing';
 
 export interface PurchaseServiceCreditNoteRequest {
@@ -71,8 +72,8 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   if (!values.every(value => Number.isFinite(Number(value))) ||
       request.taxableBaseBs < 0 || request.exemptAmountBs < 0 ||
       request.taxableBaseBs + request.exemptAmountBs <= 0 ||
-      request.bcvRate <= 0 || purchase.taxRate < 0 || purchase.taxRate > 100) {
-    throw new Error('Los importes, la alícuota o la tasa BCV de la NC no son válidos.');
+      request.bcvRate < 0 || (isBcvRateRequiredForDate(request.noteDate) && request.bcvRate <= 0) || purchase.taxRate < 0 || purchase.taxRate > 100) {
+    throw new Error('Los importes, la alícuota o la tasa BCV de la NC no son válidos para la fecha de emisión.');
   }
   const effectiveVatRate = Number(purchase.taxRate) === 31 ? 16 : Number(purchase.taxRate);
   const expectedVat = money(Number(purchase.taxableBaseBs) * effectiveVatRate / 100);
@@ -98,11 +99,11 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   const vatAmountBs = money(taxableBaseBs * effectiveVatRate / 100);
   const additionalLuxuryTaxBs = Number(purchase.taxRate) === 31 ? money(taxableBaseBs * 0.15) : 0;
   const totalAmountBs = money(taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs);
-  const taxableBaseUsd = usd(taxableBaseBs / request.bcvRate);
-  const exemptAmountUsd = usd(exemptAmountBs / request.bcvRate);
-  const vatAmountUsd = usd(vatAmountBs / request.bcvRate);
-  const additionalLuxuryTaxUsd = usd(additionalLuxuryTaxBs / request.bcvRate);
-  const totalAmountUsd = usd(totalAmountBs / request.bcvRate);
+  const taxableBaseUsd = request.bcvRate > 0 ? usd(taxableBaseBs / request.bcvRate) : 0;
+  const exemptAmountUsd = request.bcvRate > 0 ? usd(exemptAmountBs / request.bcvRate) : 0;
+  const vatAmountUsd = request.bcvRate > 0 ? usd(vatAmountBs / request.bcvRate) : 0;
+  const additionalLuxuryTaxUsd = request.bcvRate > 0 ? usd(additionalLuxuryTaxBs / request.bcvRate) : 0;
+  const totalAmountUsd = request.bcvRate > 0 ? usd(totalAmountBs / request.bcvRate) : 0;
   return {
     taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, totalAmountBs,
     taxableBaseUsd, exemptAmountUsd, vatAmountUsd, additionalLuxuryTaxUsd, totalAmountUsd,

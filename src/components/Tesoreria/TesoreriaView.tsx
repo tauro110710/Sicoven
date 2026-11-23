@@ -5,6 +5,7 @@ import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, Re
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -36,6 +37,7 @@ export const TesoreriaView: React.FC = () => {
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedAmount = parseAmount(amount);
   const parsedBcvRate = parseAmount(bcvRateInput);
+  const rateRequired = isBcvRateRequiredForDate(date);
   const [counterpartCode, setCounterpartCode] = useState('');
   const [destinationBankId, setDestinationBankId] = useState('');
   const [message, setMessage] = useState('');
@@ -58,10 +60,8 @@ export const TesoreriaView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (savingRef.current) return;
-    // Para cuentas USD la tasa BCV es siempre obligatoria (hay conversión real).
-    // Para cuentas BS es obligatoria solo si el contador la ingresó; si no,
-    // se intenta resolver del historial de la empresa y, si tampoco existe,
-    // se bloquea con mensaje claro en lugar de usar la tasa actual.
+    // La tasa es obligatoria desde 2018, independientemente de la cuenta.
+    // Antes de 2018 se permite movimiento nominal sin equivalencia USD.
     const isUsdAccount = activeBank?.currency === 'USD';
     const resolvedBcvRate = (() => {
       if (parsedBcvRate > 0) return parsedBcvRate;
@@ -78,12 +78,8 @@ export const TesoreriaView: React.FC = () => {
       setMessage('Ingrese un monto positivo.');
       return;
     }
-    if (isUsdAccount && resolvedBcvRate <= 0) {
-      setMessage('La cuenta es en dólares: ingrese la tasa BCV histórica aplicable a esta fecha (Bs./USD).');
-      return;
-    }
-    if (!isUsdAccount && resolvedBcvRate <= 0) {
-      setMessage('No se encontró tasa BCV registrada para esta fecha. Registre la tasa BCV en el módulo de configuración o ingrésela manualmente.');
+    if (rateRequired && resolvedBcvRate <= 0) {
+      setMessage('Ingrese la tasa BCV para movimientos desde 2018. Antes de 2018 puede dejarla pendiente o registrarla según su criterio.');
       return;
     }
     savingRef.current = true;
@@ -156,14 +152,14 @@ export const TesoreriaView: React.FC = () => {
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0,00"/></div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">
-              Tasa BCV aplicable (Bs./USD){activeBank?.currency === 'USD' ? ' *' : ' — opcional para cuentas Bs.'}
+              Tasa BCV aplicable (Bs./USD){rateRequired ? ' *' : ' — opcional antes de 2018'}
             </label>
             <input
               type="text" inputMode="decimal"
               value={bcvRateInput}
               onChange={e=>setBcvRateInput(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-              placeholder={activeBank?.currency === 'USD' ? 'Obligatorio para USD' : 'Dejar vacío para usar tasa histórica registrada'}
+              placeholder={rateRequired ? 'Obligatoria desde 2018' : 'Opcional antes de 2018'}
             />
             {activeBank?.currency !== 'USD' && (() => {
               const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);

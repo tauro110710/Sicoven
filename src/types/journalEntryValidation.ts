@@ -1,4 +1,5 @@
 import type { Account, JournalEntryItem } from './accounting';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 /**
  * Prevents posting to missing or grouping accounts before the entry reaches
@@ -52,4 +53,24 @@ export function isJournalEntryBalanced(
   return hasMovement &&
     Math.abs(totals.debitBs - totals.creditBs) < toleranceBs &&
     Math.abs(totals.debitUsd - totals.creditUsd) < toleranceUsd;
+}
+
+/** Enforces the date-aware BCV and currency policy for a journal entry.
+ * Before 2018, BCV is optional and a single-currency entry is valid.
+ * If a historical rate is supplied, the entry must carry both currencies.
+ * From 2018 onward, BCV and both currency totals are required.
+ */
+export function isJournalEntryCurrencyPolicySatisfied(input: {
+  date: string;
+  bcvRate: number;
+  debitBs: number;
+  debitUsd: number;
+}): boolean {
+  const values = [input.bcvRate, input.debitBs, input.debitUsd];
+  if (!values.every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) return false;
+  const bs = Number(input.debitBs), usd = Number(input.debitUsd), rate = Number(input.bcvRate);
+  if (bs <= 0 && usd <= 0) return false;
+  if (isBcvRateRequiredForDate(input.date)) return rate > 0 && bs > 0 && usd > 0;
+  if (rate > 0) return bs > 0 && usd > 0;
+  return true;
 }

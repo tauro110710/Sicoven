@@ -31,7 +31,7 @@ const originalMovement: InventoryMovement = {
 const draft = (options: {
   quantity?: number; previouslyReturnedQuantity?: number; currentStock?: number;
   currentAverageCostBs?: number; product?: InventoryProduct; closedThroughDate?: string;
-  purchase?: PurchaseRecord; lines?: PurchaseCreditNoteDraftLine[];
+  purchase?: PurchaseRecord; lines?: PurchaseCreditNoteDraftLine[]; returnDate?: string;
 } = {}) => ({
   purchase: options.purchase || purchase, products: [options.product || product],
   lines: options.lines || [{
@@ -39,7 +39,7 @@ const draft = (options: {
     quantity: options.quantity ?? 1, previouslyReturnedQuantity: options.previouslyReturnedQuantity ?? 0,
     currentStock: options.currentStock ?? 2, currentAverageCostBs: options.currentAverageCostBs ?? 100
   }],
-  returnDate: '2026-10-10', creditNoteNumber: 'NC-001',
+  returnDate: options.returnDate ?? '2026-10-10', creditNoteNumber: 'NC-001',
   controlNumber: '00-NC-001', reason: 'Mercancía defectuosa devuelta',
   fiscalEmissionMedium: 'DIGITAL' as const, sameMediumAsOriginal: true,
   closedThroughDate: options.closedThroughDate
@@ -256,4 +256,16 @@ test('separates 16% recoverable VAT from the 15% luxury tax on 31% purchase invo
   assert.equal(result.igtfAmountBs, 3.93);
   assert.equal(result.totalAmountBs, 134.93);
   assert.equal(result.vatWithheldBs, 12);
+});
+
+test('calculates a pre-2018 inventory credit note in Bs only when source has no BCV rate', () => {
+  const historicalPurchase = { ...purchase, invoiceDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0, islrWithheldUsd: 0, igtfAmountUsd: 0 };
+  const historicalProduct = { ...product, avgCostUsd: 0, lastCostUsd: 0 };
+  const historicalMovement = { ...originalMovement, date: '2014-01-01', bcvRate: 0, unitCostUsd: 0, totalCostUsd: 0, balanceTotalUsd: 0 };
+  const result = calculatePurchaseCreditNote(draft({
+    purchase: historicalPurchase, product: historicalProduct, returnDate: '2014-02-01',
+    lines: [{ product: historicalProduct, originalMovement: historicalMovement, quantity: 1, previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100 }]
+  }));
+  assert.equal(result.totalAmountBs > 0, true);
+  assert.equal(result.totalAmountUsd, 0);
 });

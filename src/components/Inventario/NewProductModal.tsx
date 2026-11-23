@@ -6,6 +6,7 @@ import type { InventoryProduct } from '../../types/accounting';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { calculateInventoryPrices, DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10));
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [avgCostInput, setAvgCostInput] = useState('');
+  const [openingCostBsInput, setOpeningCostBsInput] = useState('');
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'BS'>('USD');
   const [priceInputs, setPriceInputs] = useState(['', '', '', '']);
   const [pricingConfiguration, setPricingConfiguration] = useState<InventoryPricingConfiguration>(DEFAULT_INVENTORY_PRICING);
@@ -66,6 +68,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostUsd));
+      setOpeningCostBsInput(String(product.avgCostBs || ''));
       setPricingConfiguration(withoutInventoryExchangeRates(product.pricingConfiguration || DEFAULT_INVENTORY_PRICING));
       const legacyCurrency = product.priceCurrency || 'BS';
       setPriceCurrency(legacyCurrency);
@@ -82,7 +85,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
       setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
-      setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
+      setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setOpeningCostBsInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
       setPricingConfiguration(withoutInventoryExchangeRates(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING));
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');
       setAdjustmentAccountCode('5.1.2.01'); setOpeningBalanceAccountCode('3.3.1.01');
@@ -107,7 +110,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const bcvRate = parseDecimalInput(openingBcvRateInput);
   const effectivePricingConfiguration = withoutInventoryExchangeRates(pricingConfiguration);
   const avgCostUsd = parseDecimalInput(avgCostInput);
-  const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : 0;
+  const historicalBsCost = parseDecimalInput(openingCostBsInput);
+  const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : historicalBsCost;
   let pricingCalculationError = '';
   const pricingCalculation = (() => {
     try {
@@ -133,7 +137,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
     if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculationError)) { setError(pricingCalculationError || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
-    if (!product && (currentStock > 0 || avgCostUsd > 0) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial, por ejemplo 889,67.'); return; }
+    if (!product && currentStock > 0 && avgCostBs <= 0) { setError(openingDate < '2018-01-01' && bcvRate <= 0 ? 'Ingrese el costo histórico unitario en Bs. del inventario inicial; la tasa BCV antes de 2018 es opcional.' : 'Ingrese el costo histórico unitario del inventario inicial.'); return; }
+    if (!product && (currentStock > 0 || avgCostBs > 0) && isBcvRateRequiredForDate(openingDate) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial desde 2018.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -314,6 +319,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               </select>
             </div>
           </div>
+          {openingDate < '2018-01-01' && bcvRate <= 0 && !product && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <label className="block font-semibold text-slate-700 mb-1">Costo histórico unitario de inventario en Bs. (tasa BCV opcional)</label>
+              <input type="text" inputMode="decimal" value={openingCostBsInput} onChange={e => setOpeningCostBsInput(e.target.value)} placeholder="Costo unitario en bolívares de la fecha" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <p className="mt-1 text-xs text-slate-600">Se conserva la valoración nominal en Bs. sin convertir a USD ni inventar una tasa.</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -321,8 +333,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               <input type="date" required value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
-              <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => setOpeningBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {isBcvRateRequiredForDate(openingDate) ? '*' : '(opcional)'}</label>
+              <input type="text" inputMode="decimal" required={isBcvRateRequiredForDate(openingDate)} value={openingBcvRateInput} onChange={e => setOpeningBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
           </div>
 

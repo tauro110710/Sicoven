@@ -114,3 +114,26 @@ test('reconciles a bank line only when both Bs and USD equivalents match', () =>
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditUsd: 0.99 }), false);
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditBs: 249.99 }), false);
 });
+
+test('allows historical bank movement snapshots in one currency without BCV before 2018', () => {
+  assert.doesNotThrow(() => validateBankMovementFxSnapshot({
+    date: '2014-01-01', amountBs: 1120000, amountUsd: 0, bcvRate: 0, bcvRateEffectiveDate: ''
+  }));
+  assert.doesNotThrow(() => validateBankMovementFxSnapshot({
+    date: '2017-12-31', amountBs: 0, amountUsd: 250, bcvRate: 0, bcvRateEffectiveDate: ''
+  }));
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2018-01-01', amountBs: 1120000, amountUsd: 0, bcvRate: 0, bcvRateEffectiveDate: ''
+  }), /obligatoria/);
+});
+
+test('matches historical single-currency bank movements without requiring a fictitious dual snapshot', () => {
+  assert.equal(matchesBankStatementDualCurrency({
+    movementType: 'CREDIT', amountBs: 100, amountUsd: 0,
+    debitBs: 100, creditBs: 0, debitUsd: 0, creditUsd: 0
+  }), true);
+  assert.equal(matchesBankStatementDualCurrency({
+    movementType: 'CREDIT', amountBs: 0, amountUsd: 5,
+    debitBs: 0, creditBs: 0, debitUsd: 5, creditUsd: 0
+  }), true);
+});

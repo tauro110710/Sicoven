@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { allocateSupplierAdvanceCreditNotes } from '../../types/supplierAdvanceSettlement';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface Props { onClose: () => void; }
 
@@ -43,7 +44,9 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const rate = parseAmount(bcvRate);
   const usd = parseAmount(amountUsd);
-  const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
+  const rateRequired = isBcvRateRequiredForDate(date);
+  const historicalBookValueBs = balance && balance.outstandingUsd > 0 ? Math.round(balance.outstandingBs * usd / balance.outstandingUsd * 100) / 100 : 0;
+  const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate >= 0 && (!rateRequired || rate > 0);
   const allocationPreview = useMemo(() => {
     if (!supplierRif || !Number.isFinite(usd) || usd <= 0) return { rows: [], error: '' };
     const rif = supplierRif.trim().toUpperCase();
@@ -79,12 +82,14 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     if (saving) return;
     setError('');
     if (!sqliteAvailable || !isStorageReady) { setError(storageError || 'La edición de escritorio con SQLite local no está disponible.'); return; }
-    if (!balance || !validAmount) { setError('Seleccione proveedor e indique importe y tasa BCV válidos.'); return; }
+    if (!balance || !validAmount) { setError('Seleccione proveedor e indique un importe válido y la tasa BCV cuando corresponda desde 2018.'); return; }
+    if (kind === 'REFUND_RECEIVED' && parseAmount(cashReceivedBs) <= 0) { setError('Indique el importe real recibido en Bs.'); return; }
+    if (kind === 'APPLIED_TO_PURCHASE' && !targetPurchaseId) { setError('Seleccione la factura destino para aplicar el anticipo.'); return; }
     setSaving(true);
     try {
       await addSupplierAdvanceSettlement({
         supplierRif, kind, date, amountUsd: usd,
-        amountBs: kind === 'REFUND_RECEIVED' ? parseAmount(cashReceivedBs) : Math.round(usd * rate * 100) / 100,
+        amountBs: kind === 'REFUND_RECEIVED' ? parseAmount(cashReceivedBs) : (rate > 0 ? Math.round(usd * rate * 100) / 100 : historicalBookValueBs),
         cashReceivedBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : undefined,
         bcvRate: rate,
         treasuryAccountCode: kind === 'REFUND_RECEIVED' ? treasuryAccountCode : undefined,
@@ -129,7 +134,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-xs font-semibold text-slate-700">Fecha<input required type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="text" inputMode="decimal" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            <label className="text-xs font-semibold text-slate-700">Tasa BCV {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
           </div>
           {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
             <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>

@@ -1,5 +1,6 @@
 import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import type { SupplierDebitNoteEconomicCause } from './supplierDebitNote';
 
 export interface SupplierDebitNoteAccountingDraft {
@@ -154,7 +155,8 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
   const vatAmountBs = moneyBs(Number(draft.vatAmountBs));
   const totalAmountBs = moneyBs(Number(draft.totalAmountBs));
   const values = [rate, taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs];
-  if (!values.every(Number.isFinite) || rate <= 0 ||
+  if (!values.every(Number.isFinite) || rate < 0 ||
+      (isBcvRateRequiredForDate(draft.recognitionDate) && rate <= 0) ||
       [taxableBaseBs, exemptAmountBs, vatAmountBs].some(value => value < 0) || totalAmountBs <= 0) {
     throw new Error('La ND contiene tasa o importes no válidos.');
   }
@@ -210,7 +212,7 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     throw new Error('El IVA de la ND requiere una cuenta de destino elegida y validada por el profesional; SICOVEN no infiere que sea crédito fiscal recuperable.');
   }
 
-  const toUsd = (value: number) => moneyUsd(value / rate);
+  const toUsd = (value: number) => rate > 0 ? moneyUsd(value / rate) : 0;
   const line = (account: Account, debit: number, credit: number, description: string): JournalEntryItem => ({
     accountCode: account.code, accountName: account.name,
     debitBs: debit, creditBs: credit, debitUsd: toUsd(debit), creditUsd: toUsd(credit), description

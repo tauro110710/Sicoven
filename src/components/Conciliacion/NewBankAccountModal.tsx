@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccounting } from '../../context/AccountingContext';
 import { Landmark, X, Check } from 'lucide-react';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewBankAccountModalProps {
   isOpen: boolean;
@@ -33,6 +34,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
   const bcvRate = parseAmount(bcvRateInput) || 0;
+  const effectiveOpeningDate = openingDate || (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
+  const rateRequired = parsedOpeningBalance > 0 && isBcvRateRequiredForDate(effectiveOpeningDate);
   const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
   const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,7 +50,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       window.alert('El saldo inicial debe ser cero o positivo.');
       return;
     }
-    if (parsedOpeningBalance > 0 && bcvRate <= 0) {
+    if (parsedOpeningBalance > 0 && rateRequired && bcvRate <= 0) {
       window.alert('Configure una tasa BCV válida antes de registrar el saldo inicial.');
       return;
     }
@@ -222,8 +225,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
           </div>
 
           {parsedOpeningBalance > 0 && <div>
-            <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {currency === 'USD' ? '*' : '(opcional)'}</label>
-            <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {rateRequired ? '*' : '(opcional antes de 2018)'}</label>
+            <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder={rateRequired ? 'Ej.: 889,67' : 'Opcional antes de 2018'} required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
           </div>}
 
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-1">
@@ -248,7 +251,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             </button>
             <button
               type="submit"
-              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
+              disabled={saving || !bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && rateRequired && bcvRate <= 0)}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />

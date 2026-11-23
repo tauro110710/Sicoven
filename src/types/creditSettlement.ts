@@ -1,3 +1,5 @@
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+
 export type CreditSettlementKind = 'SALE_COLLECTION' | 'PURCHASE_PAYMENT';
 export type SettlementMethod = 'CASH_BS' | 'CASH_USD' | 'BANK_TRANSFER_BS' | 'BANK_TRANSFER_USD' | 'OTHER';
 
@@ -157,7 +159,8 @@ export function calculateCreditBalance(
  */
 export function validateCreditSettlement(
   draft: CreditSettlementDraft,
-  outstandingUsd: number
+  outstandingUsd: number,
+  outstandingBs = 0
 ): string | null {
   if (!draft || typeof draft !== 'object') return 'Los datos de la liquidación no son válidos.';
   if (typeof draft.documentId !== 'string') return 'Debe seleccionar la factura de crédito.';
@@ -175,13 +178,28 @@ export function validateCreditSettlement(
   if (parsedDate.getUTCFullYear() !== year ||
       parsedDate.getUTCMonth() !== month - 1 ||
       parsedDate.getUTCDate() !== day) return 'La fecha de liquidación no es válida.';
-  if (!Number.isFinite(draft.bcvRate) || draft.bcvRate <= 0) return 'La tasa BCV debe ser mayor que cero.';
-  if (!Number.isFinite(outstandingUsd) || outstandingUsd < 0) return 'El saldo pendiente de la factura no es válido; actualice los datos antes de liquidar.';
-  if (!Number.isFinite(draft.amountUsd) || draft.amountUsd <= 0) return 'El abono debe ser mayor que cero.';
+  if (!Number.isFinite(draft.bcvRate) || draft.bcvRate < 0) return 'La tasa BCV no puede ser negativa ni inválida.';
+  if (!Number.isFinite(outstandingUsd) || outstandingUsd < 0 || !Number.isFinite(outstandingBs) || outstandingBs < 0) return 'El saldo pendiente de la factura no es válido; actualice los datos antes de liquidar.';
+  if (!Number.isFinite(draft.amountUsd) || draft.amountUsd < 0) return 'El abono USD no puede ser negativo ni inválido.';
   if (draft.amountUsd > outstandingUsd + 0.005) return 'El abono supera el saldo pendiente de la factura.';
-  if (!Number.isFinite(draft.amountBs) || draft.amountBs <= 0) return 'El importe efectivamente pagado/cobrado en Bs debe ser mayor que cero.';
-  const expectedBs = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
-  const actualBs = Math.round(draft.amountBs * 100) / 100;
-  if (Math.abs(actualBs - expectedBs) >= 0.01) return 'El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.';
+  if (!Number.isFinite(draft.amountBs) || draft.amountBs < 0) return 'El importe efectivamente pagado/cobrado en Bs no puede ser negativo.';
+  const isUsdMethod = draft.method === 'CASH_USD' || draft.method === 'BANK_TRANSFER_USD';
+  if (draft.amountUsd <= 0) {
+    if (outstandingUsd > 0.005) return 'Este documento mantiene saldo USD; indique el abono USD o registre una tasa para liquidarlo.';
+    if (draft.amountBs <= 0) return 'El abono en Bs debe ser mayor que cero.';
+    if (draft.amountBs > outstandingBs + 0.01) return 'El abono en Bs supera el saldo pendiente nominal de la factura.';
+    if (isUsdMethod) return 'Una liquidación en USD requiere un importe USD y su tasa de conversión.';
+    return null;
+  }
+  if (outstandingUsd <= 0.005) return 'La factura no tiene saldo USD pendiente para aplicar este abono.';
+  if (draft.amountBs <= 0 && !isUsdMethod) return 'El importe efectivamente pagado/cobrado en Bs debe ser mayor que cero.';
+  if (draft.amountBs < 0) return 'El importe en Bs no puede ser negativo.';
+  if (isBcvRateRequiredForDate(draft.settlementDate) && draft.bcvRate <= 0) return 'La tasa BCV es obligatoria para liquidaciones USD desde 2018.';
+  if (isUsdMethod && draft.bcvRate <= 0) return 'La tasa BCV es obligatoria para liquidaciones en USD.';
+  if (draft.bcvRate > 0) {
+    const expectedBs = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
+    const actualBs = Math.round(draft.amountBs * 100) / 100;
+    if (Math.abs(actualBs - expectedBs) >= 0.01) return 'El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.';
+  }
   return null;
 }

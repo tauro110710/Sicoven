@@ -188,3 +188,20 @@ describe('read-only receivable/payable FX exposure', () => {
     assert.throws(() => calculateCreditFxExposure(Number.NaN, 100, 100), /exposición/);
   });
 });
+
+it('allows historical dual-currency credit settlement without BCV when Bs amount is entered manually', () => {
+  const historical = { ...draft, settlementDate: '2014-01-01', bcvRate: 0, amountUsd: 5, amountBs: 600, method: 'CASH_BS' as const };
+  assert.equal(validateCreditSettlement(historical, 100, 8000), null);
+});
+
+it('allows a Bs-only settlement when the invoice has no USD balance', () => {
+  const historicalBsOnly = { ...draft, settlementDate: '2014-01-01', bcvRate: 0, amountUsd: 0, amountBs: 500, method: 'CASH_BS' as const };
+  assert.equal(validateCreditSettlement(historicalBsOnly, 0, 1000), null);
+});
+
+it('requires BCV for dual-currency settlements from 2018, but not Bs-only documents', () => {
+  const modernDual = { ...draft, settlementDate: '2018-01-01', bcvRate: 0, amountUsd: 5, amountBs: 500 };
+  assert.match(validateCreditSettlement(modernDual, 100, 8000) || '', /tasa BCV es obligatoria/);
+  const modernBsOnly = { ...draft, settlementDate: '2018-01-01', bcvRate: 0, amountUsd: 0, amountBs: 500, method: 'CASH_BS' as const };
+  assert.equal(validateCreditSettlement(modernBsOnly, 0, 1000), null);
+});

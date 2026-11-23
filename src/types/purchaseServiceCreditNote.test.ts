@@ -70,3 +70,12 @@ test('separates VAT 16% and non-creditable luxury tax 15% on a 31% service invoi
   assert.equal(result.additionalLuxuryTaxBs, 15);
   assert.equal(result.totalAmountBs, 131);
 });
+
+test('calculates a pre-2018 service credit note in Bs only without BCV', () => {
+  const historicalSource = { ...source, invoiceDate: '2014-01-01', accountCreditDate: '2014-01-01', bcvRate: 0, totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0 };
+  const result = calculatePurchaseServiceCreditNote(draft({
+    purchase: historicalSource, noteDate: '2014-02-01', bcvRate: 0
+  }));
+  assert.equal(result.totalAmountBs, 116);
+  assert.equal(result.totalAmountUsd, 0);
+});

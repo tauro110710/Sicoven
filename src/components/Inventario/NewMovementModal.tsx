@@ -5,6 +5,7 @@ import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 import { calculateFifoIssue, reconstructFifoLayers } from '../../types/inventoryAccounting';
 
 interface NewMovementModalProps {
@@ -103,6 +104,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const unitCostBs = parseDecimalInput(unitCostInput);
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
+  const rateRequired = isBcvRateRequiredForDate(date) && type !== 'SALIDA' && unitCostBs > 0;
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const fifoPreview = React.useMemo(() => {
     if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
@@ -140,8 +142,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     e.preventDefault();
     setError('');
     if (!Number.isFinite(quantity) || !Number.isFinite(unitCostBs) || !Number.isFinite(additionalLandedCostsBs) || quantity < 0 || (type !== 'AJUSTE' && quantity <= 0) || unitCostBs < 0 || additionalLandedCostsBs < 0) { setError('Verifique que la cantidad y los costos sean válidos.'); return; }
-    // La tasa BCV es opcional para movimientos en bolívares; solo se rechaza si el contador
-    // ingresó un valor explícito que no es un número positivo válido.
+    // Para entradas y ajustes desde 2018 se requiere equivalencia USD; antes de 2018 queda pendiente.
+    if (rateRequired && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('La tasa BCV es obligatoria para entradas y ajustes de inventario desde 2018. Antes de 2018 puede dejarla pendiente.'); return; }
     if (bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.'); return; }
 
     if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
@@ -326,8 +328,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) (opcional)</label>
-              <input type="text" inputMode="decimal" placeholder="Ej.: 889,67 (dejar vacío si pendiente)" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {rateRequired ? '*' : '(opcional antes de 2018)'}</label>
+              <input type="text" inputMode="decimal" placeholder={rateRequired ? 'Ej.: 889,67 (obligatoria desde 2018)' : 'Dejar vacío si no aplica'} value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>

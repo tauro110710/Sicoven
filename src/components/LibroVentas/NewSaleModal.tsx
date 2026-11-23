@@ -5,6 +5,7 @@ import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -129,10 +130,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     }
     // La tasa BCV solo es obligatoria cuando el cobro es en divisas o se requiere equivalencia.
     // Para ventas nominales en bolívares la equivalencia USD queda como pendiente (0).
-    const saleNeedsUsd = paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'FOREIGN_TRANSFER' || paymentCurrency === 'CRYPTO';
+    const saleNeedsBcv = isBcvRateRequiredForDate(invoiceDate);
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && !hasValidBcvRate;
-    if (saleNeedsUsd && !hasValidBcvRate) {
-      window.alert('La tasa BCV es obligatoria para ventas cobradas en divisas. Ingrese la tasa vigente o use el historial de la empresa.');
+    if (saleNeedsBcv && !hasValidBcvRate) {
+      window.alert('La tasa BCV es obligatoria para ventas desde 2018. Antes de 2018 puede dejarla pendiente o ingresarla según criterio contable.');
       return;
     }
     if (bcvExplicitlyInvalid) {
@@ -380,7 +381,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} {isBcvRateRequiredForDate(invoiceDate) ? '*' : '(opcional antes de 2018)'}</label>
                 <input
                   type="text"
                   inputMode="decimal"

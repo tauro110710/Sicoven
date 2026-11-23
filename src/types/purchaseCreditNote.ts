@@ -1,5 +1,6 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 
 export interface PurchaseCreditNoteLineRequest {
   productId: string;
@@ -97,7 +98,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   if (!String(draft.creditNoteNumber || '').trim() || !String(draft.controlNumber || '').trim() || String(draft.reason || '').trim().length < 10) {
     throw new Error('La nota requiere número, control y una justificación de al menos 10 caracteres.');
   }
-  if (!Number.isFinite(rate) || rate <= 0) throw new Error('La factura no conserva una tasa BCV válida.');
+  if (!Number.isFinite(rate) || rate < 0 || (isBcvRateRequiredForDate(draft.returnDate) && rate <= 0)) throw new Error('La factura no conserva una tasa BCV válida para la fecha de la nota; antes de 2018 puede quedar pendiente.');
   const requiredAmounts = [
     purchase.taxableBaseBs, purchase.exemptAmountBs, purchase.vatAmountBs,
     purchase.vatWithheldBs ?? 0, purchase.islrWithheldBs ?? 0, purchase.igtfAmountBs ?? 0,
@@ -247,7 +248,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   const totalAmountBs = money(inventoryCostBs + vatAmountBs + additionalLuxuryTaxBs + igtfAmountBs);
   const netPayableReductionBs = money(totalAmountBs - vatWithheldBs - islrWithheldBs);
   if (netPayableReductionBs <= 0) throw new Error('El efecto neto de la nota no reduce CxP; requiere tratamiento fiscal especial.');
-  const toUsd = (value: number) => Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000;
+  const toUsd = (value: number) => rate > 0 ? Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000 : 0;
   return {
     inventoryCostBs, taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, vatWithheldBs,
     islrWithheldBs, igtfAmountBs, totalAmountBs, netPayableReductionBs, bcvRate: rate,

@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { PurchaseRecord } from '../../types/accounting';
 import type { SupplierDebitNoteEconomicCause } from '../../types/supplierDebitNote';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface Props {
   purchase: PurchaseRecord;
@@ -77,6 +78,8 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const taxRateValue = parseAmount(taxRate || '0');
   const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
   const isInventoryCause = economicCause === 'ADDITIONAL_GOODS_RECEIVED' || economicCause === 'INVENTORY_COST_ADJUSTMENT';
+  const rateRequired = isBcvRateRequiredForDate(recognitionDate);
+  const parsedBcvRate = parseAmount(bcvRate);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -99,8 +102,8 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
       setError('Describa la clasificación económica de la causa Otra con al menos 10 caracteres.');
       return;
     }
-    if (!debitAccountCode || !payableAccountCode || !Number.isFinite(parseAmount(bcvRate)) || parseAmount(bcvRate) <= 0) {
-      setError('Seleccione las cuentas contables y una tasa BCV válida.');
+    if (!debitAccountCode || !payableAccountCode || (rateRequired && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0)) || (!bcvRate.trim() ? false : (!Number.isFinite(parsedBcvRate) || parsedBcvRate < 0))) {
+      setError('Seleccione las cuentas contables y, cuando corresponda desde 2018, una tasa BCV válida.');
       return;
     }
     if ([taxableBaseBs, exemptAmountBs, vatAmountBs, taxRateValue].some(value => !Number.isFinite(value) || value < 0) || taxRateValue > 100 || !taxRate.trim() || totalAmountBs <= 0) {
@@ -166,7 +169,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Factura afectada<input readOnly value={purchase.invoiceNumber} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de emisión<input required type="date" value={issueDate} onChange={e=>setIssueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de reconocimiento / abono<input required type="date" value={recognitionDate} onChange={e=>setRecognitionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND<input required type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
           </div>
             <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
           <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">
