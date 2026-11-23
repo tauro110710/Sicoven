@@ -3996,7 +3996,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     for (const returnedLine of valuation.lines) {
       const product = products.find(item => item.id === returnedLine.productId && item.companyId === currentCompany.id)!;
       const code = product.inventoryAccountCode || '1.1.4.01';
-      items.push(line(code, 0, returnedLine.inventoryCostBs, 'Salida de inventario · ' + product.code + ' · devolución al proveedor'));
+      items.push({
+        accountCode: code, accountName: accounts.find(account => account.code === code)?.name || code,
+        debitBs: 0, creditBs: returnedLine.inventoryCostBs,
+        debitUsd: 0, creditUsd: returnedLine.inventoryCostUsd,
+        description: 'Salida de inventario · ' + product.code + ' · devolución al proveedor'
+      });
     }
     if (valuation.vatAmountBs > 0) items.push(line(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
     if (valuation.additionalLuxuryTaxBs > 0) items.push(line('6.1.1.13', 0, valuation.additionalLuxuryTaxBs, 'Reversión de impuesto adicional al consumo suntuario no recuperable'));
