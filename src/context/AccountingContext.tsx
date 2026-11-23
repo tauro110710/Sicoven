@@ -3208,9 +3208,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(purchaseData.bcvRate);
     // La tasa BCV es obligatoria para medios de pago en divisas, no para operaciones
     // nominales en bolívares. Sin tasa, la equivalencia USD queda pendiente (0).
-    const PURCHASE_FOREIGN_METHODS = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'];
-    const purchaseNeedsRate = PURCHASE_FOREIGN_METHODS.includes(purchaseData.paymentMethod || '') &&
-      isBcvRateRequiredForDate(purchaseData.invoiceDate);
+    // Las compras desde 2018 conservan equivalencia USD contable; antes de esa fecha puede quedar pendiente.
+    const purchaseNeedsRate = isBcvRateRequiredForDate(purchaseData.invoiceDate);
     if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
