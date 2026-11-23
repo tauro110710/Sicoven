@@ -5510,7 +5510,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('Fila ' + (index + 2) + ': indique una existencia final de ajuste distinta de la actual.');
       }
       let unitCostBs = requestedCost;
+      let unitCostUsd = 0;
       let totalCostBs = 0;
+      let totalCostUsd = 0;
+      let newAverageUsd = Number(product.avgCostUsd || 0);
       let salidaFifoUsdCost: number | null = null;
       let salidaFifoUsdUnit: number | null = null;
       let newStock = product.currentStock;
@@ -5520,8 +5523,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         unitCostBs = effectiveUnitCost;
         const incomingUnitCostUsd = rate > 0 ? effectiveUnitCost / rate : 0;
         const weighted = calculateWeightedAverageCostDual(product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0), Number(row.quantity), effectiveUnitCost, incomingUnitCostUsd);
-        newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
+        newStock = weighted.quantity; newAverageBs = weighted.unitCostBs; newAverageUsd = weighted.unitCostUsd;
+        unitCostUsd = incomingUnitCostUsd;
         totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
+        totalCostUsd = Math.round(Number(row.quantity) * incomingUnitCostUsd * 1000000) / 1000000;
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
@@ -5529,14 +5534,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
           const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
           totalCostBs = fifoIssue.totalCostBs;
+          totalCostUsd = fifoIssue.totalCostUsd;
+          unitCostUsd = fifoIssue.unitCostUsd;
           salidaFifoUsdCost = fifoIssue.totalCostUsd;
           salidaFifoUsdUnit = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
+          const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
+          newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
         } else {
           totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
-          salidaFifoUsdCost = Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000;
-          salidaFifoUsdUnit = Number(product.avgCostUsd || 0);
+          totalCostUsd = Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000;
+          unitCostUsd = Number(product.avgCostUsd || 0);
+          salidaFifoUsdCost = totalCostUsd;
+          salidaFifoUsdUnit = unitCostUsd;
         }
         unitCostBs = totalCostBs / Number(row.quantity);
         newStock = Math.max(0, product.currentStock - Number(row.quantity));
@@ -5549,10 +5560,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
             requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
+          totalCostUsd = fifoAdjustment.totalCostUsd;
           unitCostBs = fifoAdjustment.unitCostBs;
-          var adjustmentUsd = fifoAdjustment.totalCostUsd;
+          unitCostUsd = movementQuantity > 0 ? fifoAdjustment.totalCostUsd / movementQuantity : 0;
           newAverageBs = newStock > 0 ? fifoAdjustment.balanceTotalBs / newStock : 0;
-          var adjustmentAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
+          newAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
         } else {
           if (targetStock > product.currentStock) {
             const adjustmentQuantity = targetStock - product.currentStock;
@@ -5560,26 +5572,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             const weighted = calculateWeightedAverageCostDual(product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0), adjustmentQuantity, requestedCost, adjustmentUnitCostUsd);
             newAverageBs = weighted.unitCostBs;
             newAverageUsd = weighted.unitCostUsd;
-            totalCostUsd = weighted.totalCostUsd - Math.round(product.currentStock * Number(product.avgCostUsd || 0) * 1000000) / 1000000;
+            totalCostUsd = Math.round(adjustmentQuantity * adjustmentUnitCostUsd * 1000000) / 1000000;
+            unitCostUsd = adjustmentUnitCostUsd;
           } else {
             totalCostUsd = Math.round(quantity * Number(product.avgCostUsd || 0) * 1000000) / 1000000;
+            unitCostUsd = Number(product.avgCostUsd || 0);
           }
           totalCostBs = Math.round(quantity * (targetStock < product.currentStock ? product.avgCostBs : requestedCost) * 100) / 100;
           unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
         }
       }
-      const totalCostUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentUsd! : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdCost !== null
-          ? salidaFifoUsdCost : (row.type === 'SALIDA' ? (salidaFifoUsdCost ?? Math.round(Number(row.quantity) * Number(product.avgCostUsd || 0) * 1000000) / 1000000) : (row.type === 'AJUSTE' ? (totalCostUsd ?? 0) : (rate > 0 ? Math.round(totalCostBs / rate * 1000000) / 1000000))));
-      const newAverageUsd = row.type === 'AJUSTE' && product.costingMethod === 'PEPS'
-        ? adjustmentAverageUsd! : (row.type === 'ENTRADA' || (row.type === 'AJUSTE' && targetStock > product.currentStock) ? newAverageUsd : Number(product.avgCostUsd || 0));
+      if (row.type !== 'ENTRADA' && row.type !== 'SALIDA' && row.type !== 'AJUSTE') throw new Error('Tipo de movimiento no compatible con la importación.');
+      if (row.type === 'SALIDA' && product.costingMethod !== 'PEPS') unitCostUsd = Number(product.avgCostUsd || 0);
+      if (row.type === 'AJUSTE' && product.costingMethod !== 'PEPS' && targetStock < product.currentStock) unitCostUsd = Number(product.avgCostUsd || 0);
+      if (row.type === 'AJUSTE' && product.costingMethod !== 'PEPS' && targetStock === product.currentStock) { totalCostUsd = 0; unitCostUsd = 0; }
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
       }
       const { expectedBalanceQty: _expectedBalanceQty, ...movementDraft } = row;
       const movement: InventoryMovement = {
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: row.type === 'AJUSTE' && product.costingMethod === 'PEPS' ? adjustmentUsd! / movementQuantity : (row.type === 'SALIDA' && product.costingMethod === 'PEPS' && salidaFifoUsdUnit !== null ? salidaFifoUsdUnit : (rate > 0 ? unitCostBs / rate : (row.type === 'SALIDA' ? Number(product.avgCostUsd || 0) : 0))), additionalLandedCostsBs: landedCostsBs,
+        companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
