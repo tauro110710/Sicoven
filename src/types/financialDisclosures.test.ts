@@ -35,6 +35,10 @@ describe('financial disclosure account movements', () => {
   it('isolates company and fiscal year and excludes closing entries', () => {
     const rows = buildDisclosureAccountMovements([
       entry(),
+      entry({ id: 'opening', type: 'APERTURA', date: '2026-01-01', items: [
+        { accountCode: '1.1', accountName: 'Caja', debitBs: 900, creditBs: 0, debitUsd: 90, creditUsd: 0 },
+        { accountCode: '4.1', accountName: 'Ingresos', debitBs: 0, creditBs: 900, debitUsd: 0, creditUsd: 90 }
+      ] }),
       entry({ id: 'other-company', companyId: 'company-b' }),
       entry({ id: 'prior-year', date: '2025-12-31' }),
       entry({ id: 'closing', type: 'CIERRE', date: '2026-12-31' })
