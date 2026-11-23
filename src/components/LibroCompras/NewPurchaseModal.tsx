@@ -8,6 +8,7 @@ import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type Purchase
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -230,10 +231,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     // se permite bcvRate = 0 y la equivalencia USD queda como pendiente (0).
     const paymentNeedsUsd = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO', 'FOREIGN_TRANSFER'].includes(paymentMethod);
     // Desde 2018 la tasa BCV se exige para el registro contable de compras, aunque el pago sea nominal en Bs.
-    const purchaseRequiresBcv = invoiceDate >= '2018-01-01';
+    const purchaseRequiresBcv = isBcvRateRequiredForDate(invoiceDate);
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
-    if ((paymentNeedsUsd || purchaseRequiresBcv) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
-      window.alert('La tasa BCV es obligatoria para compras desde 2018 y para operaciones en divisas. Ingrese la tasa correspondiente a la fecha o use el historial de la empresa.');
+    if (purchaseRequiresBcv && (paymentNeedsUsd || purchaseRequiresBcv) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
+      window.alert('La tasa BCV es obligatoria para compras desde 2018. Antes de 2018 puede dejarla pendiente y registrarla si el contador la considera necesaria.');
       return;
     }
     if (bcvExplicitlyInvalid) {
