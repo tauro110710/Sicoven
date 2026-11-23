@@ -51,7 +51,7 @@ export const LibroComprasView: React.FC = () => {
   const [monthFilter, setMonthFilter] = useState('');
   const [monthEndFilter, setMonthEndFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
-  const normalizePurchaseSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const normalizePurchaseSearch = (value: string) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const purchaseSuppliers = Array.from(new Map(filterCompanyFiscalDocuments(purchases, currentCompany.id).map(p => [String(p.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase(), { rif: p.supplierRif, name: p.supplierName }])).values()).filter(s => s.rif).sort((a,b)=>a.name.localeCompare(b.name));
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -75,7 +75,7 @@ export const LibroComprasView: React.FC = () => {
       if (supplierFilter && String(p.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() !== supplierFilter) return false;
       if (searchTerm.trim()) {
         const searchable = [p.supplierName, p.supplierRif, p.invoiceNumber, p.controlNumber, p.voucherNumber, p.documentType, p.opNumber].map(normalizePurchaseSearch).join(' ');
-        const tokens = normalizePurchaseSearch(searchTerm).split(/\\s+/).filter(Boolean);
+        const tokens = normalizePurchaseSearch(searchTerm).split(/\s+/).filter(Boolean);
         if (!tokens.every(token => searchable.includes(token))) return false;
       }
       return true;
