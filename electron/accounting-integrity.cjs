@@ -2735,7 +2735,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       const movementCostBs = Number(movement.totalCostBs);
       const movementCostUsd = Number(movement.totalCostUsd);
       const movementRate = Number(movement.bcvRate);
-      const invoiceRate = Number(purchase.bcvRate);
+      const invoiceRate = Number(purchase.bcvRate || 0);
       const supplierRif = normalizeRif(purchase.supplierRif);
       const movementRif = normalizeRif(movement.counterpartyRif);
       const historicalBsOnly = isValidIsoDate(purchase.invoiceDate) && purchase.invoiceDate < '2018-01-01' && invoiceRate <= 0;
