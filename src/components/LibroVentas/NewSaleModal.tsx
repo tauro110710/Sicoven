@@ -6,6 +6,7 @@ import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 
 interface NewSaleModalProps {
   isOpen: boolean;
