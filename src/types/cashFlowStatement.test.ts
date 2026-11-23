@@ -239,4 +239,28 @@ describe('cash flow statement', () => {
     assert.equal(report.isFullyClassified, true);
   });
 
+  it('excludes entries after year end from cash movement and reconciliation', () => {
+    const entries = [
+      entry('opening-2025', '2025-01-01', 'APERTURA', [
+        line('1.1.1.01', 'Caja principal', 50, 0, 5, 0),
+        line('3.1', 'Capital social', 0, 50, 0, 5)
+      ]),
+      entry('receipt-2026', '2026-12-31', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
+        line('4.1', 'Ingresos operacionales', 0, 100, 0, 10)
+      ]),
+      entry('receipt-2027', '2027-01-01', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 900, 0, 90, 0),
+        line('4.1', 'Ingresos operacionales', 0, 900, 0, 90)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 50);
+    assert.equal(report.netChangeBs, 100);
+    assert.equal(report.closingCashBs, 150);
+    assert.equal(report.ledgerClosingCashBs, 150);
+    assert.equal(report.reconciliationDifferenceBs, 0);
+    assert.equal(report.isReconciled, true);
+  });
+
 });
