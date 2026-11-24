@@ -71,14 +71,21 @@ export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'ar
 
 export const parseDelimitedRecords = (text: string, requestedDelimiter?: string): MigrationRow[] => {
   const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\t', '|'];
+  const errors: Error[] = [];
   const scored = candidates.map(delimiter => {
-    const rows = splitDelimited(text, delimiter);
-    const headerCount = rows[0]?.length ?? 0;
-    const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
-    return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    try {
+      const rows = splitDelimited(text, delimiter);
+      const headerCount = rows[0]?.length ?? 0;
+      const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
+      return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error('No se pudo analizar el archivo delimitado.'));
+      return { delimiter, rows: [] as string[][], score: -1 };
+    }
   }).sort((a, b) => b.score - a.score);
-  const parsed = scored[0];
-  if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
+  const parsed = scored.find(candidate => candidate.score >= 0);
+  if (!parsed) throw errors[0] ?? new Error('No se pudo analizar el archivo delimitado.');
+  if (parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
   const headers = validateUniqueMigrationHeaders(parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1)), 'archivo delimitado');
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
@@ -86,7 +93,6 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
     return record;
   }).filter(record => Object.values(record).some(value => String(value ?? '').trim() !== ''));
 };
-
 export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
