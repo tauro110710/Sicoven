@@ -100,6 +100,9 @@ test('requires a BCV snapshot effective on the bank movement date', () => {
   assert.throws(() => validateBankMovementFxSnapshot({
     date: '2026-10-20', amountBs: 250.03, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
   }), /no concilian/);
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 250.01, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
+  }), /no concilian/);
   assert.doesNotThrow(() => validateBankMovementFxSnapshot({
     date: '2026-10-20', amountBs: 250, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
   }));
