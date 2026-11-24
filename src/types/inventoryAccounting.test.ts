@@ -259,6 +259,28 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
     assert.deepEqual(result, {provisionBs:850,provisionUsd:8.5,entryCount:3});
   });
 
+  it('rejects duplicate IDs in the VNR ledger chain instead of counting ambiguous entries', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'duplicate', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'duplicate', referenceDoc:'OTHER-1', items:[line({creditBs:200,creditUsd:2})] }
+    ]), /identificadores duplicados/);
+  });
+  it('rejects reversals with missing or duplicate IDs linked to a VNR provision', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'', reversalOfEntryId:'vnr-1', items:[line({debitBs:50,debitUsd:0.5})] }
+    ]), /identificador único/);
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'rev-dup', reversalOfEntryId:'vnr-1', items:[line({debitBs:50,debitUsd:0.5})] },
+      { id:'rev-dup', reversalOfEntryId:'rev-dup', items:[line({creditBs:10,creditUsd:0.1})] }
+    ]), /identificador único/);
+  });
+  it('rejects a self-reversal link in the VNR ledger chain', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-self', referenceDoc:'VNR-ART-01-2026-01-31', reversalOfEntryId:'vnr-self', items:[line({creditBs:100,creditUsd:1})] }
+    ]), /identificador único/);
+  });
   it('rejects reversal balances below zero and malformed ledger values', () => {
     assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
       { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({debitBs:1})] }
