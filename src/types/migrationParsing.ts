@@ -15,29 +15,44 @@ const splitDelimited = (text: string, delimiter: string): string[][] => {
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  let quoteClosed = false;
   const input = text.replace(/^\uFEFF/, '');
+  const finishCell = () => { row.push(cell); cell = ''; quoteClosed = false; };
+  const finishRow = () => {
+    finishCell();
+    if (row.some(value => value !== '') ) rows.push(row);
+    row = [];
+  };
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
-    if (ch === '"') {
-      if (quoted && input[i + 1] === '"') { cell += '"'; i++; }
-      else quoted = !quoted;
-    } else if (ch === delimiter && !quoted) {
-      row.push(cell.trim()); cell = '';
-    } else if ((ch === '\n' || ch === '\r') && !quoted) {
+    if (quoted) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') { cell += '"'; i++; }
+        else { quoted = false; quoteClosed = true; }
+      } else cell += ch;
+    } else if (quoteClosed) {
+      if (ch === delimiter) finishCell();
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && input[i + 1] === '\n') i++;
+        finishRow();
+      } else if (ch !== ' ' && ch !== '\t') {
+        throw new Error('El archivo delimitado contiene caracteres después de cerrar un campo entre comillas.');
+      }
+    } else if (ch === delimiter) finishCell();
+    else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && input[i + 1] === '\n') i++;
-      row.push(cell.trim());
-      if (row.some(value => value !== '')) rows.push(row);
-      row = []; cell = '';
-    } else {
-      cell += ch;
-    }
+      finishRow();
+    } else if (ch === '"') {
+      if (cell.trim() !== '') throw new Error('El archivo delimitado contiene comillas en una posición inválida.');
+      cell = '';
+      quoted = true;
+    } else cell += ch;
   }
   if (quoted) throw new Error('El archivo delimitado contiene comillas sin cerrar.');
-  row.push(cell.trim());
+  finishCell();
   if (row.some(value => value !== '')) rows.push(row);
   return rows;
 };
-
 export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'archivo'): string[] => {
   const normalized = headers.map(header => normalizeMigrationValue(header));
   const seen = new Set<string>();
