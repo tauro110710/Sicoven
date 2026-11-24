@@ -203,7 +203,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
             const restoredCostBs = Number(convertVenezuelanAmountBetweenDates(Number(soldLayer.unitCostBs), original.date, source.date));
             restoredLayers.push({
               sourceMovementId: soldLayer.sourceMovementId,
-              date: layerDate,
+              date: source.date,
               documentRef: soldLayer.documentRef,
               quantity: restoredQuantity,
               unitCostBs: restoredCostBs,
