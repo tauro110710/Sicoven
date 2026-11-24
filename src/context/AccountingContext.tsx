@@ -423,6 +423,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const bankOutgoingReservationsRef = useRef<PendingBankOutgoingReservation[]>([]);
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
+  const creditSettlementDocumentLockRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
   // Evita dos enteramientos simultáneos sobre la misma declaración usando el mismo snapshot React.
@@ -2996,7 +2997,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const addCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
+  const registerCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
     assertSQLitePersistenceReady('Registrar cobro o pago de factura');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el cobro/pago.');
@@ -3186,6 +3187,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       settlementInFlightRef.current.delete(operationKey);
     }
   };
+
+  const addCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
+    const documentLockKey = [currentCompany.id, draft.documentId, draft.kind].join('|');
+    if (creditSettlementDocumentLockRef.current.has(documentLockKey)) {
+      throw new Error('Ya hay un cobro o pago de esta factura en proceso. Espere a que termine antes de registrar otro.');
+    }
+    creditSettlementDocumentLockRef.current.add(documentLockKey);
+    try {
+      return await registerCreditSettlement(draft);
+    } finally {
+      creditSettlementDocumentLockRef.current.delete(documentLockKey);
+    }
+  };
+
 
   const deleteJournalEntry = (id: string) => {
     const entry = journalEntries.find(item => item.id === id && item.companyId === currentCompany.id);
