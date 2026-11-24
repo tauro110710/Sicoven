@@ -183,10 +183,10 @@ DATA:OFXSGML
 
 test('rejects malformed CSV/TXT bank rows, blank and duplicate normalized headers', () => {
   const header='Fecha,Referencia,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV';
-  assert.throws(() => parseBankStatementCsv(header+'\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10'), /cantidad de columnas distinta.*fila 2/);
-  assert.throws(() => parseBankStatementCsv(header+'\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06,EXTRA'), /cantidad de columnas distinta.*fila 2/);
-  assert.throws(() => parseBankStatementCsv('Fecha,,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados vacíos/);
-  assert.throws(() => parseBankStatementCsv('Fecha,FECHA,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados duplicados/);
+  assert.throws(() => parseBankStatementCsv(header+'\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10'), /cantidad de columnas distinta.*fila 2/);
+  assert.throws(() => parseBankStatementCsv(header+'\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06,EXTRA'), /cantidad de columnas distinta.*fila 2/);
+  assert.throws(() => parseBankStatementCsv('Fecha,,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados vacíos/);
+  assert.throws(() => parseBankStatementCsv('Fecha,FECHA,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados duplicados/);
 });
 
 test('rejects blank and duplicate normalized Excel headers and data beyond header range', async () => {
