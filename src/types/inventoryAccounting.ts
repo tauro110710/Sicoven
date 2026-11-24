@@ -135,6 +135,15 @@ export function reconstructFifoLayers(
   }
   const ordered = movementsInput.map((movement, index) => ({ movement, index }))
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
+  const movementIds = new Set<string>();
+  for (const { movement } of ordered) {
+    const movementId = String(movement.id || '').trim();
+    if (!movementId) continue;
+    if (movementIds.has(movementId)) {
+      throw new Error('El historial PEPS contiene identificadores de movimiento duplicados; no se puede determinar la capa de origen.');
+    }
+    movementIds.add(movementId);
+  }
   const layers: CostLayer[] = [];
   let runningQuantity = 0;
   const consumeLayers = (quantity: number, reference: string, sourceMovementId?: string) => {
@@ -189,8 +198,9 @@ export function reconstructFifoLayers(
       if (movement.concept === 'DEVOLUCION_COMPRA') {
         if (!movement.correctionForMovementId) throw new Error('Una devolución PEPS a proveedor no identifica la entrada original que debe descargar.');
         const originalPurchase = ordered.find(({ movement: candidate }) => candidate.id === movement.correctionForMovementId)?.movement;
-        if (!originalPurchase || originalPurchase.type !== 'ENTRADA' || originalPurchase.concept !== 'COMPRA') {
-          throw new Error('Una devolución PEPS a proveedor debe vincularse a una entrada de compra original válida.');
+        if (!originalPurchase || originalPurchase.type !== 'ENTRADA' || originalPurchase.concept !== 'COMPRA' ||
+            originalPurchase.date > date) {
+          throw new Error('Una devolución PEPS a proveedor debe vincularse a una entrada de compra original válida y anterior a la devolución.');
         }
         consumeLayers(quantity, movement.documentRef || date, movement.correctionForMovementId);
       } else {
