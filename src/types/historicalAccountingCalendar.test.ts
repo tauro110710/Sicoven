@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHistoricalFiscalExercises,
   convertVenezuelanAmount,
+  convertVenezuelanAmountBetweenDates,
   normalizeVenezuelanAmountToCurrentScale,
   getVenezuelanMonetaryEra,
   roundHistoricalPresentationAmount,
@@ -109,4 +110,11 @@ test('suma decimales de balances con precisión exacta, sin errores de coma flot
   assert.equal(addExactDecimals('1e-8', '2e-8'), '0.00000003');
   assert.equal(addExactDecimals('1.25e3', '-2.5e2'), '1000');
   assert.throws(() => addExactDecimals('NaN', '1'));
+});
+
+
+test('converts bolivar amounts between effective monetary scales without rounding', () => {
+  assert.equal(convertVenezuelanAmountBetweenDates('1000000000000', '2017-06-15', '2027-01-01'), '10');
+  assert.equal(convertVenezuelanAmountBetweenDates('10', '2027-01-01', '2017-06-15'), '1000000000000');
+  assert.equal(convertVenezuelanAmountBetweenDates('0.01', '2021-10-01', '2021-09-30'), '1000000');
 });
