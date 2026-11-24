@@ -34,6 +34,16 @@ testCase('does not suppress stored initial balance for a zero-value opening bank
   }), 1000);
 });
 
+testCase('does not let a future opening entry suppress balance before its effective date', () => {
+  const futureOpening = entry({
+    companyId: 'company-a', date: '2026-11-10', referenceDoc: 'APERTURA-01234567890123456789',
+    items: [{ accountCode: bank.accountCode, accountName: 'Banco', debitBs: 1000, creditBs: 0, debitUsd: 4, creditUsd: 0 }]
+  });
+  assert.equal(calculateBankAvailableBalance({
+    bankAccount: bank, companyId: 'company-a', asOfDate: '2026-11-05', journalEntries: [futureOpening]
+  }), 1000);
+});
+
 testCase('uses the account initial balance only for legacy accounts without an opening entry', () => {
   const movement = entry({
     companyId: 'company-a', date: '2026-11-02',
