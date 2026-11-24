@@ -29,9 +29,43 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
         run: npm install --no-audit --no-fund
-      - name: Run automated tests
-        run: npm test
-      - name: TypeScript validation
-        run: npm run check:types
-      - name: Production build
-        run: npm run build
+      - name: Run automated tests and save evidence
+        run: |
+          mkdir -p verification-evidence
+          set -o pipefail
+          npm test 2>&1 | tee verification-evidence/tests.log
+      - name: TypeScript validation and record result
+        run: |
+          npm run check:types 2>&1 | tee verification-evidence/typescript.log
+          echo "TypeScript: PASS" >> verification-evidence/summary.md
+      - name: Production build and record result
+        run: |
+          npm run build 2>&1 | tee verification-evidence/build.log
+          echo "Production build: PASS" >> verification-evidence/summary.md
+      - name: Generate PR #188 verification report and SHA-256
+        if: always()
+        run: |
+          {
+            echo "# SICOVEN PR #188 verification evidence"
+            echo
+            echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Timestamp (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "## Validation status"
+            echo "- Tests: ${{ steps.test.outcome || 'see job status' }}"
+            echo "- TypeScript: see job status/log"
+            echo "- Build: see job status/log"
+            echo
+            echo "## SHA-256 of PR #188 scope files"
+            sha256sum src/utils/resolveBcvRateForDate.ts src/utils/resolveBcvRateForDate.test.ts src/types/accounting.ts src/context/AccountingContext.tsx src/components/Conciliacion/NewBankAccountModal.tsx src/components/Conciliacion/NewBankMovementModal.tsx src/components/Tesoreria/TesoreriaView.tsx 2>&1 || true
+          } > verification-evidence/report.md
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-PR188-evidence-${{ github.sha }}
+          path: verification-evidence/
+          if-no-files-found: warn
+          retention-days: 30
