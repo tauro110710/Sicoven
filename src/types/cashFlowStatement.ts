@@ -273,7 +273,7 @@ export function buildCashFlowReport(
     entry.date >= start && entry.date <= end && !isAnnualOpening(entry, year)
   );
   for (const entry of periodEntries) {
-    const net = cashNet(entry, cashCodes);
+    const net = cashNet(entry, cashCodes, end);
     netChangeBs += net.bs;
     netChangeUsd += net.usd;
     if (Math.abs(net.bs) <= toleranceBs && Math.abs(net.usd) <= toleranceUsd) continue;
