@@ -106,8 +106,14 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   }).sort((a,b)=>b.score-a.score);
   const parsed = candidates.find(candidate => candidate.score >= 0 && candidate.rows.length >= 2 && candidate.rows[0].length >= 2);
   if (!parsed) {
-    const firstError = candidates.find(candidate => candidate.score < 0)?.error;
-    if (firstError instanceof Error) throw firstError;
+    // Select the parse error from the delimiter most strongly indicated by the header,
+    // rather than letting a failed attempt with an unrelated delimiter mask the real CSV error.
+    const headerLine = input.split(/\\r?\\n/, 1)[0] || '';
+    const errorCandidates = candidates.filter(candidate => candidate.score < 0 && candidate.error instanceof Error);
+    const bestError = errorCandidates.sort((a, b) =>
+      headerLine.split(b.delimiter).length - headerLine.split(a.delimiter).length
+    )[0]?.error;
+    if (bestError instanceof Error) throw bestError;
     throw new Error('El archivo delimitado no contiene encabezados y movimientos válidos.');
   }
   const headers = parsed.rows[0].map(normalizeHeader);
