@@ -116,5 +116,5 @@ test('suma decimales de balances con precisión exacta, sin errores de coma flot
 test('converts bolivar amounts between effective monetary scales without rounding', () => {
   assert.equal(convertVenezuelanAmountBetweenDates('1000000000000', '2017-06-15', '2027-01-01'), '10');
   assert.equal(convertVenezuelanAmountBetweenDates('10', '2027-01-01', '2017-06-15'), '1000000000000');
-  assert.equal(convertVenezuelanAmountBetweenDates('0.01', '2021-10-01', '2021-09-30'), '1000000');
+  assert.equal(convertVenezuelanAmountBetweenDates('0.01', '2021-10-01', '2021-09-30'), '10000');
 });
