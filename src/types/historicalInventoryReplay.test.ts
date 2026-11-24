@@ -19,7 +19,7 @@ const movement = (overrides: Partial<InventoryMovement> & Pick<InventoryMovement
   documentRef: overrides.documentRef || overrides.id,
   quantity: overrides.quantity, unitCostBs: overrides.unitCostBs,
   unitCostUsd: overrides.unitCostUsd, totalCostBs: 0, totalCostUsd: 0,
-  balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+  balanceQty: overrides.balanceQty ?? 0, balanceTotalBs: 0, balanceTotalUsd: 0,
   bcvRate: overrides.bcvRate,
   ...(overrides.correctionForMovementId ? { correctionForMovementId: overrides.correctionForMovementId } : {}),
   ...(overrides.additionalLandedCostsBs !== undefined ? { additionalLandedCostsBs: overrides.additionalLandedCostsBs } : {})
@@ -142,6 +142,7 @@ test('PEPS reconvierte las capas antes de disminuir existencia con un ajuste pos
     movement({ id: 'layer-2018', date: '2018-08-20', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
     movement({ id: 'adjust-2021', date: '2021-10-01', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, balanceQty: 1 })
   ]);
+  assert.equal(result.movements[1].balanceQty, 1, 'conserva la existencia objetivo del ajuste');
   assert.equal(result.movements[1].totalCostBs, 0);
   assert.equal(result.movements[1].totalCostUsd, 1);
   assert.equal(result.movements[1].balanceTotalBs, 0);
