@@ -114,3 +114,25 @@ test('bloquea devolución PEPS si no se conserva el detalle de capas de la venta
     movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, correctionForMovementId: 'sale-1' })
   ]), /detalle de capas consumidas/);
 });
+
+
+test('normaliza costos Bs históricos al cambiar de reconversión antes de ponderar o consumir', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-2018', date: '2018-08-20', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
+    movement({ id: 'purchase-2021', date: '2021-10-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 })
+  ]);
+  assert.equal(result.products[0].avgCostBs, 50000050);
+  assert.equal(result.movements[1].totalCostBs, 100);
+  assert.equal(result.movements[1].balanceTotalBs, 100000100);
+});
+
+test('PEPS reconvierte las capas Bs antiguas al día de consumo sin alterar USD', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-2018', date: '2018-08-20', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
+    movement({ id: 'layer-2021', date: '2021-10-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
+    movement({ id: 'sale-2021', date: '2021-10-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.equal(result.movements[2].totalCostBs, 100000000);
+  assert.equal(result.movements[2].totalCostUsd, 1);
+  assert.equal(result.products[0].avgCostBs, 100);
+});
