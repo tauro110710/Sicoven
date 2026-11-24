@@ -41,6 +41,15 @@ export function appendDailyInventoryBcvRate(
   history: InventoryBcvHistoryEntry[],
   input: Omit<InventoryBcvHistoryEntry, 'id'>
 ): InventoryBcvHistoryEntry[] {
+  if (!Array.isArray(history) || !validEffectiveDate(input.effectiveDate) ||
+      !Number.isFinite(input.rate) || input.rate <= 0 ||
+      !Number.isFinite(Date.parse(input.fetchedAt)) ||
+      !String(input.source || '').trim() ||
+      (input.mode === 'AUTOMATIC' && input.provider !== 'bcv.today') ||
+      (input.mode === 'MANUAL' && input.provider !== 'manual') ||
+      !['AUTOMATIC', 'MANUAL'].includes(input.mode)) {
+    throw new Error('El registro de tasa BCV contiene fecha, tasa, fuente, proveedor o modalidad inválidos.');
+  }
   if (input.mode === 'AUTOMATIC' && history.some(entry => entry.effectiveDate === input.effectiveDate)) return history;
   const id = 'inventory-bcv-' + input.effectiveDate + '-' + input.mode.toLowerCase() + '-' + input.fetchedAt.replace(/[^0-9]/g, '');
   if (history.some(entry => entry.id === id)) return history;
