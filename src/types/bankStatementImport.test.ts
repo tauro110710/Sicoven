@@ -159,3 +159,20 @@ DATA:OFXSGML
   assert.equal(normalized[1].reference,'OFX-002');
   assert.deepEqual(normalized.flatMap(row=>row.errors),[]);
 });
+
+
+test('rejects malformed CSV quoting and trailing text after quoted fields', () => {
+  assert.throws(() => parseBankStatementCsv('Fecha,Importe,Descripcion\n2026-11-06,10,mal"formed'), /comillas en una posición inválida/);
+  assert.throws(() => parseBankStatementCsv('Fecha,Importe,Descripcion\n2026-11-06,10,"texto"x'), /caracteres inválidos después de cerrar/);
+  assert.throws(() => parseBankStatementCsv('Fecha,Importe,Descripcion\n2026-11-06,10,"sin cerrar'), /comillas sin cerrar/);
+});
+
+test('preserves spaces inside quoted bank statement fields', () => {
+  const rows=parseBankStatementCsv('Fecha,Importe,Descripción\n2026-11-06,10,"  detalle con espacios  "');
+  assert.equal(rows[0].descripcion, '  detalle con espacios  ');
+});
+
+test('rejects missing headers and inconsistent statement columns', () => {
+  assert.throws(() => parseBankStatementCsv('Nombre,Concepto\nAna,Depósito'), /columnas de fecha e importe/);
+  assert.throws(() => parseBankStatementCsv('Fecha,Importe,Descripcion\n2026-11-06,10\n2026-11-07,20,extra'), /número de columnas diferente/);
+});

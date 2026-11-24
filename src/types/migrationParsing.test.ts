@@ -61,3 +61,32 @@ test('valida fechas ISO reales y rechaza fechas imposibles', () => {
   assert.equal(isValidIsoDate('27/10/2026'), false);
   assert.equal(isValidIsoDate(''), false);
 });
+
+
+test('rejects malformed amounts instead of stripping invalid characters', () => {
+  assert.equal(parseMigrationNumber('1a2'), Number.NaN);
+  assert.equal(parseMigrationNumber('12,3,4'), Number.NaN);
+  assert.equal(parseMigrationNumber('1.2.3'), Number.NaN);
+  assert.equal(parseMigrationNumber('1,23,45'), Number.NaN);
+  assert.equal(parseMigrationNumber('Bs. 1.234,56texto'), Number.NaN);
+});
+
+test('accepts currency labels only at the edges and validates separator grouping', () => {
+  assert.equal(parseMigrationNumber('$1,234.56'), 1234.56);
+  assert.equal(parseMigrationNumber('1.234,56 Bs.'), 1234.56);
+  assert.equal(parseMigrationNumber('1,234,567'), 1234567);
+  assert.equal(parseMigrationNumber('1.234'), 1234);
+  assert.equal(parseMigrationNumber('(1.234,56)'), -1234.56);
+  assert.equal(parseMigrationNumber('-25,50'), -25.5);
+});
+
+
+test('strictly rejects malformed CSV quote placement and trailing characters', () => {
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,mal"formado'), /comillas en una posición inválida/);
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,"texto"x'), /caracteres después de cerrar/);
+});
+
+test('preserves whitespace inside quoted CSV values', () => {
+  const rows = parseDelimitedRecords('codigo,nombre\nA1,"  texto con espacios  "');
+  assert.equal(rows[0].nombre, '  texto con espacios  ');
+});

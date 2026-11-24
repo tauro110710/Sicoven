@@ -137,3 +137,26 @@ test('matches historical single-currency bank movements without requiring a fict
     debitBs: 0, creditBs: 0, debitUsd: 5, creditUsd: 0
   }), true);
 });
+
+
+test('rejects any non-zero rounded reconciliation residual', () => {
+  const bsResidual = calculateBankReconciliationBalances({
+    bookMovements: [{ debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0, isReconciled: true }],
+    statementMovements: [{ type: 'CREDIT', amountBs: 100.04, amountUsd: 1, isReconciled: true }]
+  });
+  assert.equal(bsResidual.differenceBs, 0.04);
+  assert.equal(bsResidual.isBalanced, false);
+
+  const usdResidual = calculateBankReconciliationBalances({
+    bookMovements: [{ debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0, isReconciled: true }],
+    statementMovements: [{ type: 'CREDIT', amountBs: 100, amountUsd: 1.000001, isReconciled: true }]
+  });
+  assert.equal(usdResidual.differenceUsd, 0.000001);
+  assert.equal(usdResidual.isBalanced, false);
+});
+
+test('rejects a dual-currency bank snapshot mismatch of exactly one cent', () => {
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 250.01, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
+  }), /no concilian/);
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
+import { allocateSupplierAdvanceCreditNotes, allocateSupplierAdvanceFifo, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
 
 const base = {
   supplierRif: 'J-12345678-9', date: '2026-10-30', amountUsd: 20,
@@ -182,12 +182,49 @@ test('reconstruye el FIFO de notas junto con liquidaciones mixtas y directas pre
   ), [{ creditNoteId: 'nc-1', amountUsd: 8, bookValueBs: 800 }]);
 });
 
-test('allows a historical supplier advance settlement without BCV before 2018', () => {
-  const historical = { ...base, date: '2014-01-01', bcvRate: 0 };
-  assert.equal(validateSupplierAdvanceSettlementDraft(historical, 30, undefined, ['1.1.1.03']), null);
+
+test('rechaza liquidaciones históricas FIFO que consumen anticipos de fechas futuras', () => {
+  const prior = {
+    id: 'settlement-future-source', companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
+    sourceCreditNoteIds: ['nc-future'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-future', amountUsd: 2, bookValueBs: 200 }],
+    sourceDirectAdvanceIds: [], sourceDirectAdvanceAllocations: [],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 2, amountBs: 200,
+    advanceBookValueBs: 200, bcvRate: 100, journalEntryId: 'entry-future', createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [{ id: 'nc-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
+    [], [prior], 'company-1', 'J-12345678-9', 1
+  ), /posterior a su fecha de origen/);
 });
 
-test('requires BCV for supplier advance settlements dated from 2018', () => {
-  const modern = { ...base, date: '2018-01-01', bcvRate: 0 };
-  assert.match(validateSupplierAdvanceSettlementDraft(modern, 30, undefined, ['1.1.1.03']) || '', /tasa BCV solo es obligatoria desde 2018/);
+
+test('rechaza liquidaciones FIFO históricas que consumen anticipos directos con fecha futura', () => {
+  const prior = {
+    id: 'settlement-direct-future', companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: ['direct-future'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-future', amountUsd: 2, bookValueBs: 200 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 2, amountBs: 200,
+    advanceBookValueBs: 200, bcvRate: 100, journalEntryId: 'entry-direct-future', createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [], [{ id: 'direct-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
+    [prior], 'company-1', 'J-12345678-9', 1
+  ), /posterior a su fecha de origen/);
+});
+
+test('FIFO de una liquidación nueva excluye fuentes posteriores a su fecha', () => {
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [{ id: 'nc-before', amountUsd: 2, bookValueBs: 200, date: '2026-10-28' },
+     { id: 'nc-after', amountUsd: 10, bookValueBs: 1000, date: '2026-10-31' }],
+    [{ id: 'direct-after', amountUsd: 5, bookValueBs: 500, date: '2026-11-01' }],
+    [], 'company-1', 'J-12345678-9', 3, '2026-10-30'
+  ), /saldo disponible combinado/);
+});
+
+
+test('rejects supplier settlement exceeding balance by rounded micro-dollar in draft validation', () => {
+  assert.match(validateSupplierAdvanceSettlementDraft({ ...base, amountUsd: 10.000004 }, 10, undefined, ['1.1.1.03']) || '', /supera el saldo/);
+  assert.equal(validateSupplierAdvanceSettlementDraft({ ...base, amountUsd: 10 }, 10, undefined, ['1.1.1.03']), null);
 });

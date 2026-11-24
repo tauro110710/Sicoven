@@ -15,29 +15,44 @@ const splitDelimited = (text: string, delimiter: string): string[][] => {
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  let quoteClosed = false;
   const input = text.replace(/^\uFEFF/, '');
+  const finishCell = () => { row.push(cell); cell = ''; quoteClosed = false; };
+  const finishRow = () => {
+    finishCell();
+    if (row.some(value => value !== '') ) rows.push(row);
+    row = [];
+  };
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
-    if (ch === '"') {
-      if (quoted && input[i + 1] === '"') { cell += '"'; i++; }
-      else quoted = !quoted;
-    } else if (ch === delimiter && !quoted) {
-      row.push(cell.trim()); cell = '';
-    } else if ((ch === '\n' || ch === '\r') && !quoted) {
+    if (quoted) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') { cell += '"'; i++; }
+        else { quoted = false; quoteClosed = true; }
+      } else cell += ch;
+    } else if (quoteClosed) {
+      if (ch === delimiter) finishCell();
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && input[i + 1] === '\n') i++;
+        finishRow();
+      } else if (ch !== ' ' && ch !== '\t') {
+        throw new Error('El archivo delimitado contiene caracteres después de cerrar un campo entre comillas.');
+      }
+    } else if (ch === delimiter) finishCell();
+    else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && input[i + 1] === '\n') i++;
-      row.push(cell.trim());
-      if (row.some(value => value !== '')) rows.push(row);
-      row = []; cell = '';
-    } else {
-      cell += ch;
-    }
+      finishRow();
+    } else if (ch === '"') {
+      if (cell.trim() !== '') throw new Error('El archivo delimitado contiene comillas en una posición inválida.');
+      cell = '';
+      quoted = true;
+    } else cell += ch;
   }
   if (quoted) throw new Error('El archivo delimitado contiene comillas sin cerrar.');
-  row.push(cell.trim());
+  finishCell();
   if (row.some(value => value !== '')) rows.push(row);
   return rows;
 };
-
 export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'archivo'): string[] => {
   const normalized = headers.map(header => normalizeMigrationValue(header));
   const seen = new Set<string>();
@@ -57,13 +72,21 @@ export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'ar
 export const parseDelimitedRecords = (text: string, requestedDelimiter?: string): MigrationRow[] => {
   const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\t', '|'];
   const scored = candidates.map(delimiter => {
-    const rows = splitDelimited(text, delimiter);
-    const headerCount = rows[0]?.length ?? 0;
-    const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
-    return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    try {
+      const rows = splitDelimited(text, delimiter);
+      const headerCount = rows[0]?.length ?? 0;
+      const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
+      return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    } catch (error) {
+      return { delimiter, rows: [] as string[][], score: -1, error };
+    }
   }).sort((a, b) => b.score - a.score);
-  const parsed = scored[0];
-  if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
+  const parsed = scored.find(candidate => candidate.score >= 0 && candidate.rows.length >= 2 && candidate.rows[0].length >= 2);
+  if (!parsed) {
+    const bestError = scored.find(candidate => candidate.score < 0)?.error;
+    if (bestError instanceof Error) throw bestError;
+    return [];
+  }
   const headers = validateUniqueMigrationHeaders(parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1)), 'archivo delimitado');
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
@@ -75,20 +98,42 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
 export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
-  let raw = String(value).trim().replace(/[\s\u00a0]/g, '').replace(/[^0-9,().+\-]/g, '');
-  if (!/\d/.test(raw)) return NaN;
-  if (raw.startsWith('(') && raw.endsWith(')')) raw = '-' + raw.slice(1, -1);
-  const commas = (raw.match(/,/g) || []).length;
-  const dots = (raw.match(/\./g) || []).length;
-  if (commas && dots) {
-    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) raw = raw.replace(/\./g, '').replace(',', '.');
-    else raw = raw.replace(/,/g, '');
-  } else if (commas) {
-    if (commas > 1 || /,\d{3}$/.test(raw)) raw = raw.replace(/,/g, '');
-    else raw = raw.replace(',', '.');
-  } else if (dots > 1 || /\.\d{3}$/.test(raw)) {
-    raw = raw.replace(/\./g, '');
+  let raw = String(value).trim().replace(/[\s\u00a0]/g, '');
+  let negativeByParentheses = false;
+  if (raw.startsWith('(') && raw.endsWith(')')) {
+    negativeByParentheses = true;
+    raw = raw.slice(1, -1);
+  } else if (raw.includes('(') || raw.includes(')')) return NaN;
+  const currencyPrefix = /^(?:USD|US\$|Bs(?:\.S)?\.?|VES|VEF|\$)/i;
+  const currencySuffix = /(?:USD|US\$|Bs(?:\.S)?\.?|VES|VEF|\$)$/i;
+  if (currencyPrefix.test(raw)) raw = raw.replace(currencyPrefix, '');
+  if (currencySuffix.test(raw)) raw = raw.replace(currencySuffix, '');
+  if (!/^[+-]?\d[\d.,]*$/.test(raw)) return NaN;
+  const sign = raw.startsWith('-') ? -1 : 1;
+  if (raw.startsWith('+') || raw.startsWith('-')) raw = raw.slice(1);
+  const commaCount = (raw.match(/,/g) || []).length;
+  const dotCount = (raw.match(/\./g) || []).length;
+  let normalized = raw;
+  if (commaCount && dotCount) {
+    const decimalSeparator = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? ',' : '.';
+    const groupSeparator = decimalSeparator === ',' ? '.' : ',';
+    const parts = raw.split(decimalSeparator);
+    if (parts.length !== 2 || !/^\d+$/.test(parts[1])) return NaN;
+    const groups = parts[0].split(groupSeparator);
+    if (!/^\d{1,3}$/.test(groups[0]) || groups.slice(1).some(group => !/^\d{3}$/.test(group))) return NaN;
+    normalized = groups.join('') + '.' + parts[1];
+  } else if (commaCount || dotCount) {
+    const separator = commaCount ? ',' : '.';
+    const parts = raw.split(separator);
+    if (parts.length > 2) {
+      if (!/^\d{1,3}$/.test(parts[0]) || parts.slice(1).some(part => !/^\d{3}$/.test(part))) return NaN;
+      normalized = parts.join('');
+    } else {
+      const [whole, fraction] = parts;
+      if (!whole || !fraction || !/^\d+$/.test(whole) || !/^\d+$/.test(fraction)) return NaN;
+      normalized = fraction.length === 3 ? whole + fraction : whole + '.' + fraction;
+    }
   }
-  const parsed = Number(raw);
+  const parsed = Number(normalized) * sign * (negativeByParentheses ? -1 : 1);
   return Number.isFinite(parsed) ? parsed : NaN;
 };

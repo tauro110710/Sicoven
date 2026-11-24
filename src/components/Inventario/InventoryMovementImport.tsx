@@ -16,14 +16,53 @@ const valueAt = (row: SourceRow, ...names: string[]) => {
   }
   return undefined;
 };
-const dateValue = (value: unknown): string => {
+export const dateValue = (value: unknown): string => {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
   const raw = String(value ?? '').trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  const match = raw.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
-  if (match) return match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-](\d{2}):?(\d{2}))?)?$/);
+  if ( iso ) {
+    const [, date, hour, minute, second, , zone, zoneHour, zoneMinute] = iso;
+    if (!isValidIsoDate(date)) return raw;
+    if (hour !== undefined) {
+      if (Number(hour) > 23 || Number(minute) > 59 || Number(second ?? 0) > 59) return raw;
+      if (zone && zone !== 'Z' && (Number(zoneHour) > 14 || Number(zoneMinute) > 59 || (Number(zoneHour) === 14 && Number(zoneMinute) !== 0))) return raw;
+      if (!Number.isFinite(Date.parse(raw))) return raw;
+    }
+    return date;
+  }
+  const match = raw.match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/);
+  if (match) {
+    const date = match[4] + '-' + match[3].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+    return isValidIsoDate(date) ? date : raw;
+  }
   return raw;
 };
+export const resolveMovementProduct = <T extends { id: string; code: string; name: string }>(
+  products: T[],
+  sourceProductId: string,
+  code: string,
+  name: string,
+  rowNumber: number
+): T => {
+  if (code) {
+    const matches = products.filter(product => normalize(product.code) === normalize(code));
+    if (matches.length === 0) throw new Error('Fila ' + rowNumber + ': el código de artículo no coincide con ningún producto registrado.');
+    if (matches.length > 1) throw new Error('Fila ' + rowNumber + ': el código coincide con varios artículos. Corrija el archivo para usar un código único.');
+    const product = matches[0];
+    if (name && normalize(product.name) !== normalize(name)) throw new Error('Fila ' + rowNumber + ': el código y nombre identifican productos distintos.');
+    return product;
+  }
+  if (name) {
+    const matches = products.filter(product => normalize(product.name) === normalize(name));
+    if (matches.length === 0) throw new Error('Fila ' + rowNumber + ': el nombre de artículo no coincide con ningún producto registrado.');
+    if (matches.length > 1) throw new Error('Fila ' + rowNumber + ': el nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
+    return matches[0];
+  }
+  const byId = sourceProductId ? products.find(product => product.id === sourceProductId) : undefined;
+  if (!byId) throw new Error('Fila ' + rowNumber + ': no se encontró un artículo único por código, nombre o ID.');
+  return byId;
+};
+
 const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
   const extension = file.name.toLowerCase().split('.').pop();
   if (extension === 'json') {
@@ -91,21 +130,11 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
     try {
       const sourceRows = await rowsFromFile(file);
       if (!sourceRows.length) throw new Error('No se encontraron filas de movimientos.');
-      const byCode = new Map<string, typeof products>();
-      const byName = new Map<string, typeof products>();
-      products.forEach(product => {
-        byCode.set(normalize(product.code), [...(byCode.get(normalize(product.code)) ?? []), product]);
-        byName.set(normalize(product.name), [...(byName.get(normalize(product.name)) ?? []), product]);
-      });
       const result = sourceRows.map((row, index): PreparedRow => {
         const sourceProductId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '').trim();
         const code = String(valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code') ?? '').trim();
         const name = String(valueAt(row, 'productName', 'nombreProducto', 'producto', 'nombre', 'descripcion') ?? '').trim();
-        const codeMatches = code ? byCode.get(normalize(code)) ?? [] : [];
-        const nameMatches = name ? byName.get(normalize(name)) ?? [] : [];
-        if (codeMatches.length > 1 || (!codeMatches.length && nameMatches.length > 1)) throw new Error('Fila ' + (index + 2) + ': el código o nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
-        const product = codeMatches[0] || nameMatches[0] || (sourceProductId ? products.find(item => item.id === sourceProductId) : undefined);
-        if (!product) throw new Error('Fila ' + (index + 2) + ': no se encontró un artículo único por código o nombre. Código: ' + (code || '—') + '.');
+        const product = resolveMovementProduct(products, sourceProductId, code, name, index + 2);
         const rawType = normalize(valueAt(row, 'type', 'movementType', 'tipo', 'tipoMovimiento'));
         const rawConcept = normalize(valueAt(row, 'concept', 'concepto', 'operacion', 'operation'));
         let type: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
