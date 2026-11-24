@@ -32,6 +32,20 @@ test('verifies the bank reconciliation schedule balances in both Bs and USD', ()
   assert.equal(balanced.differenceUsd, 0);
   assert.equal(balanced.isBalanced, true);
 
+  const fiveCentBsResidual = calculateBankReconciliationBalances({
+    bookMovements: [{ debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0, isReconciled: true }],
+    statementMovements: [{ type: 'CREDIT' as const, amountBs: 99.96, amountUsd: 1, isReconciled: true }]
+  });
+  assert.equal(fiveCentBsResidual.differenceBs, 0.04);
+  assert.equal(fiveCentBsResidual.isBalanced, false);
+
+  const oneMicroUsdResidual = calculateBankReconciliationBalances({
+    bookMovements: [{ debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0, isReconciled: true }],
+    statementMovements: [{ type: 'CREDIT' as const, amountBs: 100, amountUsd: 0.999999, isReconciled: true }]
+  });
+  assert.equal(oneMicroUsdResidual.differenceUsd, 0.000001);
+  assert.equal(oneMicroUsdResidual.isBalanced, false);
+
   const usdMismatch = calculateBankReconciliationBalances({
     bookMovements,
     statementMovements: statementMovements.map((row, index) => index === 0 ? { ...row, amountUsd: 3.99 } : row)
