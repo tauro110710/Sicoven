@@ -206,3 +206,28 @@ test('permite reconstrucción PEPS pre-2018 sin tasa BCV, sin inventar USD', () 
   assert.equal(result.products[0].currentStock, 1);
   assert.equal(result.products[0].avgCostUsd, 0);
 });
+
+test('ajuste positivo pre-2018 con BCV cero conserva el USD explícito en promedio ponderado', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-old', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0.5, bcvRate: 0 }),
+    movement({ id: 'adjust-old', date: '2014-03-11', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 60, unitCostUsd: 0.6, bcvRate: 0, balanceQty: 3 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 60);
+  assert.equal(result.movements[1].totalCostUsd, 0.6);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 160 / 3);
+  assert.equal(result.products[0].avgCostUsd, 1.6 / 3);
+});
+
+test('ajuste positivo pre-2018 PEPS sin BCV agrega capa con USD explícito', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'purchase-old', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0.5, bcvRate: 0 }),
+    movement({ id: 'adjust-old', date: '2014-03-11', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 60, unitCostUsd: 0.6, bcvRate: 0, balanceQty: 3 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 60);
+  assert.equal(result.movements[1].totalCostUsd, 0.6);
+  assert.equal(result.movements[1].unitCostUsd, 0.6);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 160 / 3);
+  assert.equal(result.products[0].avgCostUsd, 1.6 / 3);
+});
