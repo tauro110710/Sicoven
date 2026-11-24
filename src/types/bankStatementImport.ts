@@ -110,6 +110,8 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
     return candidateHeaders.some(header => aliases.date.includes(header)) && candidateHeaders.some(header => aliases.amount.includes(header));
   })());
   if (!parsed) {
+    const structurallyParsed = candidates.find(candidate => candidate.score >= 0 && candidate.rows.length >= 2 && candidate.rows[0].length >= 2);
+    if (structurallyParsed) throw new Error('El extracto debe incluir encabezados de fecha e importe reconocibles.');
     // Select the parse error from the delimiter most strongly indicated by the header,
     // rather than letting a failed attempt with an unrelated delimiter mask the real CSV error.
     const headerLine = input.split(/\r?\n/, 1)[0] || '';
