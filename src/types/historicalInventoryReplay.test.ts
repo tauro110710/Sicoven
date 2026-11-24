@@ -147,3 +147,15 @@ test('PEPS reconvierte las capas existentes antes de aumentar existencia con un 
   assert.equal(result.products[0].avgCostBs, 50);
   assert.equal(result.products[0].avgCostUsd, 1);
 });
+
+test('PEPS reconvierte las capas antes de disminuir existencia con un ajuste posterior', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-2018', date: '2018-08-20', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
+    movement({ id: 'adjust-2021', date: '2021-10-01', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, balanceQty: 1 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 0);
+  assert.equal(result.movements[1].totalCostUsd, 1);
+  assert.equal(result.movements[1].balanceTotalBs, 0);
+  assert.equal(result.movements[1].balanceTotalUsd, 1);
+  assert.equal(result.products[0].avgCostUsd, 1);
+});
