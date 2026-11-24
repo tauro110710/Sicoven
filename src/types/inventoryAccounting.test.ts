@@ -87,6 +87,20 @@ describe('motor de inventario contable', () => {
     ], 1), /no identifica la entrada original/);
   });
 
+  it('rechaza identificadores de movimiento duplicados que vuelven ambigua la capa PEPS', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'duplicate-id', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'duplicate-id', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', documentRef: 'FAC-2', balanceQty: 4 }
+    ], 4), /identificadores de movimiento duplicados/);
+  });
+
+  it('rechaza una devolución PEPS a proveedor con fecha anterior a su compra origen', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-02', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'supplier-return', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', correctionForMovementId: 'purchase-1', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'NC-1', balanceQty: 1 }
+    ], 1), /anterior a la devolución/);
+  });
+
   it('rechaza devoluciones a proveedor enlazadas a capas de ajustes y no a compras', () => {
     assert.throws(() => reconstructFifoLayers([
       { id: 'purchase-1', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 1 },
