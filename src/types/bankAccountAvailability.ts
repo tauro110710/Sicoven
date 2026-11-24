@@ -99,3 +99,25 @@ export function validateBankOutgoingAvailability(input: {
     throw new Error(`Saldo bancario insuficiente. Disponible: ${available.toFixed(decimals)} ${currencyLabel}; solicitado: ${requested.toFixed(decimals)} ${currencyLabel}. No se registró el egreso ni la transferencia.`);
   }
 }
+
+
+export type CashOutgoingPlanItem = { accountCode: '1.1.1.01' | '1.1.1.02'; currency: 'BS' | 'USD'; amount: number };
+
+/** Net cash withdrawals by cash ledger account, avoiding false locks for same-account compensating lines. */
+export function buildCashOutgoingPlan(items: Pick<JournalEntry['items'][number], 'accountCode' | 'debitBs' | 'creditBs' | 'debitUsd' | 'creditUsd'>[]): CashOutgoingPlanItem[] {
+  const plan: CashOutgoingPlanItem[] = [];
+  for (const accountCode of ['1.1.1.01', '1.1.1.02'] as const) {
+    const currency = accountCode === '1.1.1.02' ? 'USD' : 'BS';
+    const decimals = currency === 'USD' ? 6 : 2;
+    const scale = 10 ** decimals;
+    const net = items.filter(item => item.accountCode === accountCode).reduce((sum, item) => {
+      const debit = Number(currency === 'USD' ? item.debitUsd || 0 : item.debitBs || 0);
+      const credit = Number(currency === 'USD' ? item.creditUsd || 0 : item.creditBs || 0);
+      if (!Number.isFinite(debit) || !Number.isFinite(credit) || debit < 0 || credit < 0) throw new Error('El asiento contiene importes de caja inválidos.');
+      return sum + credit - debit;
+    }, 0);
+    const amount = Math.round(net * scale) / scale;
+    if (amount > 0) plan.push({ accountCode, currency, amount });
+  }
+  return plan;
+}
