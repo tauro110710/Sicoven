@@ -206,6 +206,27 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('excludes entries dated after the selected year-end from cash-flow movements', () => {
+    const entries = [
+      entry('receipt-in-year', '2026-06-01', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 100, 0, 10, 0),
+        line('4.1', 'Ingresos operacionales', 0, 100, 0, 10)
+      ]),
+      entry('future-payment', '2027-01-15', 'MANUAL', [
+        line('5.1', 'Gastos operacionales', 900, 0, 90, 0),
+        line('1.1.1.01', 'Caja principal', 0, 900, 0, 90)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2026);
+    assert.equal(report.netChangeBs, 100);
+    assert.equal(report.netChangeUsd, 10);
+    assert.equal(report.closingCashBs, 100);
+    assert.equal(report.closingCashUsd, 10);
+    assert.equal(report.ledgerClosingCashBs, 100);
+    assert.equal(report.ledgerClosingCashUsd, 10);
+    assert.equal(report.isReconciled, true);
+  });
+
   it('isolates companies and rejects invalid report periods', () => {
     assert.throws(() => buildCashFlowReport([], accounts, banks, '', 2026));
     assert.throws(() => buildCashFlowReport([], accounts, banks, 'co-1', 0));
