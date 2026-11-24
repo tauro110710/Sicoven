@@ -5543,12 +5543,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, product.currentStock);
           const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
+          const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
           const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
           totalCostBs = fifoIssue.totalCostBs;
           salidaFifoUsdCost = fifoIssue.totalCostUsd;
           salidaFifoUsdUnit = fifoIssue.unitCostUsd;
+          unitCostUsd = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
+          newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - fifoIssue.totalCostUsd) / newStock : 0;
         } else {
           unitCostBs = Number(product.avgCostBs || 0);
           unitCostUsd = Number(product.avgCostUsd || 0);
@@ -5567,6 +5570,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
           unitCostBs = fifoAdjustment.unitCostBs;
+          unitCostUsd = fifoAdjustment.unitCostUsd;
           var adjustmentUsd = fifoAdjustment.totalCostUsd;
           newAverageBs = newStock > 0 ? fifoAdjustment.balanceTotalBs / newStock : 0;
           var adjustmentAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
