@@ -107,7 +107,6 @@ export function normalizeBankStatementRows(rows: BankStatementRawRow[], defaultC
     const type:BankMovementType=debitType?'DEBIT':'CREDIT';
     const amount=Math.abs(rawAmount);
     if(!validDate(date))errors.push('Fecha inválida.');
-    if(!reference)errors.push('Falta la referencia.');
     if(!description)errors.push('Falta la descripción.');
     if(!Number.isFinite(rawAmount)||amount<=0)errors.push('Importe inválido o no positivo.');
     if(!Number.isFinite(rate)||rate<=0)errors.push('Falta una tasa BCV positiva por movimiento.');
