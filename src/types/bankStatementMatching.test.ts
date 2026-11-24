@@ -114,3 +114,10 @@ test('reconciles a bank line only when both Bs and USD equivalents match', () =>
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditUsd: 0.99 }), false);
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditBs: 249.99 }), false);
 });
+
+
+test('rejects an FX snapshot that differs by exactly one cent', () => {
+  assert.throws(() => validateBankMovementFxSnapshot({
+    date: '2026-10-20', amountBs: 250.01, amountUsd: 1, bcvRate: 250, bcvRateEffectiveDate: '2026-10-20'
+  }), /no concilian/);
+});
