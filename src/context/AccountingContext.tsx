@@ -3191,13 +3191,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
     const supplierKey = [currentCompany.id, String(draft.supplierRif || '').trim().toUpperCase()].join('|');
+    const invoiceLockKey = draft.kind === 'APPLIED_TO_PURCHASE' && draft.targetPurchaseId
+      ? [currentCompany.id, draft.targetPurchaseId, 'PURCHASE_PAYMENT'].join('|')
+      : '';
     if (supplierAdvancePoolLockRef.current.has(supplierKey)) {
       throw new Error('Ya hay una aplicación o reembolso de anticipo de este proveedor en proceso. Espere antes de registrar otra.');
     }
+    if (invoiceLockKey && creditSettlementDocumentLockRef.current.has(invoiceLockKey)) {
+      throw new Error('Ya hay un pago o aplicación de anticipo sobre esta factura en proceso. Espere antes de registrar otra.');
+    }
     supplierAdvancePoolLockRef.current.add(supplierKey);
+    if (invoiceLockKey) creditSettlementDocumentLockRef.current.add(invoiceLockKey);
     try {
       return await registerSupplierAdvanceSettlement(draft);
     } finally {
+      if (invoiceLockKey) creditSettlementDocumentLockRef.current.delete(invoiceLockKey);
       supplierAdvancePoolLockRef.current.delete(supplierKey);
     }
   };
