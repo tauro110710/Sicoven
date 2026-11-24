@@ -143,11 +143,11 @@ export const ConciliacionBancariaView: React.FC = () => {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   // Cotejo y cédula: se calculan y validan los saldos en ambas monedas.
-  const depositsInTransit = bookMovements.filter(m => !m.isReconciled && m.debitBs > 0);
+  const depositsInTransit = bookMovements.filter(m => !m.isReconciled && (m.debitBs > 0 || m.debitUsd > 0));
   const totalDepositsInTransitBs = depositsInTransit.reduce((sum, m) => sum + m.debitBs, 0);
   const totalDepositsInTransitUsd = depositsInTransit.reduce((sum, m) => sum + m.debitUsd, 0);
 
-  const checksInTransit = bookMovements.filter(m => !m.isReconciled && m.creditBs > 0);
+  const checksInTransit = bookMovements.filter(m => !m.isReconciled && (m.creditBs > 0 || m.creditUsd > 0));
   const totalChecksInTransitBs = checksInTransit.reduce((sum, m) => sum + m.creditBs, 0);
   const totalChecksInTransitUsd = checksInTransit.reduce((sum, m) => sum + m.creditUsd, 0);
 
