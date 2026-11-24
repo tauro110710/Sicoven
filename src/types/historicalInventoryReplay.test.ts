@@ -111,12 +111,40 @@ test('exige productos preparados y fechas válidas', () => {
   assert.equal(empty.products[0].currentStock, 0);
 });
 
-test('bloquea devolución PEPS si no se conserva el detalle de capas de la venta', () => {
-  assert.throws(() => replay([makeProduct('PEPS')], [
-    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
-    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
-    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, correctionForMovementId: 'sale-1' })
-  ]), /detalle de capas consumidas/);
+test('PEPS devuelve unidades a las capas originales y las ventas posteriores las consumen con su costo fuente', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-first', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'layer-second', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 2, unitCostBs: 999, unitCostUsd: 9.99, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'sale-after-return', date: '2010-01-04', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.equal(result.movements[3].totalCostBs, 20);
+  assert.equal(result.movements[3].totalCostUsd, 0.2);
+  assert.deepEqual(result.movements[3].consumedFifoLayers, [
+    { sourceMovementId: 'layer-first', date: '2010-01-01', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
+  ]);
+  assert.equal(result.movements[4].totalCostBs, 20);
+  assert.deepEqual(result.movements[4].consumedFifoLayers, [
+    { sourceMovementId: 'layer-first', date: '2010-01-01', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
+  ]);
+  assert.equal(result.products[0].currentStock, 1);
+});
+
+test('PEPS admite devoluciones parciales acumuladas y rechaza exceder la venta original', () => {
+  const source = [
+    movement({ id: 'layer-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 12, unitCostUsd: 0.12, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'return-2', date: '2010-01-04', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' })
+  ];
+  const result = replay([makeProduct('PEPS')], source);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.movements[2].totalCostBs, 12);
+  assert.equal(result.movements[3].totalCostBs, 12);
+  assert.throws(() => replay([makeProduct('PEPS')], [...source,
+    movement({ id: 'return-over', date: '2010-01-05', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' })
+  ]), /superan la cantidad de la venta original/);
 });
 
 
