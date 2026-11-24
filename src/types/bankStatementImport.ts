@@ -21,7 +21,7 @@ const normalizeHeader = (value: unknown) => String(value ?? '').replace(String.f
 const aliases: Record<string,string[]> = {
   date:['fecha','date','fecha_movimiento','transaction_date','dtposted'],
   reference:['referencia','reference','ref','numero_referencia','nro_referencia','fitid','checknum'],
-  description:['descripcion','description','concepto','memo','name','payee'],
+  description:['descripcion','descripcion_banco','description','bank_description','concepto','memo','name','payee'],
   type:['tipo','type','naturaleza','debit_credit','trntype'],
   amount:['monto','amount','importe','valor','transaction_amount'],
   currency:['moneda','currency','divisa','curdef'],
