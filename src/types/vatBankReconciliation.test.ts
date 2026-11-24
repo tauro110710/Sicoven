@@ -218,6 +218,12 @@ test('rejects impossible calendar dates in payment bank movements', () => {
     })
   ], [account], [paymentJournal]);
   assert.equal(invalidSummary.pendingCount, 1);
+  const invalidFiledSummary = buildVatBankReconciliationSummary(declaration, [{ ...filed, occurredAt: '2026-02-30' }, payment], [
+    movement('m-1', 60, { date: '2026-10-18', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-1', reconciledJournalEntryIds: ['entry-iva-1'] })
+  ], [account], [paymentJournal]);
+  assert.equal(invalidFiledSummary.reconciledCount, 0);
+  assert.equal(invalidFiledSummary.pendingCount, 1);
 });
 
 test('does not mark linked credits or USD-account movements reconciled', () => {
