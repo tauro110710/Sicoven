@@ -11,6 +11,7 @@ import {
   getCompanyTaxStatusForDate,
   getCompanyIgtfPerceptionAgentForDate,
   SaleRecord,
+  SaleInventoryLine,
   InventoryProduct,
   InventoryMovement,
   Customer,
@@ -4833,8 +4834,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const saleAutoMovements: InventoryMovement[] = [];
       const cogsItems: JournalEntryItem[] = [];
       const saleProductStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Consolidar líneas repetidas por producto para que PEPS consuma el stock virtual secuencialmente.
+      const consolidatedSaleInventoryLines = Array.from(saleData.inventoryLines!.reduce((map, line) => {
+        const productId = String(line.productId || '').trim();
+        const existing = map.get(productId);
+        map.set(productId, existing ? { ...existing, quantity: Number(existing.quantity) + Number(line.quantity) } : { ...line, quantity: Number(line.quantity) });
+        return map;
+      }, new Map<string, SaleInventoryLine>()).values());
       // Inicializar estado actual de cada producto.
-      for (const line of saleData.inventoryLines!) {
+      for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
         if (product && !saleProductStateMap.has(product.id)) {
           saleProductStateMap.set(product.id, {
@@ -4844,7 +4852,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         }
       }
-      for (const line of saleData.inventoryLines!) {
+      for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
         if (!product) continue;
         const pState = saleProductStateMap.get(product.id)!;
