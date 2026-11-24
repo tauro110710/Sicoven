@@ -177,3 +177,21 @@ test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al result
   assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 80);
   assert.equal(items.some(item => item.accountCode === '4.1.1' || item.accountCode === '6.1.1'), false);
 });
+
+test('reexpresses historical bolivar balances and accumulated profit at opening-date scale', () => {
+  const historical = entry('historical-2017', '2017-06-15', [
+    line('1.1.1', 1_000_000_000_000, 0, 10, 0),
+    line('4.1.1', 0, 1_000_000_000_000, 0, 10)
+  ]);
+  const items = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2017-01-01', periodEndDate: '2026-12-31',
+    openingDate: '2027-01-01', accounts, journalEntries: [historical],
+    retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitBs, 10);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 10);
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitUsd, 10);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditUsd, 10);
+  assert.equal(items.reduce((sum, item) => sum + item.debitBs, 0), items.reduce((sum, item) => sum + item.creditBs, 0));
+  assert.equal(items.reduce((sum, item) => sum + item.debitUsd, 0), items.reduce((sum, item) => sum + item.creditUsd, 0));
+});
