@@ -3773,7 +3773,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
-          ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
         autoMovements.push(autoMov);
@@ -4970,6 +4969,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
         saleAutoMovements.push(saleAutoMov);
