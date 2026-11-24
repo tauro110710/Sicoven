@@ -70,8 +70,13 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   if(cell.length||row.length){row.push(cell);rows.push(row);}
   if(rows.length<2)throw new Error('El archivo CSV no contiene encabezado y movimientos.');
   const headers=rows[0].map(normalizeHeader);
+  if(headers.some(header=>!header))throw new Error('El extracto bancario contiene encabezados vacíos. Renombre todas las columnas.');
+  if(new Set(headers).size!==headers.length)throw new Error('El extracto bancario contiene encabezados duplicados o equivalentes. Renombre las columnas.');
   if(!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h)))throw new Error('El archivo delimitado debe incluir columnas de fecha e importe.');
-  return rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
+  const dataRows=rows.slice(1);
+  const invalidWidth=dataRows.findIndex(values=>values.length!==headers.length);
+  if(invalidWidth>=0)throw new Error('El extracto bancario contiene una fila con cantidad de columnas distinta al encabezado (fila '+(invalidWidth+2)+'). No se importará para evitar desplazar o perder datos.');
+  return dataRows.map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
 }
 
 /** TXT delimitado: admite tabulador, punto y coma, barra vertical o coma, con encabezados. */
