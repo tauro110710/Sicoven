@@ -56,7 +56,7 @@ export function hasAccountMovement(totals: AccountMovementTotals): boolean {
     totals.creditBs,
     totals.debitUsd,
     totals.creditUsd
-  ].some(value => Number.isFinite(value) && value > 0);
+  ].some(value => Number.isFinite(value) && value !== 0);
 }
 
 /** Trial balance must reconcile in both Bs and USD, including net balances. */
