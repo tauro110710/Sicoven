@@ -267,7 +267,7 @@ export function buildCashFlowReport(
   };
 
   const periodEntries = companyEntries.filter(entry =>
-    entry.date >= start && !isAnnualOpening(entry, year)
+    entry.date >= start && entry.date <= end && !isAnnualOpening(entry, year)
   );
   for (const entry of periodEntries) {
     const net = cashNet(entry, cashCodes);
