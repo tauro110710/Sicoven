@@ -87,15 +87,20 @@ export function isDuplicateBankStatementMovement(input: {
 }): boolean {
   const normalizeReference = (value: string) => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
   const candidateReference = normalizeReference(input.candidate.reference);
-  if (!candidateReference) return false;
-  return input.existing.some(row =>
-    row.bankAccountId === input.candidate.bankAccountId &&
-    row.date === input.candidate.date &&
-    row.type === input.candidate.type &&
-    normalizeReference(row.reference) === candidateReference &&
-    Math.round(Number(row.amountBs) * 100) === Math.round(Number(input.candidate.amountBs) * 100) &&
-    Math.round(Number(row.amountUsd) * 1_000_000) === Math.round(Number(input.candidate.amountUsd) * 1_000_000)
-  );
+  return input.existing.some(row => {
+    const sameFingerprint = row.bankAccountId === input.candidate.bankAccountId &&
+      row.date === input.candidate.date &&
+      row.type === input.candidate.type &&
+      Math.round(Number(row.amountBs) * 100) === Math.round(Number(input.candidate.amountBs) * 100) &&
+      Math.round(Number(row.amountUsd) * 1_000_000) === Math.round(Number(input.candidate.amountUsd) * 1_000_000);
+    if (!sameFingerprint) return false;
+    const existingReference = normalizeReference(row.reference);
+    // Without a bank reference, use the remaining exact identity fields conservatively
+    // to prevent the same reference-less transaction from being imported twice.
+    return candidateReference
+      ? existingReference === candidateReference
+      : !existingReference;
+  });
 }
 
 export function calculateBankReconciliationBalances(input: {
