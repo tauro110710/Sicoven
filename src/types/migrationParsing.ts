@@ -2,38 +2,58 @@ export type MigrationRow = Record<string, unknown>;
 
 export const isValidIsoDate = (value: unknown): boolean => {
   const date = String(value ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
   const parsed = new Date(date + 'T00:00:00.000Z');
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
 };
-
 export const normalizeMigrationValue = (value: unknown): string =>
-  String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const splitDelimited = (text: string, delimiter: string): string[][] => {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';
   let quoted = false;
-  const input = text.replace(/^\uFEFF/, '');
+  let quoteClosed = false;
+  const input = text.replace(/^\\uFEFF/, '');
+  const finishCell = () => { row.push(cell.trim()); cell = ''; quoteClosed = false; };
+  const finishRow = () => {
+    finishCell();
+    if (row.some(value => value !== '')) rows.push(row);
+    row = [];
+  };
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
-    if (ch === '"') {
-      if (quoted && input[i + 1] === '"') { cell += '"'; i++; }
-      else quoted = !quoted;
-    } else if (ch === delimiter && !quoted) {
-      row.push(cell.trim()); cell = '';
-    } else if ((ch === '\n' || ch === '\r') && !quoted) {
-      if (ch === '\r' && input[i + 1] === '\n') i++;
-      row.push(cell.trim());
-      if (row.some(value => value !== '')) rows.push(row);
-      row = []; cell = '';
+    if (quoted) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') { cell += '"'; i++; }
+        else { quoted = false; quoteClosed = true; }
+      } else {
+        cell += ch;
+      }
+    } else if (quoteClosed) {
+      if (ch === delimiter) finishCell();
+      else if (ch === '\\n' || ch === '\\r') {
+        if (ch === '\\r' && input[i + 1] === '\\n') i++;
+        finishRow();
+      } else if (ch !== ' ' && ch !== '\\t') {
+        throw new Error('El archivo delimitado contiene caracteres después de cerrar un campo entre comillas.');
+      }
+    } else if (ch === delimiter) {
+      finishCell();
+    } else if (ch === '\\n' || ch === '\\r') {
+      if (ch === '\\r' && input[i + 1] === '\\n') i++;
+      finishRow();
+    } else if (ch === '"') {
+      if (cell.trim() !== '') throw new Error('El archivo delimitado contiene comillas en una posición inválida.');
+      cell = '';
+      quoted = true;
     } else {
       cell += ch;
     }
   }
   if (quoted) throw new Error('El archivo delimitado contiene comillas sin cerrar.');
-  row.push(cell.trim());
+  finishCell();
   if (row.some(value => value !== '')) rows.push(row);
   return rows;
 };
@@ -55,7 +75,7 @@ export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'ar
 };
 
 export const parseDelimitedRecords = (text: string, requestedDelimiter?: string): MigrationRow[] => {
-  const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\t', '|'];
+  const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\\t', '|'];
   const scored = candidates.map(delimiter => {
     const rows = splitDelimited(text, delimiter);
     const headerCount = rows[0]?.length ?? 0;
@@ -75,19 +95,19 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
 export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
-  let raw = String(value).trim().replace(/[\s\u00a0]/g, '').replace(/[^0-9,().+\-]/g, '');
-  if (!/\d/.test(raw)) return NaN;
+  let raw = String(value).trim().replace(/[\\s\\u00a0]/g, '').replace(/[^0-9,().+\\-]/g, '');
+  if (!/\\d/.test(raw)) return NaN;
   if (raw.startsWith('(') && raw.endsWith(')')) raw = '-' + raw.slice(1, -1);
   const commas = (raw.match(/,/g) || []).length;
-  const dots = (raw.match(/\./g) || []).length;
+  const dots = (raw.match(/\\./g) || []).length;
   if (commas && dots) {
-    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) raw = raw.replace(/\./g, '').replace(',', '.');
+    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) raw = raw.replace(/\\./g, '').replace(',', '.');
     else raw = raw.replace(/,/g, '');
   } else if (commas) {
-    if (commas > 1 || /,\d{3}$/.test(raw)) raw = raw.replace(/,/g, '');
+    if (commas > 1 || /,\\d{3}$/.test(raw)) raw = raw.replace(/,/g, '');
     else raw = raw.replace(',', '.');
-  } else if (dots > 1 || /\.\d{3}$/.test(raw)) {
-    raw = raw.replace(/\./g, '');
+  } else if (dots > 1 || /\\.\\d{3}$/.test(raw)) {
+    raw = raw.replace(/\\./g, '');
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : NaN;
