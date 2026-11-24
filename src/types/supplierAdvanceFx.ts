@@ -21,10 +21,11 @@ export function calculateSupplierAdvanceFxSettlement(
       requestedUsd <= 0 || settlementValueBs <= 0) {
     throw new Error('Los valores para calcular el diferencial cambiario deben ser positivos y finitos.');
   }
-  if (requestedUsd > availableUsd + 0.000005) {
+  const amountUsd = Math.round((requestedUsd + Number.EPSILON) * 1000000) / 1000000;
+  const roundedAvailableUsd = Math.round((availableUsd + Number.EPSILON) * 1000000) / 1000000;
+  if (amountUsd > roundedAvailableUsd) {
     throw new Error('La liquidación supera el saldo a favor disponible del proveedor.');
   }
-  const amountUsd = Math.round((requestedUsd + Number.EPSILON) * 1000000) / 1000000;
   const advanceBookValueBs = Math.round((availableBookBs * amountUsd / availableUsd) * 100) / 100;
   const roundedSettlementBs = Math.round(settlementValueBs * 100) / 100;
   const exchangeDifferenceBs = Math.round((roundedSettlementBs - advanceBookValueBs) * 100) / 100;
