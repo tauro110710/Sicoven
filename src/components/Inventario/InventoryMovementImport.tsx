@@ -30,9 +30,9 @@ export const dateValue = (value: unknown): string => {
     }
     return date;
   }
-  const match = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  const match = raw.match(/^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/);
   if (match) {
-    const date = match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+    const date = match[4] + '-' + match[3].padStart(2, '0') + '-' + match[1].padStart(2, '0');
     return isValidIsoDate(date) ? date : raw;
   }
   return raw;
