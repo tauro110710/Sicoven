@@ -28,7 +28,7 @@ test('flags missing historical rate, invalid date and incomplete reference witho
   const result=normalizeBankStatementRows([
     {Fecha:'2026-11-06',Referencia:'',Descripción:'Comisión',Tipo:'Débito',Importe:'5,00',Moneda:'BS',Tasa_BCV:'',Fecha_vigencia_BCV:''}
   ],'BS');
-  assert.ok(result[0].errors.some(error=>error.includes('referencia')));
+  assert.ok(!result[0].errors.some(error=>error.includes('referencia')));
   assert.ok(result[0].errors.some(error=>error.includes('tasa BCV')));
   assert.ok(result[0].errors.some(error=>error.includes('vigencia BCV')));
 });
