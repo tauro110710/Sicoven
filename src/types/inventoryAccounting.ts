@@ -97,6 +97,8 @@ export interface CostLayer {
 }
 
 export interface InventoryCostResult {
+  /** Capas PEPS consumidas por una salida; se omite en cálculos de promedio. */
+  consumedLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
   quantity: number;
   totalCostBs: number;
   totalCostUsd: number;
@@ -287,20 +289,24 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
   }
   let remaining = quantityToIssue;
-  const consumedLayers: Array<[number, number, number]> = [];
+  const consumedLayers: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }> = [];
   for (const layer of layers) {
     if (remaining <= 1e-8) break;
     const consumed = Math.min(remaining, layer.quantity);
-    consumedLayers.push([consumed, layer.unitCostBs, layer.unitCostUsd]);
+    consumedLayers.push({
+      sourceMovementId: layer.sourceMovementId, date: layer.date, documentRef: layer.documentRef,
+      quantity: consumed, unitCostBs: layer.unitCostBs, unitCostUsd: layer.unitCostUsd
+    });
     remaining -= consumed;
   }
   if (remaining > 1e-8) {
     throw new Error('No se pudo conciliar el consumo PEPS con las capas disponibles.');
   }
-  const totalCostBs = exactRoundedProductSum(consumedLayers.map(([q, bs]) => [q, bs] as [number, number]), 2);
-  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(([q, _bs, usd]) => [q, usd] as [number, number]), 6);
+  const totalCostBs = exactRoundedProductSum(consumedLayers.map(layer => [layer.quantity, layer.unitCostBs] as [number, number]), 2);
+  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(layer => [layer.quantity, layer.unitCostUsd] as [number, number]), 6);
   return {
     quantity: quantityToIssue,
+    consumedLayers,
     totalCostBs,
     totalCostUsd,
     unitCostBs: exactQuotient(totalCostBs, quantityToIssue),
