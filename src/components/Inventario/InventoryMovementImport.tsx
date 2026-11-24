@@ -44,19 +44,23 @@ export const resolveMovementProduct = <T extends { id: string; code: string; nam
   name: string,
   rowNumber: number
 ): T => {
-  const byCode = code ? products.filter(product => normalize(product.code) === normalize(code)) : [];
-  const byName = name ? products.filter(product => normalize(product.name) === normalize(name)) : [];
+  if (code) {
+    const matches = products.filter(product => normalize(product.code) === normalize(code));
+    if (matches.length === 0) throw new Error('Fila ' + rowNumber + ': el código de artículo no coincide con ningún producto registrado.');
+    if (matches.length > 1) throw new Error('Fila ' + rowNumber + ': el código coincide con varios artículos. Corrija el archivo para usar un código único.');
+    const product = matches[0];
+    if (name && normalize(product.name) !== normalize(name)) throw new Error('Fila ' + rowNumber + ': el código y nombre identifican productos distintos.');
+    return product;
+  }
+  if (name) {
+    const matches = products.filter(product => normalize(product.name) === normalize(name));
+    if (matches.length === 0) throw new Error('Fila ' + rowNumber + ': el nombre de artículo no coincide con ningún producto registrado.');
+    if (matches.length > 1) throw new Error('Fila ' + rowNumber + ': el nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
+    return matches[0];
+  }
   const byId = sourceProductId ? products.find(product => product.id === sourceProductId) : undefined;
-  if (code && byCode.length === 0) throw new Error('Fila ' + rowNumber + ': el código de artículo no coincide con ningún producto registrado.');
-  if (byCode.length > 1) throw new Error('Fila ' + rowNumber + ': el código coincide con varios artículos. Corrija el archivo para usar un código único.');
-  if (!code && name && byName.length === 0) throw new Error('Fila ' + rowNumber + ': el nombre de artículo no coincide con ningún producto registrado.');
-  if (!code && byName.length > 1) throw new Error('Fila ' + rowNumber + ': el nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
-  if (sourceProductId && !byId) throw new Error('Fila ' + rowNumber + ': el identificador de producto no existe en la empresa destino.');
-  const product = byCode[0] ?? byName[0] ?? byId;
-  if (!product) throw new Error('Fila ' + rowNumber + ': no se encontró un artículo único por código, nombre o ID.');
-  if (byId && byId.id !== product.id) throw new Error('Fila ' + rowNumber + ': el ID de producto no coincide con el código o nombre indicado.');
-  if (code && name && normalize(product.name) !== normalize(name)) throw new Error('Fila ' + rowNumber + ': el código y nombre identifican productos distintos.');
-  return product;
+  if (!byId) throw new Error('Fila ' + rowNumber + ': no se encontró un artículo único por código, nombre o ID.');
+  return byId;
 };
 
 const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
