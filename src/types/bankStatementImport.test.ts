@@ -180,3 +180,26 @@ DATA:OFXSGML
   assert.equal(row.bcvRateEffectiveDate,'2026-11-06');
   assert.deepEqual(row.errors,[]);
 });
+
+test('rejects malformed CSV/TXT bank rows, blank and duplicate normalized headers', () => {
+  const header='Fecha,Referencia,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV';
+  assert.throws(() => parseBankStatementCsv(header+'\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10'), /cantidad de columnas distinta.*fila 2/);
+  assert.throws(() => parseBankStatementCsv(header+'\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06,EXTRA'), /cantidad de columnas distinta.*fila 2/);
+  assert.throws(() => parseBankStatementCsv('Fecha,,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados vacíos/);
+  assert.throws(() => parseBankStatementCsv('Fecha,FECHA,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados duplicados/);
+});
+
+test('rejects blank and duplicate normalized Excel headers and data beyond header range', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const makeBuffer = async (headers: unknown[], values: unknown[]) => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Extracto');
+    sheet.addRow(headers);
+    sheet.addRow(values);
+    return workbook.xlsx.writeBuffer();
+  };
+  await assert.rejects(async () => parseBankStatementXlsx(await makeBuffer(['Fecha','','Importe'], ['2026-11-06','TR-1',100])), /encabezados vacíos/);
+  await assert.rejects(async () => parseBankStatementXlsx(await makeBuffer(['Fecha','FECHA','Importe'], ['2026-11-06','TR-1',100])), /encabezados duplicados/);
+  const bytes=await makeBuffer(['Fecha','Referencia','Descripción','Tipo','Importe','Moneda','Tasa BCV','Fecha vigencia BCV'], ['2026-11-06','TR-1','Depósito','Crédito',100,'BS',10,'2026-11-06','EXTRA']);
+  await assert.rejects(async () => parseBankStatementXlsx(bytes as ArrayBuffer), /datos fuera de las columnas.*fila 2/);
+});
