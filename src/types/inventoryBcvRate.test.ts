@@ -20,6 +20,12 @@ test('automatic inventory BCV history does not duplicate an effective date', () 
   assert.equal(duplicate[0].rate, 890);
 });
 
+test('rejects malformed BCV records before they enter the saved history', () => {
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 0) }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-02-30', 890) }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 890), fetchedAt: 'invalid' }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 890), mode: 'MANUAL', provider: 'bcv.today' }), /registro de tasa BCV/);
+});
 test('manual BCV entry appends a same-day correction and becomes the effective value', () => {
   const automatic = appendDailyInventoryBcvRate([], entry('2026-11-06', 890));
   const corrected = appendDailyInventoryBcvRate(automatic, {
