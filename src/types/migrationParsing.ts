@@ -72,13 +72,21 @@ export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'ar
 export const parseDelimitedRecords = (text: string, requestedDelimiter?: string): MigrationRow[] => {
   const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\t', '|'];
   const scored = candidates.map(delimiter => {
-    const rows = splitDelimited(text, delimiter);
-    const headerCount = rows[0]?.length ?? 0;
-    const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
-    return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    try {
+      const rows = splitDelimited(text, delimiter);
+      const headerCount = rows[0]?.length ?? 0;
+      const consistent = rows.slice(1).filter(row => row.length === headerCount).length;
+      return { delimiter, rows, score: headerCount > 1 ? consistent * 100 + headerCount : 0 };
+    } catch (error) {
+      return { delimiter, rows: [] as string[][], score: -1, error };
+    }
   }).sort((a, b) => b.score - a.score);
-  const parsed = scored[0];
-  if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
+  const parsed = scored.find(candidate => candidate.score >= 0 && candidate.rows.length >= 2 && candidate.rows[0].length >= 2);
+  if (!parsed) {
+    const bestError = scored.find(candidate => candidate.score < 0)?.error;
+    if (bestError instanceof Error) throw bestError;
+    return [];
+  }
   const headers = validateUniqueMigrationHeaders(parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1)), 'archivo delimitado');
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
