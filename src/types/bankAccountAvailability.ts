@@ -28,6 +28,7 @@ export function calculateBankAvailableBalance(input: BankBalanceInput): number {
   const openingReference = `APERTURA-${bankAccount.accountNumber}`;
   const hasOpeningEntry = journalEntries.some(entry =>
     entry.companyId === companyId &&
+    entry.date <= asOfDate &&
     entry.referenceDoc === openingReference &&
     entry.items.some(item => {
       if (item.accountCode !== bankAccount.accountCode) return false;
