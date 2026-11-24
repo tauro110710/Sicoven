@@ -16,6 +16,16 @@ test('detects repeated statement rows without rejecting distinct movements', () 
   assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...base, bankAccountId: 'bank-b' } }), false);
 });
 
+test('detects duplicate bank statement rows without a reference using exact identity fields', () => {
+  const existing = [{ bankAccountId: 'bank-a', date: '2026-11-01', reference: '', type: 'DEBIT' as const, amountBs: 100, amountUsd: 0 }];
+  const candidate = { bankAccountId: 'bank-a', date: '2026-11-01', reference: '   ', type: 'DEBIT' as const, amountBs: 100, amountUsd: 0 };
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate }), true);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...candidate, amountBs: 101 } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...candidate, date: '2026-11-02' } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...candidate, bankAccountId: 'bank-b' } }), false);
+  assert.equal(isDuplicateBankStatementMovement({ existing, candidate: { ...candidate, reference: 'TRF-1' } }), false);
+});
+
 test('verifies the bank reconciliation schedule balances in both Bs and USD', () => {
   const bookMovements = [
     { debitBs: 1000, creditBs: 0, debitUsd: 4, creditUsd: 0, isReconciled: true },
