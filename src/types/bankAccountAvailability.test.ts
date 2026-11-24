@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import testCase from 'node:test';
-import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from './bankAccountAvailability';
+import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability, buildCashOutgoingPlan } from './bankAccountAvailability';
 import type { BankAccount, JournalEntry } from './accounting';
 
 const bank: BankAccount = {
@@ -118,4 +118,26 @@ testCase('allows an outgoing amount up to the exact available balance and reject
   assert.throws(() => validateBankOutgoingAvailability({
     availableBalance: -1, requestedAmount: 0.01, currency: 'BS'
   }), /Saldo bancario insuficiente/);
+});
+
+
+testCase('plans net cash withdrawals by currency and ignores same-account offsets', () => {
+  const plan = buildCashOutgoingPlan([
+    { accountCode: '1.1.1.01', debitBs: 80, creditBs: 120, debitUsd: 0, creditUsd: 0 },
+    { accountCode: '1.1.1.01', debitBs: 25, creditBs: 0, debitUsd: 0, creditUsd: 0 },
+    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 1.25, creditUsd: 3.5 },
+    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 3.0, creditUsd: 0 }
+  ]);
+  assert.deepEqual(plan, [
+    { accountCode: '1.1.1.01', currency: 'BS', amount: 15 },
+    { accountCode: '1.1.1.02', currency: 'USD', amount: 2.25 }
+  ]);
+});
+
+testCase('cash outgoing plan rounds to account precision and excludes net inflows', () => {
+  const plan = buildCashOutgoingPlan([
+    { accountCode: '1.1.1.01', debitBs: 20, creditBs: 10, debitUsd: 0, creditUsd: 0 },
+    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 1.2345674, creditUsd: 0 }
+  ]);
+  assert.deepEqual(plan, [{ accountCode: '1.1.1.02', currency: 'USD', amount: 1.234567 }]);
 });
