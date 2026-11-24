@@ -39,6 +39,15 @@ test('manual BCV entry appends a same-day correction and becomes the effective v
   assert.equal(resolveInventoryBcvRate(corrected, '2026-11-06')?.rate, 891.25);
 });
 
+test('same-day manual corrections take precedence even if their saved timestamp is earlier than automatic data', () => {
+  const history = [
+    { ...entry('2026-11-06', 890), fetchedAt: '2026-11-06T17:00:00.000Z' },
+    { ...entry('2026-11-06', 891.25), mode: 'MANUAL' as const, provider: 'manual' as const, source: 'Manual', fetchedAt: '2026-11-06T15:00:00.000Z', correctionOfId: 'auto-id' }
+  ];
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-06')?.rate, 891.25);
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-06')?.mode, 'MANUAL');
+});
+
 test('inventory BCV date resolver selects the latest effective rate not after the date', () => {
   const history = [
     entry('2026-11-04', 870),
