@@ -151,6 +151,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     let unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : roundUsd(requestedUnitCostBs / rate);
     let totalCostBs = 0;
     let totalCostUsd = 0;
+    let consumedFifoLayers: InventoryMovement['consumedFifoLayers'];
     let nextQuantity = state.quantity;
     let nextAverageBs = state.averageBs;
     let nextAverageUsd = state.averageUsd;
@@ -217,6 +218,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         const fifo = calculateFifoIssue(layers, requestedQuantity);
         totalCostBs = fifo.totalCostBs;
         totalCostUsd = fifo.totalCostUsd;
+        consumedFifoLayers = fifo.consumedLayers;
         unitCostBs = fifo.unitCostBs;
         unitCostUsd = fifo.unitCostUsd;
         let remaining = requestedQuantity;
@@ -296,6 +298,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       quantity: movementQuantity,
       unitCostBs,
       unitCostUsd,
+      ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
       totalCostBs,
       totalCostUsd,
       balanceQty: Math.max(0, nextQuantity),
