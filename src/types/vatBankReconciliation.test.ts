@@ -103,6 +103,26 @@ test('rejects impossible calendar dates when registering IVA payment support', (
   ]), /fecha inválidos/);
 });
 
+test('rejects IVA payment amounts with fractional cent amounts', () => {
+  assert.throws(() => validate(['m-1'], 60.001), /céntimos exactos/);
+  assert.throws(() => validate(['m-1'], 0), /céntimos exactos/);
+  assert.throws(() => validate(['m-1'], -60), /céntimos exactos/);
+  assert.doesNotThrow(() => validate(['m-1'], 60));
+});
+
+test('rejects invalid filing and payment dates before bank-link validation', () => {
+  const invalidDraft = { ...draft(['m-1'], 60), occurredAt: '2026-02-30' };
+  assert.throws(() => validateVatPaymentBankLinks({
+    companyId: 'company-1', declaration, draft: invalidDraft, events: [filed],
+    bankAccounts: [account], bankMovements: [movement('m-1', 60)]
+  }), /fecha del enteramiento IVA es inválida/);
+  const invalidFiling = { ...filed, occurredAt: '2026-02-30' };
+  assert.throws(() => validateVatPaymentBankLinks({
+    companyId: 'company-1', declaration, draft: draft(['m-1'], 60), events: [invalidFiling],
+    bankAccounts: [account], bankMovements: [movement('m-1', 60)]
+  }), /fecha de presentación IVA es inválida/);
+});
+
 test('reports legacy unlinked payments as pending without changing their history', () => {
   const legacy: VatWithholdingDeclarationEvent = {
     id: 'legacy-payment', declarationId: declaration.id, eventType: 'PAYMENT',
@@ -147,6 +167,21 @@ test('keeps historical payment links pending when the bank debit was later recon
   );
   assert.equal(historicallyLinked.reconciledCount, 0);
   assert.equal(historicallyLinked.pendingCount, 1);
+});
+
+test('does not reconcile a payment event containing fractional-cent amounts', () => {
+  const payment: VatWithholdingDeclarationEvent = {
+    id: 'payment-subcent', declarationId: declaration.id, eventType: 'PAYMENT',
+    occurredAt: '2026-10-19', recordedAt: '2026-10-19T10:00:00.000Z',
+    amountBs: 60.001, paymentReference: 'PAGO-1', bankStatementMovementIds: ['m-1'],
+    journalEntryId: 'entry-iva-1'
+  };
+  const summary = buildVatBankReconciliationSummary(declaration, [filed, payment], [
+    movement('m-1', 60, { isReconciled: true, reconciledWithJournalEntryId: 'entry-iva-1',
+      reconciledJournalEntryIds: ['entry-iva-1'] })
+  ], [account], [paymentJournal]);
+  assert.equal(summary.reconciledCount, 0);
+  assert.equal(summary.pendingCount, 1);
 });
 
 test('recognizes the bank movement reconciled by its own IVA payment journal entry', () => {
@@ -205,6 +240,12 @@ test('rejects impossible calendar dates in payment bank movements', () => {
     })
   ], [account], [paymentJournal]);
   assert.equal(invalidSummary.pendingCount, 1);
+  const invalidFiledSummary = buildVatBankReconciliationSummary(declaration, [{ ...filed, occurredAt: '2026-02-30' }, payment], [
+    movement('m-1', 60, { date: '2026-10-18', isReconciled: true,
+      reconciledWithJournalEntryId: 'entry-iva-1', reconciledJournalEntryIds: ['entry-iva-1'] })
+  ], [account], [paymentJournal]);
+  assert.equal(invalidFiledSummary.reconciledCount, 0);
+  assert.equal(invalidFiledSummary.pendingCount, 1);
 });
 
 test('does not mark linked credits or USD-account movements reconciled', () => {

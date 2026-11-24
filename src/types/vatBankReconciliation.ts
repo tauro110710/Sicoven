@@ -30,9 +30,19 @@ export function validateVatPaymentBankLinks(input: {
       new Set(ids).size !== ids.length) {
     throw new Error('Seleccione al menos un débito bancario real para respaldar el enteramiento.');
   }
+  if (!isValidIsoDate(input.draft.occurredAt)) {
+    throw new Error('La fecha del enteramiento IVA es inválida.');
+  }
+  const paymentAmount = Number(input.draft.amountBs);
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || Math.abs(paymentAmount - cents(paymentAmount) / 100) > 1e-9) {
+    throw new Error('El importe del enteramiento IVA debe ser positivo y expresado en céntimos exactos.');
+  }
   const filed = input.events.find(event =>
     event.declarationId === input.declaration.id && event.eventType === 'FILED');
   if (!filed) throw new Error('No existe una presentación previa que permita conciliar el enteramiento.');
+  if (!isValidIsoDate(filed.occurredAt)) {
+    throw new Error('La fecha de presentación IVA es inválida.');
+  }
   const usedIds = new Set(input.events
     .filter(event => event.eventType === 'PAYMENT')
     .flatMap(event => event.bankStatementMovementIds || []));
@@ -168,8 +178,9 @@ export function buildVatBankReconciliationSummary(
     const ids = event.bankStatementMovementIds || [];
     const paymentAmount = Number(event.amountBs);
     const validPaymentAmount = Number.isFinite(paymentAmount) && paymentAmount > 0 &&
-      Number.isInteger(cents(paymentAmount));
+      Math.abs(paymentAmount - cents(paymentAmount) / 100) <= 1e-9;
     const validPaymentDate = Boolean(filed) &&
+      isValidIsoDate(filed!.occurredAt.slice(0, 10)) &&
       isValidIsoDate(event.occurredAt.slice(0, 10)) &&
       event.occurredAt >= filed!.occurredAt;
     const linkedJournal = event.journalEntryId
