@@ -333,7 +333,7 @@ export function allocateSupplierAdvanceFifo(
     for (const allocation of noteAllocations) {
       const key = 'CREDIT_NOTE:' + allocation.creditNoteId;
       if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
-        throw new Error('Una liquidación histórica consume una nota de crédito anterior a su fecha de origen.');
+        throw new Error('Una liquidación histórica consume una nota de crédito posterior a su fecha de origen.');
       }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia una nota de crédito inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
@@ -344,7 +344,7 @@ export function allocateSupplierAdvanceFifo(
     for (const allocation of directAllocations) {
       const key = 'DIRECT_ADVANCE:' + allocation.directAdvanceId;
       if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
-        throw new Error('Una liquidación histórica consume un anticipo directo anterior a su fecha de origen.');
+        throw new Error('Una liquidación histórica consume un anticipo directo posterior a su fecha de origen.');
       }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia un anticipo directo inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
