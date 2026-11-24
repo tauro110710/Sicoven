@@ -103,6 +103,19 @@ test('rejects impossible calendar dates when registering IVA payment support', (
   ]), /fecha inválidos/);
 });
 
+test('rejects invalid filing and payment dates before bank-link validation', () => {
+  const invalidDraft = { ...draft(['m-1'], 60), occurredAt: '2026-02-30' };
+  assert.throws(() => validateVatPaymentBankLinks({
+    companyId: 'company-1', declaration, draft: invalidDraft, events: [filed],
+    bankAccounts: [account], bankMovements: [movement('m-1', 60)]
+  }), /fecha del enteramiento IVA es inválida/);
+  const invalidFiling = { ...filed, occurredAt: '2026-02-30' };
+  assert.throws(() => validateVatPaymentBankLinks({
+    companyId: 'company-1', declaration, draft: draft(['m-1'], 60), events: [invalidFiling],
+    bankAccounts: [account], bankMovements: [movement('m-1', 60)]
+  }), /fecha de presentación IVA es inválida/);
+});
+
 test('reports legacy unlinked payments as pending without changing their history', () => {
   const legacy: VatWithholdingDeclarationEvent = {
     id: 'legacy-payment', declarationId: declaration.id, eventType: 'PAYMENT',
