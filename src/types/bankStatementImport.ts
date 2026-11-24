@@ -56,7 +56,17 @@ const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFini
 export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   const firstLine=source.split(/\r?\n/).find(line=>line.trim())||'';
   const delimiters=['\t',';','|',','];
-  const delimiter=delimiters.sort((a,b)=>firstLine.split(b).length-firstLine.split(a).length)[0];
+  const delimiterCounts=delimiters.map(delimiter=>{
+    let count=0,quotedHeader=false;
+    for(let index=0;index<firstLine.length;index++){
+      const character=firstLine[index];
+      if(character==='"'&&quotedHeader&&firstLine[index+1]==='"'){index++;continue;}
+      if(character==='"'){quotedHeader=!quotedHeader;continue;}
+      if(character===delimiter&&!quotedHeader)count++;
+    }
+    return count;
+  });
+  const delimiter=delimiters[delimiterCounts.indexOf(Math.max(...delimiterCounts))];
   const rows:string[][]=[];let row:string[]=[],cell='',quoted=false;
   for(let i=0;i<source.length;i++){
     const ch=source[i];
