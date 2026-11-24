@@ -272,11 +272,18 @@ export function allocateSupplierAdvanceFifo(
     }
     sourceKeys.add(key);
   }
+  const sourceDates = new Map(sources.map(source => [source.kind + ':' + source.id, source.date]));
 
   const used = new Map<string, { usd: number; bs: number }>();
   for (const settlement of settlements) {
     if (settlement.companyId !== companyId || settlement.isReversed ||
         String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
+    const settlementDateParts = String(settlement.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
+    const settlementDateParsed = settlementDateParts ? new Date(Date.UTC(settlementDateParts[0], settlementDateParts[1] - 1, settlementDateParts[2])) : null;
+    if (!settlementDateParts || !settlementDateParsed || settlementDateParsed.getUTCFullYear() !== settlementDateParts[0] ||
+        settlementDateParsed.getUTCMonth() !== settlementDateParts[1] - 1 || settlementDateParsed.getUTCDate() !== settlementDateParts[2]) {
+      throw new Error('Una liquidación histórica de anticipos tiene una fecha inválida.');
+    }
     const noteAllocations = settlement.sourceCreditNoteAllocations || [];
     const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
     if (!noteAllocations.length && (settlement.sourceCreditNoteIds || []).length) {
@@ -317,6 +324,9 @@ export function allocateSupplierAdvanceFifo(
     }
     for (const allocation of noteAllocations) {
       const key = 'CREDIT_NOTE:' + allocation.creditNoteId;
+      if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
+        throw new Error('Una liquidación histórica consume una nota de crédito anterior a su fecha de origen.');
+      }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia una nota de crédito inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
       current.usd = roundUsd(current.usd + allocation.amountUsd);
@@ -325,6 +335,9 @@ export function allocateSupplierAdvanceFifo(
     }
     for (const allocation of directAllocations) {
       const key = 'DIRECT_ADVANCE:' + allocation.directAdvanceId;
+      if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
+        throw new Error('Una liquidación histórica consume un anticipo directo anterior a su fecha de origen.');
+      }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia un anticipo directo inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
       current.usd = roundUsd(current.usd + allocation.amountUsd);
