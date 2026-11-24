@@ -89,7 +89,8 @@ export function validateSupplierAdvanceSettlementDraft(
     return 'Importes, saldo y tasa deben ser válidos y mayores que cero.';
   }
   const roundedRequestedUsd = Math.round((draft.amountUsd + Number.EPSILON) * 1000000) / 1000000;
-  const roundedAvailableUsd = Math.round((availableUsd + Number.EPSILON) * 1000000) / 1000000;\n  if (roundedRequestedUsd > roundedAvailableUsd) return 'La liquidación supera el saldo a favor disponible del proveedor.';
+  const roundedAvailableUsd = Math.round((availableUsd + Number.EPSILON) * 1000000) / 1000000;
+  if (roundedRequestedUsd > roundedAvailableUsd return 'La liquidación supera el saldo a favor disponible del proveedor.';
   if (draft.kind === 'REFUND_RECEIVED' && (!Number.isFinite(draft.cashReceivedBs ?? draft.amountBs) || (draft.cashReceivedBs ?? draft.amountBs) <= 0)) return 'El importe efectivamente recibido en Bs debe ser válido.';
   if (draft.kind === 'REFUND_RECEIVED') {
     if (!draft.treasuryAccountCode || !validTreasuryAccountCodes.includes(draft.treasuryAccountCode)) {
