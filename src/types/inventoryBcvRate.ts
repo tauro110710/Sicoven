@@ -19,7 +19,9 @@ export function resolveInventoryBcvRate(
 ): InventoryBcvHistoryEntry | null {
   return [...history]
     .filter(entry => entry.effectiveDate <= effectiveDate && Number.isFinite(entry.rate) && entry.rate > 0)
-    .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.fetchedAt.localeCompare(a.fetchedAt))[0] || null;
+    .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) ||
+      Number(b.mode === 'MANUAL') - Number(a.mode === 'MANUAL') ||
+      b.fetchedAt.localeCompare(a.fetchedAt))[0] || null;
 }
 
 /**
