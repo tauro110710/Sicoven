@@ -16,12 +16,25 @@ const valueAt = (row: SourceRow, ...names: string[]) => {
   }
   return undefined;
 };
-const dateValue = (value: unknown): string => {
+export const dateValue = (value: unknown): string => {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
   const raw = String(value ?? '').trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  const match = raw.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
-  if (match) return match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+  const iso = raw.match(/^(\\d{4}-\\d{2}-\\d{2})(?:T(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d{1,3}))?)?(Z|[+-](\\d{2}):?(\\d{2}))?)?$/);
+  if (iso) {
+    const [, date, hour, minute, second, , zone, zoneHour, zoneMinute] = iso;
+    if (!isValidIsoDate(date)) return raw;
+    if (hour !== undefined) {
+      if (Number(hour) > 23 || Number(minute) > 59 || Number(second ?? 0) > 59) return raw;
+      if (zone && zone !== 'Z' && (Number(zoneHour) > 14 || Number(zoneMinute) > 59 || (Number(zoneHour) === 14 && Number(zoneMinute) !== 0))) return raw;
+      if (!Number.isFinite(Date.parse(raw))) return raw;
+    }
+    return date;
+  }
+  const match = raw.match(/^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4})$/);
+  if (match) {
+    const date = match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+    return isValidIsoDate(date) ? date : raw;
+  }
   return raw;
 };
 const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
