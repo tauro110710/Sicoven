@@ -2676,7 +2676,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         allSettlements,
         targetCompanyId,
         rif,
-        amountUsd
+        amountUsd,
+        draft.date
       );
       const sourceCreditNoteAllocations = allocation.creditNoteAllocations;
       const sourceCreditNoteIds = sourceCreditNoteAllocations.map(source => source.creditNoteId);
@@ -2920,7 +2921,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       supplierAdvanceSettlements,
       currentCompany.id,
       rif,
-      amountUsd
+      amountUsd,
+      draft.date
     );
     const sourceCreditNoteAllocations = fifoAllocation.creditNoteAllocations;
     const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
