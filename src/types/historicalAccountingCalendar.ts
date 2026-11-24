@@ -159,6 +159,11 @@ export function convertVenezuelanAmount(
   return negative && result !== '0' ? '-' + result : result;
 }
 
+/** Convert a nominal Bs amount from its operation-date scale to the scale effective on a target date. */
+export function convertVenezuelanAmountBetweenDates(amount: string | number, fromDate: string, toDate: string): string {
+  return convertVenezuelanAmount(amount, getVenezuelanMonetaryEra(fromDate).id, getVenezuelanMonetaryEra(toDate).id);
+}
+
 /** Normalize historical bolivar values to the current scale for comparative reports, without changing originals. */
 export function normalizeVenezuelanAmountToCurrentScale(amount: string | number, effectiveDate: string): string {
   return convertVenezuelanAmount(amount, getVenezuelanMonetaryEra(effectiveDate).id, 'BOLIVAR_DIGITAL');
