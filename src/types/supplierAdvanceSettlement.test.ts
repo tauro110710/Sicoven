@@ -222,3 +222,9 @@ test('FIFO de una liquidación nueva excluye fuentes posteriores a su fecha', ()
     [], 'company-1', 'J-12345678-9', 3, '2026-10-30'
   ), /saldo disponible combinado/);
 });
+
+
+test('rejects supplier settlement exceeding balance by rounded micro-dollar in draft validation', () => {
+  assert.match(validateSupplierAdvanceSettlementDraft({ ...base, amountUsd: 10.000004 }, 10, undefined, ['1.1.1.03']) || '', /supera el saldo/);
+  assert.equal(validateSupplierAdvanceSettlementDraft({ ...base, amountUsd: 10 }, 10, undefined, ['1.1.1.03']), null);
+});
