@@ -282,3 +282,16 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
   });
 
 });
+
+  it('registra el detalle de capas PEPS consumidas con origen, cantidad y costos', () => {
+    const result = calculateFifoIssue([
+      { sourceMovementId: 'compra-antigua', documentRef: 'FAC-1', date: '2026-01-01', quantity: 1, unitCostBs: 10, unitCostUsd: 1 },
+      { sourceMovementId: 'compra-nueva', documentRef: 'FAC-2', date: '2026-01-02', quantity: 2, unitCostBs: 20, unitCostUsd: 2 }
+    ], 1.5);
+    assert.deepEqual(result.consumedLayers, [
+      { sourceMovementId: 'compra-antigua', documentRef: 'FAC-1', date: '2026-01-01', quantity: 1, unitCostBs: 10, unitCostUsd: 1 },
+      { sourceMovementId: 'compra-nueva', documentRef: 'FAC-2', date: '2026-01-02', quantity: 0.5, unitCostBs: 20, unitCostUsd: 2 }
+    ]);
+    assert.equal(result.totalCostBs, 20);
+    assert.equal(result.totalCostUsd, 2);
+  });
