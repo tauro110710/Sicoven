@@ -2,9 +2,9 @@ name: SICOVEN CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/historical-accounting-reconstruction']
   push:
-    branches: [main, 'ci/windows-installer-validation', 'feat/historical-accounting-reconstruction']
+    branches: [main, 'ci/windows-installer-validation', 'feat/historical-accounting-reconstruction', 'fix/**']
 
 permissions:
   contents: read
