@@ -119,6 +119,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
   const replayed: InventoryMovement[] = [];
   const replayedById = new Map<string, InventoryMovement>();
   const returnedBySale = new Map<string, number>();
+  const returnedLayersBySale = new Map<string, number[]>();
 
   for (const { movement: source } of ordered) {
     const id = String(source.id || '').trim();
@@ -176,10 +177,48 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         }
         returnedBySale.set(original.id, returned);
         if (state.product.costingMethod === 'PEPS') {
-          throw new Error('La devolución PEPS requiere conservar el detalle de capas consumidas por la venta original; no se aplicará un costo promedio estimado.');
+          const soldLayers = original.consumedFifoLayers || [];
+          const soldLayerQuantity = soldLayers.reduce((sum, layer) => sum + Number(layer.quantity), 0);
+          if (!soldLayers.length || Math.abs(soldLayerQuantity - Number(original.quantity)) > 1e-8 ||
+              soldLayers.some(layer => !validPositive(Number(layer.quantity)) ||
+                !validNonNegative(Number(layer.unitCostBs)) || !validNonNegative(Number(layer.unitCostUsd)) ||
+                !String(layer.sourceMovementId || '').trim())) {
+            throw new Error('La venta original no conserva capas PEPS completas y válidas; no se puede restituir la devolución con trazabilidad.');
+          }
+          const returnedLayerAmounts = returnedLayersBySale.get(original.id) || soldLayers.map(() => 0);
+          let remainingReturn = requestedQuantity;
+          const restoredLayers: NonNullable<InventoryMovement['consumedFifoLayers']> = [];
+          for (let layerIndex = 0; layerIndex < soldLayers.length && remainingReturn > 1e-8; layerIndex++) {
+            const soldLayer = soldLayers[layerIndex];
+            const availableFromLayer = Number(soldLayer.quantity) - returnedLayerAmounts[layerIndex];
+            if (availableFromLayer <= 1e-8) continue;
+            const restoredQuantity = Math.min(availableFromLayer, remainingReturn);
+            const layerDate = validDate(String(soldLayer.date || original.date)) ? String(soldLayer.date || original.date) : original.date;
+            const restoredCostBs = Number(convertVenezuelanAmountBetweenDates(Number(soldLayer.unitCostBs), layerDate, source.date));
+            restoredLayers.push({
+              sourceMovementId: soldLayer.sourceMovementId,
+              date: layerDate,
+              documentRef: soldLayer.documentRef,
+              quantity: restoredQuantity,
+              unitCostBs: restoredCostBs,
+              unitCostUsd: Number(soldLayer.unitCostUsd)
+            });
+            returnedLayerAmounts[layerIndex] += restoredQuantity;
+            remainingReturn -= restoredQuantity;
+          }
+          if (remainingReturn > 1e-8) {
+            throw new Error('La devolución PEPS excede las capas originales aún no restituidas.');
+          }
+          returnedLayersBySale.set(original.id, returnedLayerAmounts);
+          consumedFifoLayers = restoredLayers;
+          totalCostBs = roundBs(restoredLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0));
+          totalCostUsd = roundUsd(restoredLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0));
+          entryUnitCostBs = totalCostBs / requestedQuantity;
+          entryUnitCostUsd = totalCostUsd / requestedQuantity;
+        } else {
+          entryUnitCostBs = Number(convertVenezuelanAmountBetweenDates(original.unitCostBs, original.date, source.date));
+          entryUnitCostUsd = Number(original.unitCostUsd);
         }
-        entryUnitCostBs = Number(convertVenezuelanAmountBetweenDates(original.unitCostBs, original.date, source.date));
-        entryUnitCostUsd = Number(original.unitCostUsd);
       }
       if (!validNonNegative(entryUnitCostBs) || !validNonNegative(entryUnitCostUsd)) {
         throw new Error('El costo efectivo de entrada no es válido en ' + (source.documentRef || id) + '.');
@@ -188,8 +227,17 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       unitCostUsd = entryUnitCostUsd;
       if (state.product.costingMethod === 'PEPS') {
         const priorLayers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
-        totalCostBs = roundBs(requestedQuantity * entryUnitCostBs);
-        totalCostUsd = roundUsd(requestedQuantity * entryUnitCostUsd);
+        if (source.concept === 'DEVOLUCION_CLIENTE') {
+          totalCostBs = roundBs((consumedFifoLayers || []).reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0));
+          totalCostUsd = roundUsd((consumedFifoLayers || []).reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0));
+          entryUnitCostBs = totalCostBs / requestedQuantity;
+          entryUnitCostUsd = totalCostUsd / requestedQuantity;
+          unitCostBs = entryUnitCostBs;
+          unitCostUsd = entryUnitCostUsd;
+        } else {
+          totalCostBs = roundBs(requestedQuantity * entryUnitCostBs);
+          totalCostUsd = roundUsd(requestedQuantity * entryUnitCostUsd);
+        }
         nextQuantity += requestedQuantity;
         const totalBs = roundBs(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) + totalCostBs);
         const totalUsd = roundUsd(priorLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) + totalCostUsd);
