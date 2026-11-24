@@ -182,3 +182,27 @@ test('PEPS reconvierte las capas antes de disminuir existencia con un ajuste pos
   assert.equal(result.movements[1].balanceTotalUsd, 1);
   assert.equal(result.products[0].avgCostUsd, 1);
 });
+
+
+test('permite reconstruir movimientos anteriores a 2018 sin tasa BCV y conserva valoración solo en Bs', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-pre-bcv', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'sale-pre-bcv', date: '2014-03-11', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 })
+  ]);
+  assert.equal(result.movements[0].totalCostBs, 100);
+  assert.equal(result.movements[1].totalCostBs, 50);
+  assert.equal(result.movements[1].totalCostUsd, 0);
+  assert.equal(result.products[0].currentStock, 1);
+  assert.equal(result.products[0].avgCostUsd, 0);
+});
+
+test('permite reconstrucción PEPS pre-2018 sin tasa BCV, sin inventar USD', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-pre-bcv', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'sale-pre-bcv', date: '2014-03-11', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 50);
+  assert.equal(result.movements[1].totalCostUsd, 0);
+  assert.equal(result.products[0].currentStock, 1);
+  assert.equal(result.products[0].avgCostUsd, 0);
+});
