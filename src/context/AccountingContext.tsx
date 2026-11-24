@@ -424,6 +424,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const activeImportBatchRef = useRef<ActiveAccountingImportBatch | null>(null);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
+  const supplierAdvancePoolLockRef = useRef<Set<string>>(new Set());
   const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
   // Evita dos enteramientos simultáneos sobre la misma declaración usando el mismo snapshot React.
   const vatPaymentInFlightRef = useRef<Set<string>>(new Set());
@@ -2812,7 +2813,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
+  const registerSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
     assertSQLitePersistenceReady('Liquidar anticipo a proveedor');
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
     const rif = String(draft.supplierRif || '').trim().toUpperCase();
@@ -2995,6 +2996,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       supplierAdvanceSettlementInFlightRef.current.delete(operationKey);
     }
   };
+
+  const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
+    const supplierKey = [currentCompany.id, String(draft.supplierRif || '').trim().toUpperCase()].join('|');
+    if (supplierAdvancePoolLockRef.current.has(supplierKey)) {
+      throw new Error('Ya hay una aplicación o reembolso de anticipo de este proveedor en proceso. Espere antes de registrar otra.');
+    }
+    supplierAdvancePoolLockRef.current.add(supplierKey);
+    try {
+      return await registerSupplierAdvanceSettlement(draft);
+    } finally {
+      supplierAdvancePoolLockRef.current.delete(supplierKey);
+    }
+  };
+
 
   const addCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
     assertSQLitePersistenceReady('Registrar cobro o pago de factura');
