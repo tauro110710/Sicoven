@@ -5594,6 +5594,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let newAverageUsd = Number(product.avgCostUsd || 0);
       let salidaFifoUsdCost: number | null = null;
       let salidaFifoUsdUnit: number | null = null;
+      let salidaFifoConsumedLayers: InventoryMovement['consumedFifoLayers'];
       let newStock = product.currentStock;
       let newAverageBs = product.avgCostBs;
       let movementQuantity = Number(row.quantity);
@@ -5616,6 +5617,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           totalCostBs = fifoIssue.totalCostBs;
           salidaFifoUsdCost = fifoIssue.totalCostUsd;
           salidaFifoUsdUnit = fifoIssue.unitCostUsd;
+          salidaFifoConsumedLayers = fifoIssue.consumedLayers;
           unitCostUsd = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
@@ -5673,6 +5675,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
         companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostUsd, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
+        ...(salidaFifoConsumedLayers ? { consumedFifoLayers: salidaFifoConsumedLayers } : {}),
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
