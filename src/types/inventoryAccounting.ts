@@ -32,19 +32,34 @@ export function calculateVnrProvisionLedgerBalance(
     throw new Error('No se puede reconstruir la provisión VNR sin código de artículo, asientos y cuenta correctora válidos.');
   }
 
-  const includedIds = new Set(
-    journalEntries
-      .filter(entry => String(entry.referenceDoc || '').startsWith('VNR-' + code + '-'))
-      .map(entry => String(entry.id))
+  const idCounts = new Map<string, number>();
+  for (const entry of journalEntries) {
+    const id = String(entry.id || '').trim();
+    if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1);
+  }
+  const initialEntries = journalEntries.filter(entry =>
+    String(entry.referenceDoc || '').startsWith('VNR-' + code + '-')
   );
+  if (initialEntries.some(entry => !String(entry.id || '').trim())) {
+    throw new Error('El historial VNR contiene asientos iniciales sin identificador único.');
+  }
+  const includedIds = new Set(initialEntries.map(entry => String(entry.id).trim()));
+  if ([...includedIds].some(id => idCounts.get(id) !== 1)) {
+    throw new Error('El historial VNR contiene identificadores duplicados; no se puede reconstruir el saldo con trazabilidad.');
+  }
   let expanded = true;
   while (expanded) {
     expanded = false;
     for (const entry of journalEntries) {
-      if (entry.reversalOfEntryId && includedIds.has(String(entry.reversalOfEntryId)) && !includedIds.has(String(entry.id))) {
-        includedIds.add(String(entry.id));
-        expanded = true;
+      const targetId = String(entry.reversalOfEntryId || '').trim();
+      const entryId = String(entry.id || '').trim();
+      if (!targetId || !includedIds.has(targetId)) continue;
+      if (!entryId || idCounts.get(entryId) !== 1 || entryId === targetId) {
+        throw new Error('Una reversión del historial VNR no conserva un identificador único.');
       }
+      if (includedIds.has(entryId)) continue;
+      includedIds.add(entryId);
+      expanded = true;
     }
   }
 
