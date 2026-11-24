@@ -102,14 +102,14 @@ export const parseMigrationNumber = (value: unknown): number => {
     if (parts.length !== 2 || !/^\d+$/.test(parts[1])) return NaN;
     integerPart = parts[0];
     decimalPart = parts[1];
-    const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (groupSeparator === '.' ? '\\.' : ',') + '\\d{3})+$');
+    const groupingPattern = new RegExp('^\\d{1,3}(?:' + (groupSeparator === '.' ? '\\.' : ',') + '\\d{3})+$');
     if (integerPart.includes(groupSeparator) && !groupingPattern.test(integerPart)) return NaN;
     integerPart = integerPart.split(groupSeparator).join('');
   } else if (hasComma || hasDot) {
     const separator = hasComma ? ',' : '.';
     const parts = raw.split(separator);
     if (parts.length > 2) {
-      const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (separator === '.' ? '\\.' : ',') + '\\d{3})+$');
+      const groupingPattern = new RegExp('^\\d{1,3}(?:' + (separator === '.' ? '\\.' : ',') + '\\d{3})+$');
       if (!groupingPattern.test(raw)) return NaN;
       integerPart = raw.split(separator).join('');
     } else {
@@ -117,7 +117,7 @@ export const parseMigrationNumber = (value: unknown): number => {
       if (!whole || !fraction) return NaN;
       const isThousands = fraction.length === 3 && whole.length <= 3 && whole !== '0';
       if (isThousands) {
-        const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (separator === '.' ? '\\.' : ',') + '\\d{3})+$');
+        const groupingPattern = new RegExp('^\\d{1,3}(?:' + (separator === '.' ? '\\.' : ',') + '\\d{3})+$');
         if (!groupingPattern.test(raw)) return NaN;
         integerPart = raw.split(separator).join('');
       } else {
