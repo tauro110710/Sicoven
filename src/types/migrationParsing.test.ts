@@ -62,15 +62,15 @@ test('valida fechas ISO reales y rechaza fechas imposibles', () => {
   assert.equal(isValidIsoDate(''), false);
 });
 test('rejects quote embedded in unquoted field', () => {
-  assert.throws(() => parseDelimitedRecords('codigo,nombre\\nA1,tor"nillo'), /posición inválida/);
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,tor"nillo'), /posición inválida/);
 });
 
 test('rejects garbage after a closing quoted field', () => {
-  assert.throws(() => parseDelimitedRecords('codigo,nombre\\nA1,"tornillo"x'), /después de cerrar/);
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,"tornillo"x'), /después de cerrar/);
 });
 
 test('accepts whitespace after a quoted field before delimiter', () => {
-  const rows = parseDelimitedRecords('codigo,nombre,precio\\nA1,"tornillo"  ,12');
+  const rows = parseDelimitedRecords('codigo,nombre,precio\nA1,"tornillo"  ,12');
   assert.equal(rows[0].nombre, 'tornillo');
   assert.equal(rows[0].precio, '12');
 });
