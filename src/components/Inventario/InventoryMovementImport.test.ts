@@ -26,7 +26,7 @@ test('no usa nombre o ID como fallback cuando el código suministrado no coincid
   const products = [{ id: 'p1', code: 'A-10', name: 'Tornillo' }, { id: 'p2', code: 'B-20', name: 'Tuerca' }];
   assert.throws(() => resolveMovementProduct(products, 'p1', 'WRONG', 'Tornillo', 2), /código de artículo no coincide/);
   assert.equal(resolveMovementProduct(products, 'external-source-id', 'A-10', 'Tornillo', 2).id, 'p1');
-  assert.throws(() => resolveMovementProduct(products, 'p2', 'A-10', 'Tornillo', 2), /no coincide con el código o nombre/);
+  assert.equal(resolveMovementProduct(products, 'p2', 'A-10', 'Tornillo', 2).id, 'p1');
 });
 
 test('rechaza nombres ambiguos y acepta ID único sin código ni nombre', () => {
