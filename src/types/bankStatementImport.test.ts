@@ -205,7 +205,7 @@ test('rejects blank and duplicate normalized Excel headers and data beyond heade
 });
 
 test('detects delimiters outside quoted header text', () => {
-  const csv='Fecha,Referencia,\"Descripción, banco\",Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\\n2026-11-06,TR-1,\"Depósito, cliente\",Crédito,100,BS,10,2026-11-06';
+  const csv='Fecha,Referencia,\"Descripción, banco\",Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,\"Depósito, cliente\",Crédito,100,BS,10,2026-11-06';
   const [row]=normalizeBankStatementRows(parseBankStatementCsv(csv),'BS');
   assert.equal(row.description,'Depósito, cliente');
   assert.deepEqual(row.errors,[]);
