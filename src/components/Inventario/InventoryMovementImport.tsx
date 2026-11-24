@@ -126,12 +126,6 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
     try {
       const sourceRows = await rowsFromFile(file);
       if (!sourceRows.length) throw new Error('No se encontraron filas de movimientos.');
-      const byCode = new Map<string, typeof products>();
-      const byName = new Map<string, typeof products>();
-      products.forEach(product => {
-        byCode.set(normalize(product.code), [...(byCode.get(normalize(product.code)) ?? []), product]);
-        byName.set(normalize(product.name), [...(byName.get(normalize(product.name)) ?? []), product]);
-      });
       const result = sourceRows.map((row, index): PreparedRow => {
         const sourceProductId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '').trim();
         const code = String(valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code') ?? '').trim();
