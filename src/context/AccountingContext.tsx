@@ -1931,6 +1931,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
     }
+    // Cash outgoing backstop: enforce posted availability for Bs/USD cash accounts
+    // just like bank auxiliaries. Runs before state insertion and includes the active
+    // atomic import batch to prevent a batch from spending the same cash twice.
+    if (!entry.isAdjusted && !['APERTURA', 'CIERRE'].includes(entry.type)) {
+      const cashPlan = buildCashOutgoingPlan(entry.items);
+      if (cashPlan.length) {
+        const balanceEntries = activeImportBatchRef.current
+          ? [...journalEntries, ...activeImportBatchRef.current.journalEntries]
+          : journalEntries;
+        for (const cash of cashPlan) {
+          const availableBalance = calculateCashAccountAvailableBalance({
+            companyId: targetCompany.id,
+            accountCode: cash.accountCode,
+            asOfDate: entry.date,
+            journalEntries: balanceEntries
+          });
+          validateBankOutgoingAvailability({
+            availableBalance,
+            requestedAmount: cash.amount,
+            currency: cash.currency
+          });
+        }
+      }
+    }
+
     // Domain-level backstop: every newly posted credit to a bank auxiliary is
     // an outgoing movement and must fit the available balance at its effective date.
     // Reconciliation adjustments are excluded because they record bank facts that
