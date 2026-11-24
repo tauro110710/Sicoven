@@ -188,6 +188,10 @@ export function reconstructFifoLayers(
       if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
       if (movement.concept === 'DEVOLUCION_COMPRA') {
         if (!movement.correctionForMovementId) throw new Error('Una devolución PEPS a proveedor no identifica la entrada original que debe descargar.');
+        const originalPurchase = ordered.find(({ movement: candidate }) => candidate.id === movement.correctionForMovementId)?.movement;
+        if (!originalPurchase || originalPurchase.type !== 'ENTRADA' || originalPurchase.concept !== 'COMPRA') {
+          throw new Error('Una devolución PEPS a proveedor debe vincularse a una entrada de compra original válida.');
+        }
         consumeLayers(quantity, movement.documentRef || date, movement.correctionForMovementId);
       } else {
         consumeLayers(quantity, movement.documentRef || date);
