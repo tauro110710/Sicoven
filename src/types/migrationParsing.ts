@@ -75,20 +75,58 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
 export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
-  let raw = String(value).trim().replace(/[\s\u00a0]/g, '').replace(/[^0-9,().+\-]/g, '');
-  if (!/\d/.test(raw)) return NaN;
-  if (raw.startsWith('(') && raw.endsWith(')')) raw = '-' + raw.slice(1, -1);
-  const commas = (raw.match(/,/g) || []).length;
-  const dots = (raw.match(/\./g) || []).length;
-  if (commas && dots) {
-    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) raw = raw.replace(/\./g, '').replace(',', '.');
-    else raw = raw.replace(/,/g, '');
-  } else if (commas) {
-    if (commas > 1 || /,\d{3}$/.test(raw)) raw = raw.replace(/,/g, '');
-    else raw = raw.replace(',', '.');
-  } else if (dots > 1 || /\.\d{3}$/.test(raw)) {
-    raw = raw.replace(/\./g, '');
+  let raw = String(value).trim().replace(/[\s\u00a0]/g, '');
+  let negative = false;
+  if (raw.startsWith('(') || raw.endsWith(')')) {
+    if (!(raw.startsWith('(') && raw.endsWith(')'))) return NaN;
+    negative = true;
+    raw = raw.slice(1, -1);
   }
-  const parsed = Number(raw);
+  if (raw.startsWith('-') || raw.startsWith('+')) {
+    if (negative) return NaN;
+    negative = raw.startsWith('-');
+    raw = raw.slice(1);
+  }
+  const currency = /^(?:Bs(?:f|s)?\.?|US\$|USD|VES|VEF|VEB|EUR|€|\$)/i;
+  const suffixCurrency = /(?:Bs(?:f|s)?\.?|US\$|USD|VES|VEF|VEB|EUR|€|\$)$/i;
+  raw = raw.replace(currency, '').replace(suffixCurrency, '');
+  if (!/^\d[\d.,]*$/.test(raw)) return NaN;
+  const hasComma = raw.includes(',');
+  const hasDot = raw.includes('.');
+  let integerPart = raw;
+  let decimalPart = '';
+  if (hasComma && hasDot) {
+    const decimalSeparator = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? ',' : '.';
+    const groupSeparator = decimalSeparator === ',' ? '.' : ',';
+    const parts = raw.split(decimalSeparator);
+    if (parts.length !== 2 || !/^\d+$/.test(parts[1])) return NaN;
+    integerPart = parts[0];
+    decimalPart = parts[1];
+    const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (groupSeparator === '.' ? '\\\\.' : ',') + '\\\\d{3})+$');
+    if (integerPart.includes(groupSeparator) && !groupingPattern.test(integerPart)) return NaN;
+    integerPart = integerPart.split(groupSeparator).join('');
+  } else if (hasComma || hasDot) {
+    const separator = hasComma ? ',' : '.';
+    const parts = raw.split(separator);
+    if (parts.length > 2) {
+      const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (separator === '.' ? '\\\\.' : ',') + '\\\\d{3})+$');
+      if (!groupingPattern.test(raw)) return NaN;
+      integerPart = raw.split(separator).join('');
+    } else {
+      const [whole, fraction] = parts;
+      if (!whole || !fraction) return NaN;
+      const isThousands = fraction.length === 3 && whole.length <= 3 && whole !== '0';
+      if (isThousands) {
+        const groupingPattern = new RegExp('^\\\\d{1,3}(?:' + (separator === '.' ? '\\\\.' : ',') + '\\\\d{3})+$');
+        if (!groupingPattern.test(raw)) return NaN;
+        integerPart = raw.split(separator).join('');
+      } else {
+        integerPart = whole;
+        decimalPart = fraction;
+      }
+    }
+  }
+  const normalized = (negative ? '-' : '') + integerPart + (decimalPart ? '.' + decimalPart : '');
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : NaN;
 };
