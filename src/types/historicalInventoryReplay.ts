@@ -57,7 +57,13 @@ const toFifoSnapshot = (movement: InventoryMovement, targetDate = movement.date)
   date: movement.date,
   documentRef: movement.documentRef,
   balanceQty: movement.balanceQty,
-  correctionForMovementId: movement.correctionForMovementId
+  correctionForMovementId: movement.correctionForMovementId,
+  consumedFifoLayers: movement.consumedFifoLayers?.map(layer => ({
+    ...layer,
+    unitCostBs: layer.unitCostBs > 0 && validDate(movement.date) && validDate(targetDate)
+      ? Number(convertVenezuelanAmountBetweenDates(layer.unitCostBs, movement.date, targetDate))
+      : layer.unitCostBs
+  }))
 });
 
 /**
