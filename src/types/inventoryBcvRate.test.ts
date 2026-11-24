@@ -48,6 +48,15 @@ test('same-day manual corrections take precedence even if their saved timestamp 
   assert.equal(resolveInventoryBcvRate(history, '2026-11-06')?.mode, 'MANUAL');
 });
 
+test('ignores invalid BCV effective dates and invalid requested dates', () => {
+  const history = [
+    entry('2026-02-30', 900),
+    entry('2026-11-06', 890)
+  ];
+  assert.equal(resolveInventoryBcvRate(history, '2026-02-28'), null);
+  assert.equal(resolveInventoryBcvRate(history, '2026-02-30'), null);
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-99'), null);
+});
 test('inventory BCV date resolver selects the latest effective rate not after the date', () => {
   const history = [
     entry('2026-11-04', 870),
