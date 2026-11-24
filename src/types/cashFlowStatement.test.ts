@@ -227,6 +227,26 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('normalizes cash movements across the October 2021 monetary reconversion to year-end scale', () => {
+    const entries = [
+      entry('receipt-before-reconversion', '2021-09-15', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 1_000_000, 0, 1, 0),
+        line('4.1', 'Ingresos operacionales', 0, 1_000_000, 0, 1)
+      ]),
+      entry('receipt-after-reconversion', '2021-10-15', 'VENTA', [
+        line('1.1.1.01', 'Caja principal', 1, 0, 1, 0),
+        line('4.1', 'Ingresos operacionales', 0, 1, 0, 1)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2021);
+    assert.equal(report.netChangeBs, 2);
+    assert.equal(report.closingCashBs, 2);
+    assert.equal(report.ledgerClosingCashBs, 2);
+    assert.equal(report.activities.OPERACION.receiptsBs, 2);
+    assert.equal(report.isReconciled, true);
+    assert.equal(report.isFullyClassified, true);
+  });
+
   it('isolates companies and rejects invalid report periods', () => {
     assert.throws(() => buildCashFlowReport([], accounts, banks, '', 2026));
     assert.throws(() => buildCashFlowReport([], accounts, banks, 'co-1', 0));
