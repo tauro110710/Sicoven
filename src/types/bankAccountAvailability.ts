@@ -1,4 +1,5 @@
 import type { BankAccount, JournalEntry } from './accounting';
+import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 
 type BankBalanceInput = {
   bankAccount: BankAccount;
@@ -72,9 +73,13 @@ export function calculateCashAccountAvailableBalance(input: {
     if (entry.companyId !== input.companyId || entry.date > input.asOfDate) return total;
     for (const item of entry.items) {
       if (item.accountCode !== input.accountCode) continue;
-      total += currency === 'USD'
-        ? Number(item.debitUsd || 0) - Number(item.creditUsd || 0)
-        : Number(item.debitBs || 0) - Number(item.creditBs || 0);
+      if (currency === 'USD') {
+        total += Number(item.debitUsd || 0) - Number(item.creditUsd || 0);
+      } else {
+        const debitBs = Number(convertVenezuelanAmountBetweenDates(Number(item.debitBs || 0), entry.date, input.asOfDate));
+        const creditBs = Number(convertVenezuelanAmountBetweenDates(Number(item.creditBs || 0), entry.date, input.asOfDate));
+        total += debitBs - creditBs;
+      }
     }
     return total;
   }, 0);
