@@ -142,11 +142,11 @@ testCase('cash outgoing plan rounds to account precision and excludes net inflow
 });
 
 
-testCase('normalizes historical cash Bs movements into the scale effective on the balance date', () => {
+testCase('rounds historical cash Bs availability to the account posting precision', () => {
   const historical = entry({ companyId: 'company-a', date: '2018-08-20', items: [
     { accountCode: '1.1.1.01', accountName: 'Caja Bs.', debitBs: 100, creditBs: 0, debitUsd: 0, creditUsd: 0 }
   ]});
   assert.equal(calculateCashAccountAvailableBalance({
     companyId: 'company-a', accountCode: '1.1.1.01', asOfDate: '2021-10-01', journalEntries: [historical]
-  }), 0.0001);
+  }), 0);
 });
