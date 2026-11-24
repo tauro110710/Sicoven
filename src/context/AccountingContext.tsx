@@ -4096,7 +4096,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
           unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
           balanceQty: item.balanceQty, id: item.id, concept: item.concept,
-          correctionForMovementId: item.correctionForMovementId
+          correctionForMovementId: item.correctionForMovementId,
+          consumedFifoLayers: item.consumedFifoLayers
         }));
       const layers = reconstructFifoLayers(history, product.currentStock).map(layer => ({ ...layer }));
       for (const returnedLine of valuation.lines.filter(item => item.productId === product.id)) {
