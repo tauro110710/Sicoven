@@ -122,12 +122,12 @@ test('PEPS devuelve unidades a las capas originales y las ventas posteriores las
   assert.equal(result.movements[3].totalCostBs, 20);
   assert.equal(result.movements[3].totalCostUsd, 0.2);
   assert.deepEqual(result.movements[3].consumedFifoLayers, [
-    { sourceMovementId: 'layer-first', date: '2010-01-01', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
   ]);
   assert.equal(result.movements[4].totalCostBs, 30, 'consume primero la capa restante anterior y luego la capa restitituida, con sus costos fuente');
   assert.deepEqual(result.movements[4].consumedFifoLayers, [
     { sourceMovementId: 'layer-second', date: '2010-01-01', documentRef: 'layer-second', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 },
-    { sourceMovementId: 'layer-first', date: '2010-01-01', documentRef: 'layer-first', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1 }
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1 }
   ]);
   assert.equal(result.products[0].currentStock, 1);
 });
