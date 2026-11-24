@@ -54,24 +54,67 @@ const isoDate = (value: unknown): string => {
 const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
 
 export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
-  const firstLine=source.split(/\r?\n/).find(line=>line.trim())||'';
-  const delimiters=['\t',';','|',','];
-  const delimiter=delimiters.sort((a,b)=>firstLine.split(b).length-firstLine.split(a).length)[0];
-  const rows:string[][]=[];let row:string[]=[],cell='',quoted=false;
-  for(let i=0;i<source.length;i++){
-    const ch=source[i];
-    if(ch==='"'&&quoted&&source[i+1]==='"'){cell+='"';i++;continue;}
-    if(ch==='"'){quoted=!quoted;continue;}
-    if(ch===delimiter&&!quoted){row.push(cell);cell='';continue;}
-    if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&source[i+1]==='\n')i++;row.push(cell);cell='';if(row.some(v=>v.trim()))rows.push(row);row=[];continue;}
-    cell+=ch;
+  const input = source.replace(/^\\uFEFF/, '');
+  const delimiters = ['\\t', ';', '|', ','];
+  const parseWithDelimiter = (delimiter: string): string[][] => {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let quoted = false;
+    let quoteClosed = false;
+    const finishCell = () => { row.push(cell.trim()); cell = ''; quoteClosed = false; };
+    const finishRow = () => { finishCell(); if (row.some(value => value.trim() !== '')) rows.push(row); row = []; };
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i];
+      if (quoted) {
+        if (ch === '"') {
+          if (input[i + 1] === '"') { cell += '"'; i++; }
+          else { quoted = false; quoteClosed = true; }
+        } else cell += ch;
+      } else if (quoteClosed) {
+        if (ch === delimiter) finishCell();
+        else if (ch === '\\n' || ch === '\\r') {
+          if (ch === '\\r' && input[i + 1] === '\\n') i++;
+          finishRow();
+        } else if (ch !== ' ' && ch !== '\\t') {
+          throw new Error('El extracto contiene caracteres inválidos después de cerrar un campo entre comillas.');
+        }
+      } else if (ch === delimiter) finishCell();
+      else if (ch === '\\n' || ch === '\\r') {
+        if (ch === '\\r' && input[i + 1] === '\\n') i++;
+        finishRow();
+      } else if (ch === '"') {
+        if (cell.trim() !== '') throw new Error('El extracto contiene comillas en una posición inválida.');
+        cell = '';
+        quoted = true;
+      } else cell += ch;
+    }
+    if (quoted) throw new Error('El extracto contiene comillas sin cerrar.');
+    finishCell();
+    if (row.some(value => value.trim() !== '')) rows.push(row);
+    return rows;
+  };
+  const candidates = delimiters.map(delimiter => {
+    try {
+      const rows = parseWithDelimiter(delimiter);
+      const width = rows[0]?.length ?? 0;
+      const consistentRows = rows.filter(row => row.length === width).length;
+      return { delimiter, rows, score: width > 1 ? consistentRows * 100 + width : 0 };
+    } catch (error) {
+      return { delimiter, rows: [] as string[][], score: -1, error };
+    }
+  }).sort((a,b)=>b.score-a.score);
+  const parsed = candidates.find(candidate => candidate.score >= 0 && candidate.rows.length >= 2 && candidate.rows[0].length >= 2);
+  if (!parsed) {
+    const firstError = candidates.find(candidate => candidate.score < 0)?.error;
+    if (firstError instanceof Error) throw firstError;
+    throw new Error('El archivo delimitado no contiene encabezados y movimientos válidos.');
   }
-  if(quoted)throw new Error('El CSV contiene comillas sin cerrar.');
-  if(cell.length||row.length){row.push(cell);rows.push(row);}
-  if(rows.length<2)throw new Error('El archivo CSV no contiene encabezado y movimientos.');
-  const headers=rows[0].map(normalizeHeader);
-  if(!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h)))throw new Error('El archivo delimitado debe incluir columnas de fecha e importe.');
-  return rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
+  const headers = parsed.rows[0].map(normalizeHeader);
+  if (!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h))) {
+    throw new Error('El archivo delimitado debe incluir columnas de fecha e importe.');
+  }
+  return parsed.rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
 }
 
 /** TXT delimitado: admite tabulador, punto y coma, barra vertical o coma, con encabezados. */
