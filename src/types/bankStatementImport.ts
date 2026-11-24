@@ -54,8 +54,8 @@ const isoDate = (value: unknown): string => {
 const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
 
 export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
-  const input = source.replace(/^\\uFEFF/, '');
-  const delimiters = ['\\t', ';', '|', ','];
+  const input = source.replace(/^\uFEFF/, '');
+  const delimiters = ['\t', ';', '|', ','];
   const parseWithDelimiter = (delimiter: string): string[][] => {
     const rows: string[][] = [];
     let row: string[] = [];
@@ -73,15 +73,15 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
         } else cell += ch;
       } else if (quoteClosed) {
         if (ch === delimiter) finishCell();
-        else if (ch === '\\n' || ch === '\\r') {
-          if (ch === '\\r' && input[i + 1] === '\\n') i++;
+        else if (ch === '\n' || ch === '\r') {
+          if (ch === '\r' && input[i + 1] === '\n') i++;
           finishRow();
-        } else if (ch !== ' ' && ch !== '\\t') {
+        } else if (ch !== ' ' && ch !== '\t') {
           throw new Error('El extracto contiene caracteres inválidos después de cerrar un campo entre comillas.');
         }
       } else if (ch === delimiter) finishCell();
-      else if (ch === '\\n' || ch === '\\r') {
-        if (ch === '\\r' && input[i + 1] === '\\n') i++;
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && input[i + 1] === '\n') i++;
         finishRow();
       } else if (ch === '"') {
         if (cell.trim() !== '') throw new Error('El extracto contiene comillas en una posición inválida.');
