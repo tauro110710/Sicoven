@@ -114,6 +114,8 @@ export function parseBankStatementCsv(source: string): BankStatementRawRow[] {
   if (!headers.some(h=>aliases.date.includes(h))||!headers.some(h=>aliases.amount.includes(h))) {
     throw new Error('El archivo delimitado debe incluir columnas de fecha e importe.');
   }
+  const inconsistent = parsed.rows.slice(1).findIndex(values => values.length !== headers.length);
+  if (inconsistent !== -1) throw new Error('El extracto contiene filas con un número de columnas diferente al encabezado.');
   return parsed.rows.slice(1).map(values=>Object.fromEntries(headers.map((header,index)=>[header,values[index]??''])));
 }
 
