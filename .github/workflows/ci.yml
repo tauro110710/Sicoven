@@ -37,15 +37,18 @@ jobs:
           npm test 2>&1 | tee verification-evidence/tests.log
       - name: TypeScript validation and record result
         run: |
+          set -o pipefail
           npm run check:types 2>&1 | tee verification-evidence/typescript.log
           echo "TypeScript: PASS" >> verification-evidence/summary.md
       - name: Production build and record result
         run: |
+          set -o pipefail
           npm run build 2>&1 | tee verification-evidence/build.log
           echo "Production build: PASS" >> verification-evidence/summary.md
       - name: Generate verification report and SHA-256 manifest
         if: always()
         run: |
+          set -o pipefail
           {
             echo "# SICOVEN CI verification evidence"
             echo
