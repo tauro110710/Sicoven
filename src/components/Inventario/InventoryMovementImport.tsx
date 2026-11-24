@@ -19,8 +19,8 @@ const valueAt = (row: SourceRow, ...names: string[]) => {
 export const dateValue = (value: unknown): string => {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
   const raw = String(value ?? '').trim();
-  const iso = raw.match(/^(\\d{4}-\\d{2}-\\d{2})(?:T(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d{1,3}))?)?(Z|[+-](\\d{2}):?(\\d{2}))?)?$/);
-  if (iso) {
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-](\d{2}):?(\d{2}))?)?$/);
+  if ( iso ) {
     const [, date, hour, minute, second, , zone, zoneHour, zoneMinute] = iso;
     if (!isValidIsoDate(date)) return raw;
     if (hour !== undefined) {
@@ -30,7 +30,7 @@ export const dateValue = (value: unknown): string => {
     }
     return date;
   }
-  const match = raw.match(/^(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4})$/);
+  const match = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   if (match) {
     const date = match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
     return isValidIsoDate(date) ? date : raw;
