@@ -49,7 +49,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     const rif = supplierRif.trim().toUpperCase();
     const sourceNotes = purchases.filter(p => p.companyId === currentCompany.id && p.documentType === '03' &&
       !p.isCancelled && String(p.supplierRif || '').trim().toUpperCase() === rif &&
-      Number(p.supplierAdvanceUsd || 0) > 0).sort((a, b) =>
+      Number(p.supplierAdvanceUsd || 0) > 0 && String(p.invoiceDate || '') <= date).sort((a, b) =>
         String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')) || String(a.id).localeCompare(String(b.id)));
     try {
       const allocations = allocateSupplierAdvanceCreditNotes(
@@ -73,7 +73,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     } catch (cause) {
       return { rows: [], error: cause instanceof Error ? cause.message : 'No se pudo calcular la distribución FIFO.' };
     }
-  }, [supplierRif, usd, purchases, supplierAdvanceSettlements, currentCompany.id]);
+  }, [supplierRif, usd, date, purchases, supplierAdvanceSettlements, currentCompany.id]);
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
