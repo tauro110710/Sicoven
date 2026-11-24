@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
+import { allocateSupplierAdvanceCreditNotes, allocateSupplierAdvanceFifo, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
 
 const base = {
   supplierRif: 'J-12345678-9', date: '2026-10-30', amountUsd: 20,
@@ -180,4 +180,20 @@ test('reconstruye el FIFO de notas junto con liquidaciones mixtas y directas pre
     [{ id: 'nc-1', amountUsd: 10, bookValueBs: 1000 }],
     [directOnly, mixed], 'company-1', 'J-12345678-9', 8
   ), [{ creditNoteId: 'nc-1', amountUsd: 8, bookValueBs: 800 }]);
+});
+
+
+test('rechaza liquidaciones históricas FIFO que consumen anticipos de fechas futuras', () => {
+  const prior = {
+    id: 'settlement-future-source', companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
+    sourceCreditNoteIds: ['nc-future'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-future', amountUsd: 2, bookValueBs: 200 }],
+    sourceDirectAdvanceIds: [], sourceDirectAdvanceAllocations: [],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 2, amountBs: 200,
+    advanceBookValueBs: 200, bcvRate: 100, journalEntryId: 'entry-future', createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [{ id: 'nc-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
+    [], [prior], 'company-1', 'J-12345678-9', 1
+  ), /anterior a su fecha de origen/);
 });
