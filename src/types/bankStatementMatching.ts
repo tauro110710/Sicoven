@@ -50,7 +50,7 @@ export function validateBankMovementFxSnapshot(input: {
     throw new Error('La fecha de vigencia de la tasa BCV debe ser válida y no puede ser posterior al movimiento bancario.');
   }
   if (Math.abs(Math.round(Number(input.amountBs) * 100) / 100 -
-      Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0.01) {
+      Math.round(Number(input.amountUsd) * Number(input.bcvRate) * 100) / 100) > 0) {
     throw new Error('Los importes Bs. y USD del movimiento no concilian con la tasa BCV efectiva en esa fecha.');
   }
 }
