@@ -6,6 +6,7 @@ test('normaliza fechas ISO exactas y fechas ISO con hora', () => {
   assert.equal(dateValue('2026-10-27'), '2026-10-27');
   assert.equal(dateValue('2026-10-27T12:30:45Z'), '2026-10-27');
   assert.equal(dateValue('27/10/2026'), '2026-10-27');
+  assert.equal(dateValue('27/10-2026'), '27/10-2026');
 });
 
 test('rechaza fechas con sufijos o tiempos inválidos sin truncarlos', () => {
