@@ -1,5 +1,3 @@
-import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
-
 export type SupplierAdvanceSettlementKind = 'REFUND_RECEIVED' | 'APPLIED_TO_PURCHASE';
 
 export interface SupplierAdvanceCreditNoteAllocation {
@@ -87,8 +85,8 @@ export function validateSupplierAdvanceSettlementDraft(
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return 'La fecha de liquidación no es válida.';
   if (![draft.amountUsd, draft.amountBs, draft.bcvRate, availableUsd].every(Number.isFinite) ||
-      draft.amountUsd <= 0 || draft.amountBs <= 0 || draft.bcvRate < 0 || (isBcvRateRequiredForDate(draft.date) && draft.bcvRate <= 0) || availableUsd < 0) {
-    return 'Importes y saldo deben ser positivos; la tasa BCV solo es obligatoria desde 2018.';
+      draft.amountUsd <= 0 || draft.amountBs <= 0 || draft.bcvRate <= 0 || availableUsd < 0) {
+    return 'Importes, saldo y tasa deben ser válidos y mayores que cero.';
   }
   if (draft.amountUsd > availableUsd + 0.000005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
   if (draft.kind === 'REFUND_RECEIVED' && (!Number.isFinite(draft.cashReceivedBs ?? draft.amountBs) || (draft.cashReceivedBs ?? draft.amountBs) <= 0)) return 'El importe efectivamente recibido en Bs debe ser válido.';
@@ -241,7 +239,8 @@ export function allocateSupplierAdvanceFifo(
   settlements: SupplierAdvanceSettlement[],
   companyId: string,
   supplierRif: string,
-  requestedUsd: number
+  requestedUsd: number,
+  settlementDate?: string
 ): SupplierAdvanceFifoAllocation {
   if (!companyId.trim() || !String(supplierRif || '').trim()) {
     throw new Error('La empresa y el RIF del proveedor son obligatorios para distribuir anticipos.');
@@ -253,6 +252,13 @@ export function allocateSupplierAdvanceFifo(
     throw new Error('No se pudo reconstruir el historial de anticipos del proveedor.');
   }
   const rif = supplierRif.trim().toUpperCase();
+  if (settlementDate !== undefined) {
+    const parts = settlementDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
+    const parsed = parts ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+    if (!parts || !parsed || parsed.getUTCFullYear() !== parts[0] || parsed.getUTCMonth() !== parts[1] - 1 || parsed.getUTCDate() !== parts[2]) {
+      throw new Error('La fecha de liquidación FIFO es inválida.');
+    }
+  }
   const sources: SupplierAdvanceFifoSource[] = [
     ...creditNotes.map(source => ({ ...source, kind: 'CREDIT_NOTE' as const })),
     ...directAdvances.map(source => ({ ...source, kind: 'DIRECT_ADVANCE' as const }))
@@ -274,11 +280,18 @@ export function allocateSupplierAdvanceFifo(
     }
     sourceKeys.add(key);
   }
+  const sourceDates = new Map(sources.map(source => [source.kind + ':' + source.id, source.date]));
 
   const used = new Map<string, { usd: number; bs: number }>();
   for (const settlement of settlements) {
     if (settlement.companyId !== companyId || settlement.isReversed ||
         String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
+    const settlementDateParts = String(settlement.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
+    const settlementDateParsed = settlementDateParts ? new Date(Date.UTC(settlementDateParts[0], settlementDateParts[1] - 1, settlementDateParts[2])) : null;
+    if (!settlementDateParts || !settlementDateParsed || settlementDateParsed.getUTCFullYear() !== settlementDateParts[0] ||
+        settlementDateParsed.getUTCMonth() !== settlementDateParts[1] - 1 || settlementDateParsed.getUTCDate() !== settlementDateParts[2]) {
+      throw new Error('Una liquidación histórica de anticipos tiene una fecha inválida.');
+    }
     const noteAllocations = settlement.sourceCreditNoteAllocations || [];
     const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
     if (!noteAllocations.length && (settlement.sourceCreditNoteIds || []).length) {
@@ -319,6 +332,9 @@ export function allocateSupplierAdvanceFifo(
     }
     for (const allocation of noteAllocations) {
       const key = 'CREDIT_NOTE:' + allocation.creditNoteId;
+      if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
+        throw new Error('Una liquidación histórica consume una nota de crédito posterior a su fecha de origen.');
+      }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia una nota de crédito inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
       current.usd = roundUsd(current.usd + allocation.amountUsd);
@@ -327,6 +343,9 @@ export function allocateSupplierAdvanceFifo(
     }
     for (const allocation of directAllocations) {
       const key = 'DIRECT_ADVANCE:' + allocation.directAdvanceId;
+      if (sourceDates.has(key) && sourceDates.get(key)! > settlement.date) {
+        throw new Error('Una liquidación histórica consume un anticipo directo posterior a su fecha de origen.');
+      }
       if (!sourceKeys.has(key)) throw new Error('Una liquidación histórica referencia un anticipo directo inexistente.');
       const current = used.get(key) || { usd: 0, bs: 0 };
       current.usd = roundUsd(current.usd + allocation.amountUsd);
@@ -335,7 +354,7 @@ export function allocateSupplierAdvanceFifo(
     }
   }
 
-  const ordered = [...sources].sort((a, b) =>
+  const ordered = sources.filter(source => settlementDate === undefined || source.date <= settlementDate).sort((a, b) =>
     a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)
   );
   let remaining = roundUsd(requestedUsd);
