@@ -159,3 +159,24 @@ DATA:OFXSGML
   assert.equal(normalized[1].reference,'OFX-002');
   assert.deepEqual(normalized.flatMap(row=>row.errors),[]);
 });
+
+
+test('parses OFX exchange-rate effective date from a full timestamp', () => {
+  const ofx=`OFXHEADER:100
+DATA:OFXSGML
+<OFX><CURDEF>USD
+<BANKTRANLIST>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20261106120000
+<TRNAMT>-12.50
+<FITID>OFX-RATE-TIMESTAMP
+<NAME>Bank fee
+<EXCHANGERATE>10.00
+<EXCHANGERATEDATE>20261106120000
+</BANKTRANLIST></OFX>`;
+  const parsed=parseOfxBankStatement(ofx);
+  const [row]=normalizeBankStatementRows(parsed.rows,parsed.currency);
+  assert.equal(row.bcvRateEffectiveDate,'2026-11-06');
+  assert.deepEqual(row.errors,[]);
+});
