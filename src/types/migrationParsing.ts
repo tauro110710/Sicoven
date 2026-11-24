@@ -16,7 +16,7 @@ const splitDelimited = (text: string, delimiter: string): string[][] => {
   let cell = '';
   let quoted = false;
   let quoteClosed = false;
-  const input = text.replace(/^\\uFEFF/, '');
+  const input = text.replace(/^\uFEFF/, '');
   const finishCell = () => { row.push(cell.trim()); cell = ''; quoteClosed = false; };
   const finishRow = () => {
     finishCell();
