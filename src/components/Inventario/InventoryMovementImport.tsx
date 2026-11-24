@@ -37,6 +37,28 @@ export const dateValue = (value: unknown): string => {
   }
   return raw;
 };
+export const resolveMovementProduct = <T extends { id: string; code: string; name: string }>(
+  products: T[],
+  sourceProductId: string,
+  code: string,
+  name: string,
+  rowNumber: number
+): T => {
+  const byCode = code ? products.filter(product => normalize(product.code) === normalize(code)) : [];
+  const byName = name ? products.filter(product => normalize(product.name) === normalize(name)) : [];
+  const byId = sourceProductId ? products.find(product => product.id === sourceProductId) : undefined;
+  if (code && byCode.length === 0) throw new Error('Fila ' + rowNumber + ': el código de artículo no coincide con ningún producto registrado.');
+  if (byCode.length > 1) throw new Error('Fila ' + rowNumber + ': el código coincide con varios artículos. Corrija el archivo para usar un código único.');
+  if (!code && name && byName.length === 0) throw new Error('Fila ' + rowNumber + ': el nombre de artículo no coincide con ningún producto registrado.');
+  if (!code && byName.length > 1) throw new Error('Fila ' + rowNumber + ': el nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
+  if (sourceProductId && !byId) throw new Error('Fila ' + rowNumber + ': el identificador de producto no existe en la empresa destino.');
+  const product = byCode[0] ?? byName[0] ?? byId;
+  if (!product) throw new Error('Fila ' + rowNumber + ': no se encontró un artículo único por código, nombre o ID.');
+  if (byId && byId.id !== product.id) throw new Error('Fila ' + rowNumber + ': el ID de producto no coincide con el código o nombre indicado.');
+  if (code && name && normalize(product.name) !== normalize(name)) throw new Error('Fila ' + rowNumber + ': el código y nombre identifican productos distintos.');
+  return product;
+};
+
 const rowsFromFile = async (file: File): Promise<SourceRow[]> => {
   const extension = file.name.toLowerCase().split('.').pop();
   if (extension === 'json') {
@@ -114,11 +136,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
         const sourceProductId = String(valueAt(row, 'productId', 'productoId', 'idProducto') ?? '').trim();
         const code = String(valueAt(row, 'productCode', 'codigoProducto', 'codigo', 'sku', 'code') ?? '').trim();
         const name = String(valueAt(row, 'productName', 'nombreProducto', 'producto', 'nombre', 'descripcion') ?? '').trim();
-        const codeMatches = code ? byCode.get(normalize(code)) ?? [] : [];
-        const nameMatches = name ? byName.get(normalize(name)) ?? [] : [];
-        if (codeMatches.length > 1 || (!codeMatches.length && nameMatches.length > 1)) throw new Error('Fila ' + (index + 2) + ': el código o nombre coincide con varios artículos. Corrija el archivo para usar un código único.');
-        const product = codeMatches[0] || nameMatches[0] || (sourceProductId ? products.find(item => item.id === sourceProductId) : undefined);
-        if (!product) throw new Error('Fila ' + (index + 2) + ': no se encontró un artículo único por código o nombre. Código: ' + (code || '—') + '.');
+        const product = resolveMovementProduct(products, sourceProductId, code, name, index + 2);
         const rawType = normalize(valueAt(row, 'type', 'movementType', 'tipo', 'tipoMovimiento'));
         const rawConcept = normalize(valueAt(row, 'concept', 'concepto', 'operacion', 'operation'));
         let type: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
