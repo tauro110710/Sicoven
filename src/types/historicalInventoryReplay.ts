@@ -1,4 +1,5 @@
 import type { InventoryMovement, InventoryProduct } from './accounting';
+import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 import {
   applyFifoAdjustment,
   calculateFifoIssue,
@@ -30,6 +31,7 @@ interface ProductState {
   averageUsd: number;
   lastCostBs: number;
   lastCostUsd: number;
+  lastBsDate: string;
   history: InventoryMovement[];
 }
 
@@ -43,12 +45,14 @@ const validDate = (value: string): boolean => {
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
 const validNonNegative = (value: number): boolean => Number.isFinite(value) && value >= 0;
 
-const toFifoSnapshot = (movement: InventoryMovement): FifoMovementSnapshot => ({
+const toFifoSnapshot = (movement: InventoryMovement, targetDate = movement.date): FifoMovementSnapshot => ({
   id: movement.id,
   type: movement.type,
   concept: movement.concept,
   quantity: movement.quantity,
-  unitCostBs: movement.unitCostBs,
+  unitCostBs: movement.unitCostBs > 0 && validDate(movement.date) && validDate(targetDate)
+    ? Number(convertVenezuelanAmountBetweenDates(movement.unitCostBs, movement.date, targetDate))
+    : movement.unitCostBs,
   unitCostUsd: movement.unitCostUsd,
   date: movement.date,
   documentRef: movement.documentRef,
@@ -98,6 +102,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       averageUsd: 0,
       lastCostBs: 0,
       lastCostUsd: 0,
+      lastBsDate: startDate,
       history: []
     });
   }
@@ -124,6 +129,9 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     }
     const state = states.get(source.productId);
     if (!state) throw new Error('El movimiento ' + (source.documentRef || id) + ' referencia un artículo inexistente en la empresa.');
+    if (state.quantity > 0 && state.averageBs > 0 && state.lastBsDate !== source.date) {
+      state.averageBs = Number(convertVenezuelanAmountBetweenDates(state.averageBs, state.lastBsDate, source.date));
+    }
     const rate = Number(source.bcvRate || 0);
     const requestedQuantity = Number(source.quantity);
     const requestedUnitCostBs = Number(source.unitCostBs);
@@ -169,7 +177,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         if (state.product.costingMethod === 'PEPS') {
           throw new Error('La devolución PEPS requiere conservar el detalle de capas consumidas por la venta original; no se aplicará un costo promedio estimado.');
         }
-        entryUnitCostBs = Number(original.unitCostBs);
+        entryUnitCostBs = Number(convertVenezuelanAmountBetweenDates(original.unitCostBs, original.date, source.date));
         entryUnitCostUsd = Number(original.unitCostUsd);
       }
       if (!validNonNegative(entryUnitCostBs) || !validNonNegative(entryUnitCostUsd)) {
@@ -178,7 +186,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       unitCostBs = entryUnitCostBs;
       unitCostUsd = entryUnitCostUsd;
       if (state.product.costingMethod === 'PEPS') {
-        const priorLayers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
+        const priorLayers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
         totalCostBs = roundBs(requestedQuantity * entryUnitCostBs);
         totalCostUsd = roundUsd(requestedQuantity * entryUnitCostUsd);
         nextQuantity += requestedQuantity;
@@ -205,7 +213,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         throw new Error('Existencia insuficiente al reconstruir ' + (source.documentRef || id) + ': disponibles ' + state.quantity + ', solicitadas ' + requestedQuantity + '.');
       }
       if (state.product.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
+        const layers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
         const fifo = calculateFifoIssue(layers, requestedQuantity);
         totalCostBs = fifo.totalCostBs;
         totalCostUsd = fifo.totalCostUsd;
@@ -298,6 +306,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     state.averageBs = nextAverageBs;
     state.averageUsd = nextAverageUsd;
     state.history.push(nextMovement);
+    state.lastBsDate = source.date;
     replayedById.set(nextMovement.id, nextMovement);
     replayed.push(nextMovement);
   }
