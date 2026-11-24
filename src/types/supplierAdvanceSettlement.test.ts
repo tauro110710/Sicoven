@@ -213,3 +213,12 @@ test('rechaza liquidaciones FIFO históricas que consumen anticipos directos con
     [prior], 'company-1', 'J-12345678-9', 1
   ), /anterior a su fecha de origen/);
 });
+
+test('FIFO de una liquidación nueva excluye fuentes posteriores a su fecha', () => {
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [{ id: 'nc-before', amountUsd: 2, bookValueBs: 200, date: '2026-10-28' },
+     { id: 'nc-after', amountUsd: 10, bookValueBs: 1000, date: '2026-10-31' }],
+    [{ id: 'direct-after', amountUsd: 5, bookValueBs: 500, date: '2026-11-01' }],
+    [], 'company-1', 'J-12345678-9', 3, '2026-10-30'
+  ), /saldo disponible combinado/);
+});
