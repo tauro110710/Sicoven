@@ -151,16 +151,22 @@ export async function parseBankStatementXlsx(buffer: ArrayBuffer): Promise<BankS
   const headerRow = worksheet.getRow(1);
   const headers: string[] = [];
   headerRow.eachCell({ includeEmpty: true }, (cell, column) => { headers[column - 1] = normalizeHeader(cell.text || cell.value); });
+  if (headers.some(header => !header)) throw new Error('El Excel contiene encabezados vacíos. Renombre todas las columnas.');
+  if (new Set(headers).size !== headers.length) throw new Error('El Excel contiene encabezados duplicados o equivalentes. Renombre las columnas.');
   if (!headers.some(h => aliases.date.includes(h)) || !headers.some(h => aliases.amount.includes(h))) {
     throw new Error('El Excel debe incluir columnas de fecha e importe en la primera hoja.');
   }
   const rows: BankStatementRawRow[] = [];
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
+    const extraValues: unknown[] = [];
+    row.eachCell({ includeEmpty: false }, (cell, column) => { if (column > headers.length && String(cell.value ?? '').trim() !== '') extraValues.push(cell.value); });
+    if (extraValues.length) throw new Error('El Excel contiene datos fuera de las columnas del encabezado en la fila '+rowNumber+'. No se importará para evitar pérdida de datos.');
     const record: BankStatementRawRow = {};
-    row.eachCell({ includeEmpty: true }, (cell, column) => {
+    headers.forEach((header, index) => {
+      const cell = row.getCell(index + 1);
       const value = cell.value;
-      record[headers[column - 1] || String(column)] =
+      record[header] =
         value && typeof value === 'object' && 'text' in value ? String((value as { text: string }).text) :
         value && typeof value === 'object' && 'result' in value ? (value as { result: unknown }).result :
         value;
