@@ -176,3 +176,8 @@ test('accepts escaped quotes, multiline fields, and whitespace after quoted fiel
 test('rejects a delimited file that does not contain required headers', () => {
   assert.throws(() => parseBankStatementCsv('Nombre,Concepto\nAna,Deposito'), /columnas de fecha e importe/);
 });
+
+
+test('rejects rows with a different column count than the bank statement header', () => {
+  assert.throws(() => parseBankStatementCsv('Fecha,Importe,Descripcion\n2026-11-06,10\n2026-11-07,20,segunda,extra'), /número de columnas diferente/);
+});
