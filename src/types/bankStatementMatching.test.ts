@@ -125,3 +125,13 @@ test('requires exact zero residual in both currencies for a balanced reconciliat
   assert.equal(calculateBankReconciliationBalances({bookMovements:books,statementMovements:[{...line,amountBs:99.96}]}).isBalanced,false);
   assert.equal(calculateBankReconciliationBalances({bookMovements:books,statementMovements:[{...line,amountUsd:0.999999}]}).isBalanced,false);
 });
+
+test('identifies duplicate reference-less statement rows using exact remaining fields', () => {
+  const existing=[{bankAccountId:'bank-a',date:'2026-11-01',reference:'',type:'DEBIT' as const,amountBs:100,amountUsd:0}];
+  const candidate={bankAccountId:'bank-a',date:'2026-11-01',reference:'  ',type:'DEBIT' as const,amountBs:100,amountUsd:0};
+  assert.equal(isDuplicateBankStatementMovement({existing,candidate}),true);
+  assert.equal(isDuplicateBankStatementMovement({existing,candidate:{...candidate,amountBs:100.01}}),false);
+  assert.equal(isDuplicateBankStatementMovement({existing,candidate:{...candidate,date:'2026-11-02'}}),false);
+  assert.equal(isDuplicateBankStatementMovement({existing,candidate:{...candidate,bankAccountId:'bank-b'}}),false);
+  assert.equal(isDuplicateBankStatementMovement({existing,candidate:{...candidate,reference:'REF-1'}}),false);
+});
