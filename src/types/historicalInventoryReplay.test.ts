@@ -60,6 +60,10 @@ test('conserva el orden original de movimientos del mismo día para PEPS', () =>
   ]);
   assert.equal(result.movements[2].totalCostBs, 40);
   assert.equal(result.movements[2].totalCostUsd, 0.4);
+  assert.deepEqual(result.movements[2].consumedFifoLayers, [
+    { sourceMovementId: 'layer-first', documentRef: 'layer-first', date: '2010-01-01', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 },
+    { sourceMovementId: 'layer-second', documentRef: 'layer-second', date: '2010-01-01', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 }
+  ]);
   assert.equal(result.products[0].currentStock, 1);
   assert.equal(result.products[0].avgCostBs, 20);
 });
