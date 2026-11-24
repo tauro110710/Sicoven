@@ -35,7 +35,7 @@ const splitDelimited = (text: string, delimiter: string): string[][] => {
       else if (ch === '\n' || ch === '\r') {
         if (ch === '\r' && input[i + 1] === '\n') i++;
         finishRow();
-      } else if (ch !== ' ' && ch !== '\\t') {
+      } else if (ch !== ' ' && ch !== '\t') {
         throw new Error('El archivo delimitado contiene caracteres después de cerrar un campo entre comillas.');
       }
     } else if (ch === delimiter) finishCell();
