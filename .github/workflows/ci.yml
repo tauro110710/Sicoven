@@ -30,6 +30,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
         run: npm install --no-audit --no-fund
       - name: Run automated tests and save evidence
+        id: test
         run: |
           mkdir -p verification-evidence
           set -o pipefail
