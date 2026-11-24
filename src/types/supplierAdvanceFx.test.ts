@@ -39,3 +39,14 @@ test('preserves six-decimal USD amounts such as Bs. 106.48 at a BCV rate of 100'
     settlementValueBs: 106.48, exchangeDifferenceBs: 0
   });
 });
+
+
+test('rejects a settlement that exceeds available balance by a rounded micro-dollar', () => {
+  assert.throws(() => calculateSupplierAdvanceFxSettlement(1, 100, 1.000004, 100), /supera el saldo/);
+});
+
+test('allows settlement equal to available balance after six-decimal normalization', () => {
+  assert.deepEqual(calculateSupplierAdvanceFxSettlement(1.0000004, 100, 1, 100), {
+    amountUsd: 1, advanceBookValueBs: 100, settlementValueBs: 100, exchangeDifferenceBs: 0
+  });
+});
