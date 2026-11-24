@@ -239,7 +239,8 @@ export function allocateSupplierAdvanceFifo(
   settlements: SupplierAdvanceSettlement[],
   companyId: string,
   supplierRif: string,
-  requestedUsd: number
+  requestedUsd: number,
+  settlementDate?: string
 ): SupplierAdvanceFifoAllocation {
   if (!companyId.trim() || !String(supplierRif || '').trim()) {
     throw new Error('La empresa y el RIF del proveedor son obligatorios para distribuir anticipos.');
@@ -251,6 +252,13 @@ export function allocateSupplierAdvanceFifo(
     throw new Error('No se pudo reconstruir el historial de anticipos del proveedor.');
   }
   const rif = supplierRif.trim().toUpperCase();
+  if (settlementDate !== undefined) {
+    const parts = settlementDate.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)?.slice(1).map(Number);
+    const parsed = parts ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+    if (!parts || !parsed || parsed.getUTCFullYear() !== parts[0] || parsed.getUTCMonth() !== parts[1] - 1 || parsed.getUTCDate() !== parts[2]) {
+      throw new Error('La fecha de liquidación FIFO es inválida.');
+    }
+  }
   const sources: SupplierAdvanceFifoSource[] = [
     ...creditNotes.map(source => ({ ...source, kind: 'CREDIT_NOTE' as const })),
     ...directAdvances.map(source => ({ ...source, kind: 'DIRECT_ADVANCE' as const }))
@@ -346,7 +354,7 @@ export function allocateSupplierAdvanceFifo(
     }
   }
 
-  const ordered = [...sources].sort((a, b) =>
+  const ordered = sources.filter(source => settlementDate === undefined || source.date <= settlementDate).sort((a, b) =>
     a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)
   );
   let remaining = roundUsd(requestedUsd);
