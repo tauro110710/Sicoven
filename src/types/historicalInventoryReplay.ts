@@ -200,7 +200,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
             if (availableFromLayer <= 1e-8) continue;
             const restoredQuantity = Math.min(availableFromLayer, remainingReturn);
             const layerDate = validDate(String(soldLayer.date || original.date)) ? String(soldLayer.date || original.date) : original.date;
-            const restoredCostBs = Number(convertVenezuelanAmountBetweenDates(Number(soldLayer.unitCostBs), layerDate, source.date));
+            const restoredCostBs = Number(convertVenezuelanAmountBetweenDates(Number(soldLayer.unitCostBs), original.date, source.date));
             restoredLayers.push({
               sourceMovementId: soldLayer.sourceMovementId,
               date: layerDate,
