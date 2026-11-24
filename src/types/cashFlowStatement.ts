@@ -295,7 +295,7 @@ export function buildCashFlowReport(
     ? companyEntries.filter(entry => entry.date >= openingBoundary.date && entry.date <= end)
     : companyEntries.filter(entry => entry.date <= end);
   const ledgerClosing = ledgerEntries.reduce((sum, entry) => {
-    const net = cashNet(entry, cashCodes);
+    const net = cashNet(entry, cashCodes, end);
     return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
   }, { bs: 0, usd: 0 });
   const closingCashBs = opening.bs + netChangeBs;
