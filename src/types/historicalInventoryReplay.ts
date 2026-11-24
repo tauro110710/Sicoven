@@ -249,7 +249,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       const delta = targetQuantity - state.quantity;
       movementQuantity = Math.abs(delta);
       if (state.product.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
+        const layers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
         const adjusted = applyFifoAdjustment(layers, delta, requestedUnitCostBs,
           roundUsd(requestedUnitCostBs / rate), source.date, source.documentRef);
         totalCostBs = adjusted.totalCostBs;
