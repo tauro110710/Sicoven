@@ -103,6 +103,13 @@ test('rejects impossible calendar dates when registering IVA payment support', (
   ]), /fecha inválidos/);
 });
 
+test('rejects IVA payment amounts with fractional cent amounts', () => {
+  assert.throws(() => validate(['m-1'], 60.001), /céntimos exactos/);
+  assert.throws(() => validate(['m-1'], 0), /céntimos exactos/);
+  assert.throws(() => validate(['m-1'], -60), /céntimos exactos/);
+  assert.doesNotThrow(() => validate(['m-1'], 60));
+});
+
 test('rejects invalid filing and payment dates before bank-link validation', () => {
   const invalidDraft = { ...draft(['m-1'], 60), occurredAt: '2026-02-30' };
   assert.throws(() => validateVatPaymentBankLinks({
