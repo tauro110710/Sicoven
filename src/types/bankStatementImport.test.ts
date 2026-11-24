@@ -159,3 +159,27 @@ DATA:OFXSGML
   assert.equal(normalized[1].reference,'OFX-002');
   assert.deepEqual(normalized.flatMap(row=>row.errors),[]);
 });
+
+
+test('rejects blank and duplicate normalized Excel bank headers', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const makeBuffer = async (headers: unknown[]) => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Extracto');
+    sheet.addRow(headers);
+    sheet.addRow(['2026-11-06','TR-1','Depósito','Crédito',100,'BS',10,'2026-11-06']);
+    return workbook.xlsx.writeBuffer();
+  };
+  await assert.rejects(async () => parseBankStatementXlsx(await makeBuffer(['Fecha','','Importe'])), /encabezados vacíos/);
+  await assert.rejects(async () => parseBankStatementXlsx(await makeBuffer(['Fecha','FECHA','Importe'])), /encabezados duplicados/);
+});
+
+test('rejects non-empty Excel bank import cells outside the header range', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Extracto');
+  sheet.addRow(['Fecha','Referencia','Descripción','Tipo','Importe','Moneda','Tasa BCV','Fecha vigencia BCV']);
+  sheet.addRow(['2026-11-06','TR-1','Depósito','Crédito',100,'BS',10,'2026-11-06','EXTRA']);
+  const bytes = await workbook.xlsx.writeBuffer();
+  await assert.rejects(async () => parseBankStatementXlsx(bytes as ArrayBuffer), /datos fuera de las columnas.*fila 2/);
+});
