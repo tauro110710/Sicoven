@@ -4841,7 +4841,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           saleProductStateMap.set(product.id, {
             currentStock: product.currentStock,
             avgCostBs: product.avgCostBs,
-            avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
+            avgCostUsd: Number(product.avgCostUsd || 0)
           });
         }
       }
