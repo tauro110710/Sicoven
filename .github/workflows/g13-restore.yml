@@ -1,6 +1,7 @@
 name: SICOVEN G13 restore validation
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'electron/backup-restore.cjs'
