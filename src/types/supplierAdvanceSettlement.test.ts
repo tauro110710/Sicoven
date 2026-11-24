@@ -197,3 +197,19 @@ test('rechaza liquidaciones históricas FIFO que consumen anticipos de fechas fu
     [], [prior], 'company-1', 'J-12345678-9', 1
   ), /anterior a su fecha de origen/);
 });
+
+
+test('rechaza liquidaciones FIFO históricas que consumen anticipos directos con fecha futura', () => {
+  const prior = {
+    id: 'settlement-direct-future', companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: ['direct-future'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-future', amountUsd: 2, bookValueBs: 200 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 2, amountBs: 200,
+    advanceBookValueBs: 200, bcvRate: 100, journalEntryId: 'entry-direct-future', createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceFifo(
+    [], [{ id: 'direct-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
+    [prior], 'company-1', 'J-12345678-9', 1
+  ), /anterior a su fecha de origen/);
+});
