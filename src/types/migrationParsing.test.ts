@@ -61,3 +61,16 @@ test('valida fechas ISO reales y rechaza fechas imposibles', () => {
   assert.equal(isValidIsoDate('27/10/2026'), false);
   assert.equal(isValidIsoDate(''), false);
 });
+test('rechaza comillas en posición inválida dentro de campo sin comillas', () => {
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\\nA1,tor"nillo'), /posición inválida/);
+});
+
+test('rechaza texto sobrante después de cerrar campo entre comillas', () => {
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\\nA1,"tornillo"x'), /después de cerrar/);
+});
+
+test('acepta espacios después de campo entre comillas', () => {
+  const rows = parseDelimitedRecords('codigo,nombre\\nA1,"tornillo"  ,12');
+  assert.equal(rows[0].nombre, 'tornillo');
+  assert.equal(rows[0].precio, '12');
+});
