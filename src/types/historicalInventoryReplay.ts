@@ -213,7 +213,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
         throw new Error('Existencia insuficiente al reconstruir ' + (source.documentRef || id) + ': disponibles ' + state.quantity + ', solicitadas ' + requestedQuantity + '.');
       }
       if (state.product.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(state.history.map(toFifoSnapshot), state.quantity);
+        const layers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
         const fifo = calculateFifoIssue(layers, requestedQuantity);
         totalCostBs = fifo.totalCostBs;
         totalCostUsd = fifo.totalCostUsd;
