@@ -61,3 +61,16 @@ test('valida fechas ISO reales y rechaza fechas imposibles', () => {
   assert.equal(isValidIsoDate('27/10/2026'), false);
   assert.equal(isValidIsoDate(''), false);
 });
+test('rejects malformed numeric text instead of silently stripping characters', () => {
+  assert.equal(parseMigrationNumber('1a2'), Number.NaN);
+  assert.equal(parseMigrationNumber('12,3,4'), Number.NaN);
+  assert.equal(parseMigrationNumber('1.2.3'), Number.NaN);
+  assert.equal(parseMigrationNumber('1,23,45'), Number.NaN);
+  assert.equal(parseMigrationNumber('Bs. 1.234,56texto'), Number.NaN);
+});
+
+test('accepts common currency prefixes and suffixes with valid grouping', () => {
+  assert.equal(parseMigrationNumber('$1,234.56'), 1234.56);
+  assert.equal(parseMigrationNumber('1.234,56 Bs.'), 1234.56);
+  assert.equal(parseMigrationNumber('1.234.567'), 1234567);
+});
