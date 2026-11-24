@@ -3773,6 +3773,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
         autoMovements.push(autoMov);
@@ -4927,6 +4928,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         let totalCostUsd = 0;
         let unitCostBs = 0;
         let unitCostUsd = 0;
+        let consumedFifoLayers: InventoryMovement['consumedFifoLayers'];
         if (product.costingMethod === 'PEPS') {
           const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, pState.currentStock);
@@ -4935,6 +4937,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           totalCostUsd = fifoResult.totalCostUsd;
           unitCostBs = fifoResult.unitCostBs;
           unitCostUsd = fifoResult.unitCostUsd;
+          consumedFifoLayers = fifoResult.consumedLayers;
         } else {
           unitCostBs = pState.avgCostBs;
           unitCostUsd = pState.avgCostUsd;
