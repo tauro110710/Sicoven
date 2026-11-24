@@ -11,6 +11,7 @@ import {
   getCompanyTaxStatusForDate,
   getCompanyIgtfPerceptionAgentForDate,
   SaleRecord,
+  SaleInventoryLine,
   InventoryProduct,
   InventoryMovement,
   Customer,
@@ -4839,7 +4840,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const existing = map.get(productId);
         map.set(productId, existing ? { ...existing, quantity: Number(existing.quantity) + Number(line.quantity) } : { ...line, quantity: Number(line.quantity) });
         return map;
-      }, new Map<string, typeof saleData.inventoryLines[number]>()).values());
+      }, new Map<string, SaleInventoryLine>()).values());
       // Inicializar estado actual de cada producto.
       for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
@@ -4851,7 +4852,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           });
         }
       }
-      for (const line of saleData.inventoryLines!) {
+      for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
         if (!product) continue;
         const pState = saleProductStateMap.get(product.id)!;
