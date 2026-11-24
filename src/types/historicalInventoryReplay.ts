@@ -1,4 +1,5 @@
 import type { InventoryMovement, InventoryProduct } from './accounting';
+import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
 import {
   applyFifoAdjustment,
@@ -144,7 +145,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     const requestedUnitCostBs = Number(source.unitCostBs);
     const requestedUnitCostUsd = Number(source.unitCostUsd);
     const landedCostsBs = Number(source.additionalLandedCostsBs || 0);
-    if (!validPositive(rate) || !validPositive(requestedQuantity) ||
+    if (!validNonNegative(rate) || (isBcvRateRequiredForDate(source.date) && !validPositive(rate)) || !validPositive(requestedQuantity) ||
         !validNonNegative(requestedUnitCostBs) || !validNonNegative(requestedUnitCostUsd) ||
         !validNonNegative(landedCostsBs)) {
       throw new Error('El movimiento ' + (source.documentRef || id) + ' contiene tasa, cantidad o costos inválidos.');
@@ -155,7 +156,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
 
     let movementQuantity = requestedQuantity;
     let unitCostBs = requestedUnitCostBs;
-    let unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : roundUsd(requestedUnitCostBs / rate);
+    let unitCostUsd = requestedUnitCostUsd > 0 ? requestedUnitCostUsd : rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0;
     let totalCostBs = 0;
     let totalCostUsd = 0;
     let consumedFifoLayers: InventoryMovement['consumedFifoLayers'];
