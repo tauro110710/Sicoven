@@ -159,3 +159,14 @@ DATA:OFXSGML
   assert.equal(normalized[1].reference,'OFX-002');
   assert.deepEqual(normalized.flatMap(row=>row.errors),[]);
 });
+
+
+test('rejects malformed bank rows with missing or extra columns instead of silently truncating data', () => {
+  assert.throws(() => parseBankStatementCsv('Fecha,Referencia,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10'), /cantidad de columnas distinta.*fila 2/);
+  assert.throws(() => parseBankStatementCsv('Fecha,Referencia,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06,EXTRA'), /cantidad de columnas distinta.*fila 2/);
+});
+
+test('rejects empty or duplicate normalized bank statement headers', () => {
+  assert.throws(() => parseBankStatementCsv('Fecha,Referencia,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV,FECHA\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06,2026-11-06'), /encabezados duplicados/);
+  assert.throws(() => parseBankStatementCsv('Fecha,,Descripción,Tipo,Importe,Moneda,Tasa BCV,Fecha vigencia BCV\n2026-11-06,TR-1,Depósito,CREDIT,100,BS,10,2026-11-06'), /encabezados vacíos/);
+});
