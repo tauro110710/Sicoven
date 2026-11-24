@@ -26,6 +26,7 @@ const entry = (id: string, date: string, type: JournalEntry['type'], items: Jour
       line('1.1.1.01', 'Caja principal', 30, 0, 3, 0),
       line('4.1', 'Ingresos operacionales', 0, 30, 0, 3)
     ]);
+    sameDayReceipt.entryNumber = priorOpening.entryNumber + 1;
     const report = buildCashFlowReport([sameDayReceipt, priorOpening], accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 230);
     assert.equal(report.openingCashUsd, 23);
