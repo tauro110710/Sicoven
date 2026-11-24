@@ -117,7 +117,10 @@ export interface FifoMovementSnapshot {
   id?: string;
   concept?: string;
   correctionForMovementId?: string;
+  /** Layer provenance restored by a customer return; quantities must match the movement. */
+  consumedFifoLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
 }
+
 
 /**
  * Reconstructs PEPS layers only from the real movement history.
@@ -166,7 +169,20 @@ export function reconstructFifoLayers(
     }
     if (movement.type === 'ENTRADA') {
       if (!validPositive(quantity)) throw new Error('Una entrada PEPS debe contener una cantidad positiva.');
-      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      if (movement.concept === 'DEVOLUCION_CLIENTE') {
+        const restored = movement.consumedFifoLayers || [];
+        const restoredQuantity = restored.reduce((sum, layer) => sum + Number(layer.quantity), 0);
+        if (!restored.length || Math.abs(restoredQuantity - quantity) > 1e-8 || restored.some(layer =>
+          !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) ||
+          !validNonNegative(Number(layer.unitCostUsd)) || !String(layer.sourceMovementId || '').trim())) {
+          throw new Error('La devolución PEPS no conserva capas originales válidas o su cantidad no concilia.');
+        }
+        for (const layer of restored) {
+          layers.push({ quantity: Number(layer.quantity), unitCostBs: Number(layer.unitCostBs), unitCostUsd: Number(layer.unitCostUsd), date: layer.date || date, documentRef: layer.documentRef, sourceMovementId: layer.sourceMovementId });
+        }
+      } else {
+        layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      }
       runningQuantity += quantity;
     } else if (movement.type === 'SALIDA') {
       if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
