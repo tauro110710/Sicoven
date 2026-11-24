@@ -75,20 +75,43 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
 export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
-  let raw = String(value).trim().replace(/[\s\u00a0]/g, '').replace(/[^0-9,().+\-]/g, '');
-  if (!/\d/.test(raw)) return NaN;
-  if (raw.startsWith('(') && raw.endsWith(')')) raw = '-' + raw.slice(1, -1);
-  const commas = (raw.match(/,/g) || []).length;
-  const dots = (raw.match(/\./g) || []).length;
-  if (commas && dots) {
-    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) raw = raw.replace(/\./g, '').replace(',', '.');
-    else raw = raw.replace(/,/g, '');
-  } else if (commas) {
-    if (commas > 1 || /,\d{3}$/.test(raw)) raw = raw.replace(/,/g, '');
-    else raw = raw.replace(',', '.');
-  } else if (dots > 1 || /\.\d{3}$/.test(raw)) {
-    raw = raw.replace(/\./g, '');
+  let raw = String(value).trim().replace(/[\\s\\u00a0]/g, '');
+  let negativeByParentheses = false;
+  if (raw.startsWith('(') && raw.endsWith(')')) {
+    negativeByParentheses = true;
+    raw = raw.slice(1, -1);
+  } else if (raw.includes('(') || raw.includes(')')) return NaN;
+  const currency = /^(?:USD|US\\$|Bs(?:\\.S)?\\.?|VES|VEF|\\$)/i;
+  if (currency.test(raw)) raw = raw.replace(currency, '');
+  const currencySuffix = /(?:USD|US\\$|Bs(?:\\.S)?\\.?|VES|VEF|\\$)$/i;
+  if (currencySuffix.test(raw)) raw = raw.replace(currencySuffix, '');
+  if (!/^[+-]?\\d[\\d.,]*$/.test(raw)) return NaN;
+  const sign = raw.startsWith('-') ? -1 : 1;
+  if (raw.startsWith('+') || raw.startsWith('-')) raw = raw.slice(1);
+  const commaCount = (raw.match(/,/g) || []).length;
+  const dotCount = (raw.match(/\\./g) || []).length;
+  let normalized = raw;
+  if (commaCount && dotCount) {
+    const decimalSeparator = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? ',' : '.';
+    const groupSeparator = decimalSeparator === ',' ? '.' : ',';
+    const [integerPart, decimalPart] = raw.split(decimalSeparator);
+    if (!decimalPart || !/^\\d+$/.test(decimalPart) ||
+        (integerPart.includes(groupSeparator) && !new RegExp('^\\\\d{1,3}(?:' + (groupSeparator === '.' ? '\\\\.' : ',') + '\\\\d{3})+$').test(integerPart)) ||
+        integerPart.includes(decimalSeparator)) return NaN;
+    normalized = integerPart.replace(new RegExp(groupSeparator === '.' ? '\\\\.' : ',', 'g'), '') + '.' + decimalPart;
+  } else if (commaCount || dotCount) {
+    const separator = commaCount ? ',' : '.';
+    const count = commaCount || dotCount;
+    const parts = raw.split(separator);
+    if (count > 1) {
+      if (!/^\\d{1,3}$/.test(parts[0]) || parts.slice(1).some(part => !/^\\d{3}$/.test(part))) return NaN;
+      normalized = parts.join('');
+    } else {
+      const [whole, fraction] = parts;
+      if (!whole || !fraction || !/^\\d+$/.test(whole) || !/^\\d+$/.test(fraction)) return NaN;
+      normalized = fraction.length === 3 ? whole + fraction : whole + '.' + fraction;
+    }
   }
-  const parsed = Number(raw);
+  const parsed = Number(normalized) * sign * (negativeByParentheses ? -1 : 1);
   return Number.isFinite(parsed) ? parsed : NaN;
 };
