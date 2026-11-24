@@ -269,3 +269,17 @@ test('calculates a pre-2018 inventory credit note in Bs only when source has no 
   assert.equal(result.totalAmountBs > 0, true);
   assert.equal(result.totalAmountUsd, 0);
 });
+
+test('nota de crédito conserva el costo USD histórico de la entrada original', () => {
+  const sourceWithHistoricalUsd = { ...originalMovement, unitCostUsd: 3.25, totalCostUsd: 6.5 };
+  const result = calculatePurchaseCreditNote({
+    ...draft(),
+    lines: [{
+      product, originalMovement: sourceWithHistoricalUsd, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100
+    }]
+  });
+  assert.equal(result.lines[0].unitCostUsd, 3.25);
+  assert.equal(result.lines[0].inventoryCostUsd, 3.25);
+  assert.equal(result.inventoryCostUsd, 3.25);
+});
