@@ -136,6 +136,6 @@ export function calculateBankReconciliationBalances(input: {
   return {
     bookBalanceBs, bankStatementBalanceBs, adjustedBankBalanceBs, adjustedBookBalanceBs, differenceBs,
     bookBalanceUsd, bankStatementBalanceUsd, adjustedBankBalanceUsd, adjustedBookBalanceUsd, differenceUsd,
-    isBalanced: differenceBs < 0.05 && differenceUsd <= 0.000001
+    isBalanced: differenceBs === 0 && differenceUsd === 0
   };
 }
