@@ -29,7 +29,12 @@ export function calculateBankAvailableBalance(input: BankBalanceInput): number {
   const hasOpeningEntry = journalEntries.some(entry =>
     entry.companyId === companyId &&
     entry.referenceDoc === openingReference &&
-    entry.items.some(item => item.accountCode === bankAccount.accountCode)
+    entry.items.some(item => {
+      if (item.accountCode !== bankAccount.accountCode) return false;
+      const debit = currency === 'USD' ? Number(item.debitUsd || 0) : Number(item.debitBs || 0);
+      const credit = currency === 'USD' ? Number(item.creditUsd || 0) : Number(item.creditBs || 0);
+      return Number.isFinite(debit) && Number.isFinite(credit) && (debit !== 0 || credit !== 0);
+    })
   );
   const initialBalance = currency === 'USD'
     ? Number(bankAccount.initialBalanceUsd || 0)
