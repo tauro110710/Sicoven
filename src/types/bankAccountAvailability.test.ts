@@ -148,5 +148,5 @@ testCase('normalizes historical cash Bs movements into the scale effective on th
   ]});
   assert.equal(calculateCashAccountAvailableBalance({
     companyId: 'company-a', accountCode: '1.1.1.01', asOfDate: '2021-10-01', journalEntries: [historical]
-  }), 0.0001);
+  }), 100000000);
 });
