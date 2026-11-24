@@ -74,3 +74,8 @@ test('accepts whitespace after a quoted field before delimiter', () => {
   assert.equal(rows[0].nombre, 'tornillo');
   assert.equal(rows[0].precio, '12');
 });
+test('strips UTF-8 BOM before delimited headers', () => {
+  const rows = parseDelimitedRecords('\\uFEFFcodigo,nombre\\nA1,Tornillo');
+  assert.equal(rows[0].codigo, 'A1');
+  assert.equal(rows[0].nombre, 'Tornillo');
+});
