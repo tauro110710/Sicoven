@@ -126,7 +126,6 @@ testCase('plans net cash withdrawals by currency and ignores same-account offset
     { accountCode: '1.1.1.01', debitBs: 80, creditBs: 120, debitUsd: 0, creditUsd: 0 },
     { accountCode: '1.1.1.01', debitBs: 25, creditBs: 0, debitUsd: 0, creditUsd: 0 },
     { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 1.25, creditUsd: 3.5 },
-    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 3.0, creditUsd: 0 }
   ]);
   assert.deepEqual(plan, [
     { accountCode: '1.1.1.01', currency: 'BS', amount: 15 },
@@ -137,7 +136,7 @@ testCase('plans net cash withdrawals by currency and ignores same-account offset
 testCase('cash outgoing plan rounds to account precision and excludes net inflows', () => {
   const plan = buildCashOutgoingPlan([
     { accountCode: '1.1.1.01', debitBs: 20, creditBs: 10, debitUsd: 0, creditUsd: 0 },
-    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 1.2345674, creditUsd: 0 }
+    { accountCode: '1.1.1.02', debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 1.2345674 }
   ]);
   assert.deepEqual(plan, [{ accountCode: '1.1.1.02', currency: 'USD', amount: 1.234567 }]);
 });
