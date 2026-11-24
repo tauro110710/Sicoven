@@ -50,7 +50,9 @@ const toFifoSnapshot = (movement: InventoryMovement, targetDate = movement.date)
   type: movement.type,
   concept: movement.concept,
   quantity: movement.quantity,
-  unitCostBs: Number(convertVenezuelanAmountBetweenDates(movement.unitCostBs, movement.date, targetDate)),
+  unitCostBs: movement.unitCostBs > 0 && validDate(movement.date) && validDate(targetDate)
+    ? Number(convertVenezuelanAmountBetweenDates(movement.unitCostBs, movement.date, targetDate))
+    : movement.unitCostBs,
   unitCostUsd: movement.unitCostUsd,
   date: movement.date,
   documentRef: movement.documentRef,
@@ -127,7 +129,9 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     }
     const state = states.get(source.productId);
     if (!state) throw new Error('El movimiento ' + (source.documentRef || id) + ' referencia un artículo inexistente en la empresa.');
-    state.averageBs = Number(convertVenezuelanAmountBetweenDates(state.averageBs, state.lastBsDate, source.date));
+    if (state.quantity > 0 && state.averageBs > 0 && state.lastBsDate !== source.date) {
+      state.averageBs = Number(convertVenezuelanAmountBetweenDates(state.averageBs, state.lastBsDate, source.date));
+    }
     const rate = Number(source.bcvRate || 0);
     const requestedQuantity = Number(source.quantity);
     const requestedUnitCostBs = Number(source.unitCostBs);
