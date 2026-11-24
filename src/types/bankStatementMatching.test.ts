@@ -114,3 +114,12 @@ test('reconciles a bank line only when both Bs and USD equivalents match', () =>
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditUsd: 0.99 }), false);
   assert.equal(matchesBankStatementDualCurrency({ ...matching, creditBs: 249.99 }), false);
 });
+
+
+test('requires zero difference in both currencies to report reconciliation balanced', () => {
+  const bookMovements = [{debitBs:100,creditBs:0,debitUsd:1,creditUsd:0,isReconciled:true}];
+  const base = [{type:'CREDIT' as const,amountBs:100,amountUsd:1,isReconciled:true}];
+  assert.equal(calculateBankReconciliationBalances({bookMovements,statementMovements:base}).isBalanced,true);
+  assert.equal(calculateBankReconciliationBalances({bookMovements,statementMovements:[{...base[0],amountBs:100.04}]}).isBalanced,false);
+  assert.equal(calculateBankReconciliationBalances({bookMovements,statementMovements:[{...base[0],amountUsd:1.000001}]}).isBalanced,false);
+});
