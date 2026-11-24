@@ -5503,6 +5503,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const targetStock = Number(row.balanceQty);
       const expectedBalanceQty = row.expectedBalanceQty === undefined ? undefined : Number(row.expectedBalanceQty);
       const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
+      if (isAdjustment && (!Number.isFinite(targetStock) || targetStock < 0 || !Number.isFinite(quantity) || quantity < 0.00000001)) {
+        throw new Error('Fila ' + (index + 2) + ': indique una existencia final de ajuste válida y distinta de la actual.');
+      }
       const validation = validateInventoryMovement({
         date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
         bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: product.currentStock,
