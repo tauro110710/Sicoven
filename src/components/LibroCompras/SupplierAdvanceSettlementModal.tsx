@@ -57,12 +57,12 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     try {
       const allocations = allocateSupplierAdvanceCreditNotes(
         sourceNotes.map(p => ({ id: p.id, amountUsd: Number(p.supplierAdvanceUsd || 0), bookValueBs: Number(p.supplierAdvanceBs || 0) })),
-        supplierAdvanceSettlements, currentCompany.id, rif, Math.round(usd * 100) / 100
+        supplierAdvanceSettlements.filter(item => item.date <= date), currentCompany.id, rif, Math.round(usd * 100) / 100
       );
       const rows = allocations.map(allocation => {
         const note = sourceNotes.find(p => p.id === allocation.creditNoteId)!;
         const previouslyUsed = supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
-          !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
+          item.date <= date && !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
           .flatMap(item => item.sourceCreditNoteAllocations || [])
           .filter(item => item.creditNoteId === note.id)
           .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
