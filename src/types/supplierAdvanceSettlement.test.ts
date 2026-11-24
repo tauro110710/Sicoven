@@ -195,7 +195,7 @@ test('rechaza liquidaciones históricas FIFO que consumen anticipos de fechas fu
   assert.throws(() => allocateSupplierAdvanceFifo(
     [{ id: 'nc-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
     [], [prior], 'company-1', 'J-12345678-9', 1
-  ), /anterior a su fecha de origen/);
+  ), /posterior a su fecha de origen/);
 });
 
 
@@ -211,7 +211,7 @@ test('rechaza liquidaciones FIFO históricas que consumen anticipos directos con
   assert.throws(() => allocateSupplierAdvanceFifo(
     [], [{ id: 'direct-future', amountUsd: 10, bookValueBs: 1000, date: '2026-10-30' }],
     [prior], 'company-1', 'J-12345678-9', 1
-  ), /anterior a su fecha de origen/);
+  ), /posterior a su fecha de origen/);
 });
 
 test('FIFO de una liquidación nueva excluye fuentes posteriores a su fecha', () => {
