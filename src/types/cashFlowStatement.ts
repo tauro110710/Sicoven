@@ -147,7 +147,7 @@ export function buildCashFlowReport(
   ).sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber).at(-1);
   const openingEntries = openingBoundary
     ? [
-        ...companyEntries.filter(entry => entry.date > openingBoundary.date && entry.date < start),
+        ...companyEntries.filter(entry => (entry.date > openingBoundary.date || (entry.date === openingBoundary.date && entry.entryNumber > openingBoundary.entryNumber)) && entry.date < start),
         openingBoundary
       ]
     : companyEntries.filter(entry => entry.date < start);
@@ -294,7 +294,7 @@ export function buildCashFlowReport(
   // Reconcile against the same opening basis: a linked annual opening supersedes
   // the prior-year ledger movements for this year's opening balance.
   const ledgerEntries = openingBoundary
-    ? companyEntries.filter(entry => entry.date >= openingBoundary.date && entry.date <= end)
+    ? companyEntries.filter(entry => (entry.date > openingBoundary.date || (entry.date === openingBoundary.date && entry.entryNumber >= openingBoundary.entryNumber)) && entry.date <= end)
     : companyEntries.filter(entry => entry.date <= end);
   const ledgerClosing = ledgerEntries.reduce((sum, entry) => {
     const net = cashNet(entry, cashCodes);
