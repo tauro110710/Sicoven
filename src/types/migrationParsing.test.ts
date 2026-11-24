@@ -79,3 +79,14 @@ test('accepts currency labels only at the edges and validates separator grouping
   assert.equal(parseMigrationNumber('(1.234,56)'), -1234.56);
   assert.equal(parseMigrationNumber('-25,50'), -25.5);
 });
+
+
+test('strictly rejects malformed CSV quote placement and trailing characters', () => {
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,mal"formado'), /comillas en una posición inválida/);
+  assert.throws(() => parseDelimitedRecords('codigo,nombre\nA1,"texto"x'), /caracteres después de cerrar/);
+});
+
+test('preserves whitespace inside quoted CSV values', () => {
+  const rows = parseDelimitedRecords('codigo,nombre\nA1,"  texto con espacios  "');
+  assert.equal(rows[0].nombre, '  texto con espacios  ');
+});
