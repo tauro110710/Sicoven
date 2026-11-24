@@ -17,24 +17,7 @@ const banks: BankAccount[] = [
 const entry = (id: string, date: string, type: JournalEntry['type'], items: JournalEntry['items'], exerciseLink?: JournalEntry['exerciseLink']): JournalEntry => ({
   id, companyId: 'co-1', entryNumber: Number(id.replace(/\D/g, '')) || 1,
   date, description: id, type, bcvRate: 1, items, createdAt: date, exerciseLink
-  it('includes cash movements posted after a prior annual opening on the same date in the carry-forward', () => {
-    const priorOpening = entry('opening-2025', '2025-01-01', 'APERTURA', [
-      line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
-      line('3.1', 'Capital social', 0, 200, 0, 20)
-    ], { priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01' });
-    const sameDayReceipt = entry('receipt-2025-sameday', '2025-01-01', 'VENTA', [
-      line('1.1.1.01', 'Caja principal', 30, 0, 3, 0),
-      line('4.1', 'Ingresos operacionales', 0, 30, 0, 3)
-    ]);
-    sameDayReceipt.entryNumber = priorOpening.entryNumber + 1;
-    const report = buildCashFlowReport([sameDayReceipt, priorOpening], accounts, banks, 'co-1', 2026);
-    assert.equal(report.openingCashBs, 230);
-    assert.equal(report.openingCashUsd, 23);
-    assert.equal(report.closingCashBs, 230);
-    assert.equal(report.ledgerClosingCashBs, 230);
-    assert.equal(report.reconciliationDifferenceBs, 0);
-    assert.equal(report.isReconciled, true);
-  });
+
 
 });
 const line = (accountCode: string, accountName: string, debitBs: number, creditBs: number, debitUsd: number, creditUsd: number) => ({
@@ -278,6 +261,25 @@ describe('cash flow statement', () => {
     assert.equal(report.netChangeBs, 100);
     assert.equal(report.closingCashBs, 150);
     assert.equal(report.ledgerClosingCashBs, 150);
+    assert.equal(report.reconciliationDifferenceBs, 0);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('includes cash movements posted after a prior annual opening on the same date in the carry-forward', () => {
+    const priorOpening = entry('opening-2025', '2025-01-01', 'APERTURA', [
+      line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
+      line('3.1', 'Capital social', 0, 200, 0, 20)
+    ], { priorPeriodStartDate: '2024-01-01', priorPeriodEndDate: '2024-12-31', nextPeriodStartDate: '2025-01-01' });
+    const sameDayReceipt = entry('receipt-2025-sameday', '2025-01-01', 'VENTA', [
+      line('1.1.1.01', 'Caja principal', 30, 0, 3, 0),
+      line('4.1', 'Ingresos operacionales', 0, 30, 0, 3)
+    ]);
+    sameDayReceipt.entryNumber = priorOpening.entryNumber + 1;
+    const report = buildCashFlowReport([sameDayReceipt, priorOpening], accounts, banks, 'co-1', 2026);
+    assert.equal(report.openingCashBs, 230);
+    assert.equal(report.openingCashUsd, 23);
+    assert.equal(report.closingCashBs, 230);
+    assert.equal(report.ledgerClosingCashBs, 230);
     assert.equal(report.reconciliationDifferenceBs, 0);
     assert.equal(report.isReconciled, true);
   });
