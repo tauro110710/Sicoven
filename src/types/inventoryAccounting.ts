@@ -97,6 +97,15 @@ export interface CostLayer {
   sourceMovementId?: string;
 }
 
+/** Keeps the stored USD average-cost valuation unchanged when processing a Bs. movement at a new BCV rate. */
+export function preserveAverageCostUsd(avgCostUsd: number | null | undefined): number {
+  const value = Number(avgCostUsd ?? 0);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error('El costo promedio histórico en USD no es válido.');
+  }
+  return value;
+}
+
 export interface InventoryCostResult {
   quantity: number;
   totalCostBs: number;

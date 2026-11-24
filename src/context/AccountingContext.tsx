@@ -64,7 +64,7 @@ import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnD
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, normalizeFifoLayersToDate } from '../types/inventoryAccounting';
+import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, normalizeFifoLayersToDate, preserveAverageCostUsd } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
@@ -5876,7 +5876,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let totalCostUsd = 0;
     let newStock = prod.currentStock;
     let newAverageBs = prod.avgCostBs;
-    let newAverageUsd = rate > 0 ? toUsd(prod.avgCostBs) : Number(prod.avgCostUsd || 0);
+    let newAverageUsd = preserveAverageCostUsd(prod.avgCostUsd);
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {

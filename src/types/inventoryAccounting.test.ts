@@ -12,7 +12,8 @@ import {
   getDefaultInventoryAccountCode,
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales,
-  calculateVnrProvisionLedgerBalance
+  calculateVnrProvisionLedgerBalance,
+  preserveAverageCostUsd
 } from './inventoryAccounting';
 
 describe('motor de inventario contable', () => {
@@ -31,6 +32,14 @@ describe('motor de inventario contable', () => {
     assert.equal(result.totalCostUsd, 32.5);
     assert.equal(result.unitCostBs, 120);
     assert.equal(result.unitCostUsd, 32.5 / 15);
+  });
+
+  it('preserves the historical average USD cost instead of recalculating it at the current BCV rate', () => {
+    assert.equal(preserveAverageCostUsd(12.345678), 12.345678);
+    assert.equal(preserveAverageCostUsd(0), 0);
+    assert.equal(preserveAverageCostUsd(undefined), 0);
+    assert.throws(() => preserveAverageCostUsd(Number.NaN), /costo promedio histórico en USD no es válido/);
+    assert.throws(() => preserveAverageCostUsd(-1), /costo promedio histórico en USD no es válido/);
   });
 
   it('applies explicit half-away-from-zero rounding to weighted dual-currency totals', () => {
