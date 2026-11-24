@@ -144,8 +144,8 @@ export function convertVenezuelanAmount(
   let coefficient = BigInt((whole + fraction).replace(/^0+(?=\d)/, '') || '0');
   let decimalPlaces = fraction.length;
   const exponentShift = source.cumulativeScaleExponent - target.cumulativeScaleExponent;
-  if (exponentShift > 0) coefficient *= 10n ** BigInt(exponentShift);
-  if (exponentShift < 0) decimalPlaces += -exponentShift;
+  if (exponentShift > 0) decimalPlaces += exponentShift;
+  if (exponentShift < 0) coefficient *= 10n ** BigInt(-exponentShift);
   let digits = coefficient.toString();
   if (decimalPlaces > 0) {
     digits = digits.padStart(decimalPlaces + 1, '0');
