@@ -5932,14 +5932,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
       } else {
         if (targetStock > prod.currentStock) {
-          const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, targetStock - prod.currentStock, requestedCost, rate);
+          const adjustmentQuantity = targetStock - prod.currentStock;
+          const incomingUnitCostUsd = toUsd(requestedCost);
+          const weighted = calculateWeightedAverageCostDual(
+            prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0),
+            adjustmentQuantity, requestedCost, incomingUnitCostUsd
+          );
           newAverageBs = weighted.unitCostBs;
           newAverageUsd = weighted.unitCostUsd;
+          totalCostUsd = Math.round(adjustmentQuantity * incomingUnitCostUsd * 1000000) / 1000000;
+        } else {
+          totalCostUsd = Math.round(actualQuantity * Number(prod.avgCostUsd || 0) * 1000000) / 1000000;
         }
         totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
-        totalCostUsd = toUsd(totalCostBs);
         unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
-        unitCostUsd = toUsd(unitCostBs);
+        unitCostUsd = actualQuantity > 0 ? totalCostUsd / actualQuantity : 0;
       }
     }
 
