@@ -33,6 +33,10 @@ export function validateVatPaymentBankLinks(input: {
   if (!isValidIsoDate(input.draft.occurredAt)) {
     throw new Error('La fecha del enteramiento IVA es inválida.');
   }
+  const paymentAmount = Number(input.draft.amountBs);
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || Math.abs(paymentAmount - cents(paymentAmount) / 100) > 1e-9) {
+    throw new Error('El importe del enteramiento IVA debe ser positivo y expresado en céntimos exactos.');
+  }
   const filed = input.events.find(event =>
     event.declarationId === input.declaration.id && event.eventType === 'FILED');
   if (!filed) throw new Error('No existe una presentación previa que permita conciliar el enteramiento.');
