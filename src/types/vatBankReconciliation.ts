@@ -176,6 +176,7 @@ export function buildVatBankReconciliationSummary(
     const validPaymentAmount = Number.isFinite(paymentAmount) && paymentAmount > 0 &&
       Number.isInteger(cents(paymentAmount));
     const validPaymentDate = Boolean(filed) &&
+      isValidIsoDate(filed!.occurredAt.slice(0, 10)) &&
       isValidIsoDate(event.occurredAt.slice(0, 10)) &&
       event.occurredAt >= filed!.occurredAt;
     const linkedJournal = event.journalEntryId
