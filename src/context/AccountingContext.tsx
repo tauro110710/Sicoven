@@ -69,7 +69,7 @@ import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, 
 import { isValidIsoDate } from '../types/migrationParsing';
 import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
-import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability } from '../types/bankAccountAvailability';
+import { calculateBankAvailableBalance, calculateCashAccountAvailableBalance, validateBankOutgoingAvailability, buildCashOutgoingPlan } from '../types/bankAccountAvailability';
 import { createBankOutgoingLock } from '../types/bankOutgoingLock';
 import { removeUnusedLegacyDefaultBanks } from '../types/legacyBankAccountCleanup';
 import { resolvePurchaseVatFiscalEvent } from '../types/vatFiscalEvent';
@@ -570,9 +570,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const creditedAccountCodes = new Set(items
       .filter(item => Number(item.creditBs || 0) > 0 || Number(item.creditUsd || 0) > 0)
       .map(item => item.accountCode));
-    const lockKeys = [...new Set(bankAccounts
-      .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
-      .map(bank => `${companyId}:${bank.id}`))];
+    const lockKeys = [...new Set([
+      ...bankAccounts
+        .filter(bank => bank.companyId === companyId && creditedAccountCodes.has(bank.accountCode))
+        .map(bank => `${companyId}:${bank.id}`),
+      ...buildCashOutgoingPlan(items).map(cash => `${companyId}:CASH:${cash.accountCode}`)
+    ])];
     if (!lockKeys.length) return;
     const activeBatch = activeImportBatchRef.current;
     const lockKeysToAcquire = lockKeys.filter(key => !activeBatch?.reservedBankLockKeys.has(key));
