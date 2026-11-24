@@ -52,6 +52,11 @@ describe('accounting report integrity', () => {
     assert.equal(hasAccountMovement({ debitBs: 0, creditBs: 0, debitUsd: 12, creditUsd: 0 }), true);
   });
 
+  it('detects signed non-zero movement values in either currency', () => {
+    assert.equal(hasAccountMovement({ debitBs: -1, creditBs: 0, debitUsd: 0, creditUsd: 0 }), true);
+    assert.equal(hasAccountMovement({ debitBs: 0, creditBs: 0, debitUsd: -0.01, creditUsd: 0 }), true);
+  });
+
   it('excludes accounts without movement in either currency', () => {
     assert.equal(hasAccountMovement({ debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 }), false);
   });
