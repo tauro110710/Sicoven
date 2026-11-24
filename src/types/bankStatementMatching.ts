@@ -62,8 +62,8 @@ export function validateBankMovementFxSnapshot(input: {
       rateDate > input.date) {
     throw new Error('La fecha de vigencia de la tasa BCV debe ser válida y no puede ser posterior al movimiento bancario.');
   }
-  if (Math.abs(Math.round(Number(input.amountBs) * 100) / 100 -
-      Math.round(Number(input.amountUsd) * rate * 100) / 100) > 0.01) {
+  if (Math.round(Number(input.amountBs) * 100) / 100 !==
+      Math.round(Number(input.amountUsd) * rate * 100) / 100) {
     throw new Error('Los importes Bs. y USD del movimiento no concilian con la tasa BCV efectiva en esa fecha.');
   }
 }
@@ -161,6 +161,6 @@ export function calculateBankReconciliationBalances(input: {
   return {
     bookBalanceBs, bankStatementBalanceBs, adjustedBankBalanceBs, adjustedBookBalanceBs, differenceBs,
     bookBalanceUsd, bankStatementBalanceUsd, adjustedBankBalanceUsd, adjustedBookBalanceUsd, differenceUsd,
-    isBalanced: differenceBs < 0.05 && differenceUsd <= 0.000001
+    isBalanced: differenceBs === 0 && differenceUsd === 0
   };
 }
