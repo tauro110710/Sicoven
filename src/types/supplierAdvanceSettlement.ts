@@ -253,7 +253,7 @@ export function allocateSupplierAdvanceFifo(
   }
   const rif = supplierRif.trim().toUpperCase();
   if (settlementDate !== undefined) {
-    const parts = settlementDate.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)?.slice(1).map(Number);
+    const parts = settlementDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)?.slice(1).map(Number);
     const parsed = parts ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
     if (!parts || !parsed || parsed.getUTCFullYear() !== parts[0] || parsed.getUTCMonth() !== parts[1] - 1 || parsed.getUTCDate() !== parts[2]) {
       throw new Error('La fecha de liquidación FIFO es inválida.');
