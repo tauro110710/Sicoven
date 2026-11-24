@@ -168,6 +168,9 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     const effectiveUnitCostBs = source.type === 'ENTRADA'
       ? requestedUnitCostBs + landedCostsBs / requestedQuantity
       : requestedUnitCostBs;
+    const effectiveAdjustmentUnitCostUsd = requestedUnitCostUsd > 0
+      ? requestedUnitCostUsd
+      : rate > 0 ? roundUsd(requestedUnitCostBs / rate) : 0;
 
     if (source.type === 'ENTRADA') {
       let entryUnitCostBs = effectiveUnitCostBs;
@@ -307,7 +310,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       if (state.product.costingMethod === 'PEPS') {
         const layers = reconstructFifoLayers(state.history.map(movement => toFifoSnapshot(movement, source.date)), state.quantity);
         const adjusted = applyFifoAdjustment(layers, delta, requestedUnitCostBs,
-          roundUsd(requestedUnitCostBs / rate), source.date, source.documentRef);
+          effectiveAdjustmentUnitCostUsd, source.date, source.documentRef);
         totalCostBs = adjusted.totalCostBs;
         totalCostUsd = adjusted.totalCostUsd;
         unitCostBs = adjusted.unitCostBs;
@@ -318,12 +321,12 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
       } else if (delta > 0) {
         const weighted = calculateWeightedAverageCostDual(
           state.quantity, state.averageBs, state.averageUsd,
-          delta, requestedUnitCostBs, roundUsd(requestedUnitCostBs / rate)
+          delta, requestedUnitCostBs, effectiveAdjustmentUnitCostUsd
         );
         totalCostBs = roundBs(delta * requestedUnitCostBs);
-        totalCostUsd = roundUsd(delta * requestedUnitCostBs / rate);
+        totalCostUsd = roundUsd(delta * effectiveAdjustmentUnitCostUsd);
         unitCostBs = requestedUnitCostBs;
-        unitCostUsd = roundUsd(requestedUnitCostBs / rate);
+        unitCostUsd = effectiveAdjustmentUnitCostUsd;
         nextQuantity = weighted.quantity;
         nextAverageBs = weighted.unitCostBs;
         nextAverageUsd = weighted.unitCostUsd;
