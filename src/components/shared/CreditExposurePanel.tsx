@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { calculateCreditFxExposure } from '../../types/creditSettlement';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 
 export interface CreditExposureDocument {
   id: string;
@@ -8,6 +9,8 @@ export interface CreditExposureDocument {
   partyRif: string;
   documentNumber: string;
   dueDate?: string;
+  /** Fecha contable del documento; rige la presentación en USD. */
+  documentDate?: string;
   outstandingUsd: number;
   bookValueBs: number;
 }
@@ -46,6 +49,8 @@ export const CreditExposurePanel: React.FC<Props> = ({ documents, defaultRate, t
     })).sort((a, b) => a.partyName.localeCompare(b.partyName) || a.documentNumber.localeCompare(b.documentNumber));
   }, [documents, validRate, valuationRate]);
 
+  const usdDateFor = (document: CreditExposureDocument) => document.documentDate || document.dueDate || '';
+  const totalsUsdDate = rows.map(usdDateFor).sort().at(-1) || '';
   const totals = useMemo(() => rows.reduce((sum, row) => ({
     outstandingUsd: sum.outstandingUsd + row.outstandingUsd,
     bookValueBs: sum.bookValueBs + row.bookValueBs,
@@ -82,7 +87,7 @@ export const CreditExposurePanel: React.FC<Props> = ({ documents, defaultRate, t
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">
-            <article className="rounded-lg border p-3"><p className="text-[11px] text-slate-500">Saldo USD</p><p className="mt-1 font-bold">{formatUsd(totals.outstandingUsd)}</p></article>
+            <article className="rounded-lg border p-3"><p className="text-[11px] text-slate-500">Saldo USD</p><p className="mt-1 font-bold">{formatUsdForDate(totals.outstandingUsd, totalsUsdDate)}</p></article>
             <article className="rounded-lg border p-3"><p className="text-[11px] text-slate-500">Valor en libros Bs.</p><p className="mt-1 font-bold">{formatBs(totals.bookValueBs)}</p></article>
             <article className="rounded-lg border p-3"><p className="text-[11px] text-slate-500">Escenario Bs.</p><p className="mt-1 font-bold">{formatBs(totals.valuationBs)}</p></article>
             <article className="rounded-lg border p-3"><p className="text-[11px] text-slate-500">Diferencia estimada</p><p className={`mt-1 font-bold ${totals.differenceBs > 0 ? 'text-amber-700' : totals.differenceBs < 0 ? 'text-sky-700' : 'text-slate-900'}`}>{formatBs(totals.differenceBs)}</p></article>
@@ -98,7 +103,7 @@ export const CreditExposurePanel: React.FC<Props> = ({ documents, defaultRate, t
                     <td className="p-3"><strong>{row.partyName}</strong><span className="block text-slate-500">{row.partyRif}</span></td>
                     <td className="p-3">{row.documentNumber || '—'}</td>
                     <td className="p-3">{row.dueDate || '—'}</td>
-                    <td className="p-3 text-right">{formatUsd(row.outstandingUsd)}</td>
+                    <td className="p-3 text-right">{formatUsdForDate(row.outstandingUsd, usdDateFor(row))}</td>
                     <td className="p-3 text-right">{formatBs(row.bookValueBs)}</td>
                     <td className="p-3 text-right">{formatBs(row.valuationBs)}</td>
                     <td className="p-3 text-right font-semibold">{formatBs(row.differenceBs)}</td>

@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   RotateCcw
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { NewPurchaseModal } from './NewPurchaseModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
@@ -50,6 +50,10 @@ export const LibroComprasView: React.FC = () => {
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  // El período seleccionado es la fecha contable de los totales: antes de 2018
+  // no se muestra equivalente USD.
+  const purchasesUsdDate = monthFilter ? `${monthFilter}-01` : `${Number(currentCompany.fiscalYear)}-01-01`;
+  const usdEnPeriodo = (amount: number) => formatUsdForDate(amount, purchasesUsdDate);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleExportPdf = async () => {
@@ -372,7 +376,7 @@ export const LibroComprasView: React.FC = () => {
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalComprasConIvaBs)}
                   {displayCurrency !== 'BS' && (
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalComprasConIvaUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalComprasConIvaUsd)}</div>
                   )}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-amber-300">
@@ -384,20 +388,20 @@ export const LibroComprasView: React.FC = () => {
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalBaseBs)}
                   {displayCurrency !== 'BS' && (
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalBaseUsd)}</div>
                   )}
                 </td>
                 <td></td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-850">
                   {formatBs(totalIvaCreditoBs)}
                   {displayCurrency !== 'BS' && (
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaCreditoUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaCreditoUsd)}</div>
                   )}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {displayCurrency !== 'BS' && (
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaRetenidoUsd)}</div>
                   )}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-indigo-300">
@@ -420,17 +424,17 @@ export const LibroComprasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Total Compras Internas Gravadas:</span>
             <span className="text-base font-bold text-white mt-1 block">{formatBs(totalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</span>
+            <span className="text-[10px] text-slate-400">{usdEnPeriodo(totalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Crédito Fiscal Total (16%):</span>
             <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalIvaCreditoBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaCreditoUsd)}</span>
+            <span className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaCreditoUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Retenciones de IVA Enteradas:</span>
             <span className="text-base font-bold text-purple-300 mt-1 block">{formatBs(totalIvaRetenidoBs)}</span>
-            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</span>
+            <span className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaRetenidoUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Compras Exentas y No Sujetas:</span>

@@ -14,7 +14,8 @@ import {
   Pencil,
   FileUp
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
+import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import type { InventoryProduct } from '../../types/accounting';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
@@ -42,6 +43,9 @@ export const InventarioView: React.FC = () => {
     return balances;
   }, [companyProducts, companyJournalEntries]);
   const hasUnreconciledVnr = companyProducts.some(product => vnrLedgerBalances.get(product.id) === null);
+  // Fecha contable de valoración por artículo: su apertura o el inicio del ejercicio.
+  const inventoryUsdDate = (product: InventoryProduct) => product.openingDate || `${Number(currentCompany.fiscalYear)}-01-01`;
+  const allProductsUsdEligible = companyProducts.every(product => allowsUsdForOperationDate(inventoryUsdDate(product)));
 
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
@@ -154,7 +158,7 @@ export const InventarioView: React.FC = () => {
               {totalInventoryValueBs === null ? 'Pendiente conciliar VNR' : formatBs(totalInventoryValueBs)}
             </div>
             <div className="text-xs font-mono text-slate-500">
-              {totalInventoryValueUsd === null ? 'Pendiente conciliar VNR' : formatUsd(totalInventoryValueUsd)}
+              {totalInventoryValueUsd === null ? 'Pendiente conciliar VNR' : allProductsUsdEligible ? formatUsdForDate(totalInventoryValueUsd, `${Number(currentCompany.fiscalYear)}-01-01`) : '-'}
             </div>
           </div>
 
@@ -307,17 +311,17 @@ export const InventarioView: React.FC = () => {
                         <td className="py-2.5 px-4 text-right font-mono text-slate-800">
                           {formatBs(prod.avgCostBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400">{formatUsd(prod.avgCostUsd)}</span>
+                            <span className="block text-[10px] text-slate-400">{formatUsdForDate(prod.avgCostUsd, inventoryUsdDate(prod))}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
                           <span className="block text-[10px] text-slate-500">{currentCompany.inventoryPriceLabels?.price1 || 'Precio 1'}</span>
-                          {prod.priceCurrency === 'USD' ? formatUsd(Number(prod.price1 ?? prod.salesPriceUsd)) : formatBs(Number(prod.price1 ?? prod.salesPriceBs))}
+                          {prod.priceCurrency === 'USD' ? formatUsdForDate(Number(prod.price1 ?? prod.salesPriceUsd), inventoryUsdDate(prod)) : formatBs(Number(prod.price1 ?? prod.salesPriceBs))}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
                           {totalValBs === null ? 'Pendiente conciliar' : formatBs(totalValBs)}
                           {true && (
-                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? 'Pendiente conciliar' : formatUsd(totalValUsd)}</span>
+                            <span className="block text-[10px] text-slate-400 font-normal">{totalValUsd === null ? 'Pendiente conciliar' : formatUsdForDate(totalValUsd, inventoryUsdDate(prod))}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">

@@ -10,7 +10,7 @@ import {
   DollarSign,
   Download
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
@@ -272,7 +272,7 @@ export const LibroMayorView: React.FC = () => {
                   <div className="text-right border-l border-slate-700 pl-3">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Saldo ($ USD)</span>
                     <span className="font-semibold text-slate-200 text-xs">
-                      {formatUsd(acc.balanceUsd)}
+                      {formatUsdForDate(acc.balanceUsd, acc.movements.at(-1)?.date)}
                     </span>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
@@ -371,13 +371,13 @@ export const LibroMayorView: React.FC = () => {
                       {displayCurrency !== 'BS' && (
                         <>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                            {formatUsd(acc.totalDebitUsd)}
+                            {formatUsdForDate(acc.totalDebitUsd, acc.movements.at(-1)?.date)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                            {formatUsd(acc.totalCreditUsd)}
+                            {formatUsdForDate(acc.totalCreditUsd, acc.movements.at(-1)?.date)}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-800 bg-slate-200/50">
-                            {formatUsd(acc.balanceUsd)}
+                            {formatUsdForDate(acc.balanceUsd, acc.movements.at(-1)?.date)}
                           </td>
                         </>
                       )}
