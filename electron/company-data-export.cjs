@@ -118,7 +118,11 @@ function writeJsonExport({ db, company, userDataDir, destination }) {
     fs.writeFileSync(temporary, json, { flag: 'wx', mode: 0o600 });
     fs.renameSync(temporary, target);
   } catch (error) {
-    try { fs.rmSync(temporary, { force: true }); } catch {}
+    try {
+      fs.rmSync(temporary, { force: true });
+    } catch (cleanupError) {
+      console.error('[SICOVEN] No se pudo limpiar archivo temporal:', cleanupError?.message || cleanupError);
+    }
     throw error;
   }
   return { ok: true, format: 'json', destination: target, bytes: Buffer.byteLength(json, 'utf8'), documentCount: docs.length, companyId: String(company.id) };

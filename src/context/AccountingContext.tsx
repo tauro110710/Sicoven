@@ -61,7 +61,7 @@ import { FinancialDisclosure, validateFinancialDisclosure } from '../types/finan
 import { buildVatWithholdingDeclaration, validateVatDeclarationEventDraft } from '../types/vatWithholdingDeclaration';
 import { getVatPaymentJournalReversalBlocker, validateVatPaymentBankLinks } from '../types/vatBankReconciliation';
 import { buildVatPaymentAccountingPlan } from '../types/vatPaymentAccounting';
-import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, areVatOwnSourceSnapshotsCurrent, buildVatOwnSourceSnapshots, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnOutstandingBalance, getVatOwnNewCreditCarryForward, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
+import { getReceivedVatWithholdingSales, areVatOwnDeclarationSourcesCurrent, areVatOwnSourceSnapshotsCurrent, buildVatOwnSourceSnapshots, findExistingVatOwnPaymentReversal, resolveVatOwnPaymentBcvRate, getUnfiledVatOwnActivityPeriods, getVatOwnFiledLaterPeriods, isValidVatOwnDeclarationPeriod, calculateVatOwnPosition, calculateVatOwnPurchaseCreditSummary, buildVatOwnPurchaseVatReclassificationItems, getVatOwnNewCreditCarryForward, resolveVatOwnDailySalesSources, validateVatOwnDeclarationDraft, resolveVatOwnPurchaseCreditTreatment, snapshotVatOwnDeclarationRevision, validateVatOwnEvent } from '../types/vatOwnDeclaration';
 import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnDeclaration';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
@@ -1161,7 +1161,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!assessment.ready) {
       throw new Error('Reversión bloqueada por el análisis integral: ' + assessment.blockers.join(' '));
     }
-    const linkedSale = assessment.linkedSale;
     const linkedPurchase = assessment.linkedPurchase;
     const sourceInClosedPeriod = Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
     if (sourceInClosedPeriod && !priorPeriodAdjustment) {
@@ -2189,8 +2188,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       let updatedAssets = fixedAssets.slice();
       for (const item of planned) {
-        const expense = accounts.find(account => account.code === item.asset.depreciationExpenseAccountCode)!;
-        const accumulated = accounts.find(account => account.code === item.asset.accumulatedDepreciationAccountCode)!;
+        const expense = accounts.find(account => account.code === item.asset.depreciationExpenseAccountCode);
+        if (!expense) throw new Error('No se encontró la cuenta de gasto de depreciación para ' + item.asset.assetCode + '.');
+        const accumulated = accounts.find(account => account.code === item.asset.accumulatedDepreciationAccountCode);
+        if (!accumulated) throw new Error('No se encontró la cuenta de acumulación de depreciación para ' + item.asset.assetCode + '.');
         const { calculation, asset } = item;
         const entry = addJournalEntry({
           entryNumber: 0,
@@ -4063,7 +4064,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (valuation.vatWithheldBs > 0) items.push(line('2.1.2.03', valuation.vatWithheldBs, 0, 'Reversión proporcional de retención IVA'));
     if (valuation.islrWithheldBs > 0) items.push(line('2.1.2.04', valuation.islrWithheldBs, 0, 'Reversión proporcional de retención ISLR'));
     for (const returnedLine of valuation.lines) {
-      const product = products.find(item => item.id === returnedLine.productId && item.companyId === currentCompany.id)!;
+      const product = products.find(item => item.id === returnedLine.productId && item.companyId === currentCompany.id);
+      if (!product) throw new Error('Producto no encontrado para la línea de devolución con ID ' + returnedLine.productId + '.');
       const code = product.inventoryAccountCode || '1.1.4.01';
       items.push(line(code, 0, returnedLine.inventoryCostBs, 'Salida de inventario · ' + product.code + ' · devolución al proveedor'));
     }
@@ -4453,7 +4455,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const creditUsd = last ? Math.round((expenseBaseNoteUsd - allocatedUsd) * 1000000) / 1000000
         : Math.round(expenseBaseNoteUsd * share * 1000000) / 1000000;
       allocatedBs += creditBs; allocatedUsd += creditUsd;
-      const account = accounts.find(item => item.code === line.accountCode)!;
+      const account = accounts.find(item => item.code === line.accountCode);
+      if (!account) throw new Error('Cuenta no encontrada con código ' + line.accountCode + '.');
       items.push({ accountCode: account.code, accountName: account.name,
         debitBs: 0, creditBs, debitUsd: 0, creditUsd,
         description: 'Reversión parcial del gasto de la factura ' + source.invoiceNumber });
@@ -5595,7 +5598,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let totalCostUsd = 0;
       let newAverageUsd = Number(product.avgCostUsd || 0);
       let salidaFifoUsdCost: number | null = null;
-      let salidaFifoUsdUnit: number | null = null;
       let salidaFifoConsumedLayers: InventoryMovement['consumedFifoLayers'];
       let newStock = product.currentStock;
       let newAverageBs = product.avgCostBs;
@@ -5618,7 +5620,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
           totalCostBs = fifoIssue.totalCostBs;
           salidaFifoUsdCost = fifoIssue.totalCostUsd;
-          salidaFifoUsdUnit = fifoIssue.unitCostUsd;
           salidaFifoConsumedLayers = fifoIssue.consumedLayers;
           unitCostUsd = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
@@ -6475,8 +6476,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let paymentMovements: BankStatementMovement[] = [];
     try {
     if (draft.eventType === 'PAYMENT') {
-      paymentMovements = (draft.bankStatementMovementIds || []).map(id =>
-        bankStatementMovements.find(item => item.id === id)!).filter(Boolean);
+      paymentMovements = (draft.bankStatementMovementIds || []).map(id => {
+        const movement = bankStatementMovements.find(item => item.id === id);
+        if (!movement) throw new Error('Movimiento bancario no encontrado con ID ' + id + '.');
+        return movement;
+      }).filter(Boolean);
       const priorPayments = history.filter(event => event.eventType === 'PAYMENT');
       const priorPaidBs = priorPayments.reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
       const plan = buildVatPaymentAccountingPlan({
@@ -8234,14 +8238,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       for (const [noteId, used] of advanceConsumedByNote) {
-        const source = (data.purchases as PurchaseRecord[]).find(note => note.id === noteId)!;
+        const source = (data.purchases as PurchaseRecord[]).find(note => note.id === noteId);
+        if (!source) throw new Error('Asiento de origen no encontrado para la nota de crédito con ID ' + noteId + '.');
         if (used.usd > Number(source.supplierAdvanceUsd || 0) + 0.01 ||
             used.bs > Number(source.supplierAdvanceBs || 0) + 0.02) {
           throw new Error('El respaldo consume más anticipo del disponible en una nota de crédito de proveedor.');
         }
       }
       for (const [directId, used] of advanceConsumedByDirect) {
-        const source = directById.get(directId)!;
+        const source = directById.get(directId);
+        if (!source) throw new Error('Desembolso directo no encontrado con ID ' + directId + '.');
         if (used.usd > Number(source.amountUsd || 0) + 0.005 ||
             used.bs > Number(source.bookValueBs || 0) + 0.02) {
           throw new Error('El respaldo consume más anticipo del disponible en un desembolso directo.');

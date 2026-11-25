@@ -245,7 +245,6 @@ export function reconstructFifoLayers(
 }
 
 const cents = (value: number): number => decimalToNumber(roundDecimal(value, 2));
-const usdPrecision = (value: number): number => decimalToNumber(roundDecimal(value, 6));
 const exactProductSum = (pairs: Array<[number, number]>): ReturnType<typeof parseDecimal> =>
   pairs.reduce((sum, [quantity, unitCost]) =>
     addDecimal(decimalToString(sum), decimalToString(multiplyDecimal(quantity, unitCost))), parseDecimal(0));

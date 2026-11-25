@@ -208,7 +208,9 @@ async function clearTenantRuntimeAfterLicenseShutdown() {
   } catch (error) {
     console.error('[SICOVEN tenant] No se pudo limpiar el contexto al cerrar la licencia:', error?.message || error);
   } finally {
-    try { tenantController?.runtime.closeAll(); } catch {}
+    try { tenantController?.runtime.closeAll(); } catch (error) {
+      console.error('[SICOVEN] Error al cerrar runtime de tenant:', error?.message || error);
+    }
   }
 }
 
@@ -221,13 +223,17 @@ async function bindDefaultTenantForSession(token) {
     const preference = db.prepare("SELECT state_json FROM app_state WHERE state_key='active_company_preference'").get();
     const savedPreference = preference ? JSON.parse(preference.state_json) : null;
     preferredId = String(savedPreference?.companyId || '');
-  } catch {}
+  } catch (error) {
+    console.error('[SICOVEN] No se pudo leer la preferencia de empresa activa:', error?.message || error);
+  }
   if (!preferredId) {
     try {
       const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
       const legacy = row ? JSON.parse(row.state_json) : null;
       preferredId = String(legacy?.currentCompanyId || '');
-    } catch {}
+    } catch (error) {
+      console.error('[SICOVEN] No se pudo leer el contable legado:', error?.message || error);
+    }
   }
   const selected = companies.find(item => String(item.id) === preferredId) || companies[0];
   await tenantController.companySessionContext.selectCompany(token, selected.id, { skipFlush: true });

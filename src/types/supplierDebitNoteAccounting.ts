@@ -203,7 +203,8 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
       !payableAccount.code.startsWith('2.1.1.')) {
     throw new Error('La ND requiere una cuenta auxiliar de CxP de proveedor, de movimiento y perteneciente al pasivo.');
   }
-  const debitAccount = accounts.find(item => item.code === draft.debitAccountCode)!;
+  const debitAccount = accounts.find(item => item.code === draft.debitAccountCode);
+  if (!debitAccount) throw new Error('Cuenta de débito no encontrada con código ' + draft.debitAccountCode + '.');
   const vatAccount = vatAmountBs > 0 ? accounts.find(item =>
     item.code === draft.vatAccountCode && item.isMovement &&
     ['ACTIVO', 'COSTOS', 'GASTOS'].includes(item.type)

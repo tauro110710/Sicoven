@@ -127,8 +127,6 @@ export function buildCashFlowReport(
       }
     }
   }
-  const scopedEntries = companyEntries.filter(entry => entry.date <= end)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
   const accountsByCode = new Map(accounts.map(account => [account.code, account] as const));
   const cashCodes = new Set([
     ...bankAccounts.filter(bank => bank.companyId === companyId).map(bank => bank.accountCode),

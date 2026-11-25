@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { todayLocalIso } from '../../utils/localDate';
 import { useAccounting } from '../../context/AccountingContext';
 import { JournalEntryItem, EntryType } from '../../types/accounting';
 import { convertBsToUsdAmount } from '../../types/journalEntryValidation';
@@ -28,7 +29,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const [saving, setSaving] = useState(false);
 
   // Fecha inicial: si la empresa tiene inicio contable histórico y es anterior a hoy, partir desde ahí.
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = todayLocalIso();
   const entryStartDate = (() => {
     const s = currentCompany?.accountingStartDate;
     return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < todayIso) ? s : todayIso;

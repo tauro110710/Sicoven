@@ -91,10 +91,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
-  const [periodCloseDate, setPeriodCloseDate] = useState(() => {
-    const now = new Date();
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  });
+  const [periodCloseDate, setPeriodCloseDate] = useState(() => todayLocalIso());
   const [periodCloseBusy, setPeriodCloseBusy] = useState(false);
   const [reopenThroughDate, setReopenThroughDate] = useState(() => {
     if (!currentCompany.closedThroughDate) return '';
@@ -205,10 +202,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setCurrencyProfessionalConclusion(''); setCurrencyEvidenceReferences('');
     setExchangeabilityDraft({ legallyAccessible: false, actuallyAccessible: false, conclusion: 'NOT_CONVERTIBLE' });
     setExchangeabilityEvidence('');
-    setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
-      const now = new Date();
-      return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-    })());
+    setPeriodCloseDate(currentCompany.closedThroughDate || todayLocalIso());
   }, [currentCompany]);
 
   React.useEffect(() => {

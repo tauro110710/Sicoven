@@ -134,7 +134,6 @@ jobs:
           "[Descargar $($installer.Name)]($installerUrl)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "[Ver Release y archivos]($releaseUrl)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Upload Windows installer artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-Windows-${{ github.sha }}

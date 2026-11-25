@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
@@ -9,6 +9,9 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaAr
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+
+// Normaliza texto para búsquedas: ignora mayúsculas y acentos ("cafe" encuentra "Café").
+const normalizeSearchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -100,6 +103,49 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const nonInventoryDebitAccounts = accounts.filter(account => account.isMovement && (account.type === 'GASTOS' || account.type === 'COSTOS' || (account.type === 'ACTIVO' && account.code.startsWith('1.2.')))).sort((x,y)=>x.code.localeCompare(y.code,undefined,{numeric:true}));
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
+  // Búsqueda inteligente de artículos: línea que se está editando y texto escrito.
+  const [productSearch, setProductSearch] = useState<{ line: number; query: string } | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const companyProducts = useMemo(() => products.filter(p => p.companyId === currentCompany.id), [products, currentCompany.id]);
+  const searchQuery = productSearch?.query ?? '';
+  const filteredProducts = useMemo(() => {
+    const query = normalizeSearchText(searchQuery.trim());
+    if (!query) return [];
+    return companyProducts.filter(p => normalizeSearchText(`${p.code} ${p.name}`).includes(query));
+  }, [searchQuery, companyProducts]);
+  // Un artículo ya usado en otra línea no se ofrece: el guardado rechaza duplicados.
+  const availableProducts = (lineIndex: number) => {
+    const usedInOtherLines = new Set(inventoryLines.filter((_, i) => i !== lineIndex).map(line => line.productId));
+    return filteredProducts.filter(product => !usedInOtherLines.has(product.id));
+  };
+  const productLabel = (productId: string) => {
+    const product = companyProducts.find(p => p.id === productId);
+    return product ? `${product.code} · ${product.name}` : '';
+  };
+  const selectProduct = (productId: string, lineIndex: number) => {
+    const avgCost = Number(companyProducts.find(p => p.id === productId)?.avgCostBs || 0);
+    setInventoryLines(prev => prev.map((item, i) => i === lineIndex
+      ? { ...item, productId, unitCostBs: item.unitCostBs || (avgCost > 0 ? String(avgCost) : '') }
+      : item));
+    setProductSearch(null);
+    setHighlightedIndex(-1);
+  };
+  const handleProductKeyDown = (e: React.KeyboardEvent, lineIndex: number) => {
+    const options = availableProducts(lineIndex);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!options.length) return;
+      setHighlightedIndex(prev => Math.max(0, Math.min(prev + (e.key === 'ArrowDown' ? 1 : -1), options.length - 1)));
+    } else if (e.key === 'Enter') {
+      // Enter selecciona; nunca debe enviar el formulario de compra a medias.
+      e.preventDefault();
+      const target = options[highlightedIndex] ?? options[0];
+      if (target) selectProduct(target.id, lineIndex);
+    } else if (e.key === 'Escape') {
+      setProductSearch(null);
+      setHighlightedIndex(-1);
+    }
+  };
   const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState<string>('');
   const paymentAccounts = getCompanyPurchasePaymentAccounts(accounts, bankAccounts, currentCompany.id).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
@@ -724,7 +770,37 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             {!linkInventory && <div className="rounded-lg border border-amber-200 bg-white p-3"><label className="mb-1 block font-semibold text-slate-800">Cuenta de débito para servicio, gasto o activo *</label><select required value={purchaseDebitAccountCode} onChange={e=>setPurchaseDebitAccountCode(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Selecciona la cuenta contable correspondiente…</option>{nonInventoryDebitAccounts.map(account=><option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select><p className="mt-1 text-[10px] text-slate-500">Honorarios Profesionales solo se usará si lo seleccionas expresamente y corresponde a la naturaleza de la compra.</p></div>}
             {linkInventory && <>
               {inventoryLines.map((line,index)=><div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end rounded-lg bg-white border border-indigo-100 p-2">
-                <div className="sm:col-span-6"><label className="block font-semibold mb-1">Artículo existente</label><select required value={line.productId} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,productId:e.target.value,unitCostBs:item.unitCostBs || String(products.find(p=>p.id===e.target.value)?.avgCostBs || 0)}:item))} className="w-full rounded border border-slate-300 p-2"><option value="">Seleccionar artículo…</option>{products.filter(p=>p.companyId===currentCompany.id).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name} · Existencia {p.currentStock}</option>)}</select></div>
+                <div className="sm:col-span-6 relative"><label className="block font-semibold mb-1">Artículo existente</label>
+                  <input
+                    type="text"
+                    value={productSearch?.line === index ? searchQuery : productLabel(line.productId)}
+                    onChange={e => { setProductSearch({ line: index, query: e.target.value }); setHighlightedIndex(-1); }}
+                    onFocus={() => { setProductSearch({ line: index, query: '' }); setHighlightedIndex(-1); }}
+                    onBlur={() => setProductSearch(null)}
+                    onKeyDown={e => handleProductKeyDown(e, index)}
+                    placeholder="Escribir código o nombre del artículo..."
+                    className="w-full rounded border border-slate-300 p-2 font-mono"
+                    aria-label="Buscar artículo por código o nombre"
+                    autoComplete="off"
+                  />
+                  {productSearch?.line === index && searchQuery.trim() !== '' && (
+                    <ul className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-md">
+                      {availableProducts(index).length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Sin coincidencias</li>}
+                      {availableProducts(index).map((product, i) => (
+                        <li key={product.id}>
+                          <button
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); selectProduct(product.id, index); }}
+                            onMouseEnter={() => setHighlightedIndex(i)}
+                            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm ${highlightedIndex === i ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
+                          >
+                            <span className="font-mono text-slate-800">{product.code} · {product.name}</span>
+                            <span className="text-xs text-slate-500">Existencia {product.currentStock}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}</div>
                 <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="text" inputMode="decimal" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
                 <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
                 <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
