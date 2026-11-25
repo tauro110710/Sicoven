@@ -429,7 +429,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                 type="date"
                 required
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                onChange={e => { const nextDate = e.target.value; setDate(nextDate); if (!isBcvRateRequiredForDate(nextDate)) setBcvRate(''); }}
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
@@ -448,6 +448,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                 <option value="CIERRE">Asiento de Cierre</option>
               </select>
             </div>
+            {rateRequired && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Tasa Oficial BCV ($) {rateRequired ? '*' : ''}
@@ -464,6 +465,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
               />
             </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 N° Documento Ref.
