@@ -502,7 +502,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </label>
             <div className="flex flex-wrap justify-between gap-2 text-xs">
               <span className="text-slate-600">IGTF estimado (3% cuando el cobro es de contado en medio sujeto, sujeto a validación fiscal):</span>
-              <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
+              <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({isBcvRateRequiredForDate(invoiceDate) ? formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0) : '-'})</strong>
             </div>
             <p className="text-[11px] text-slate-600">Este formulario estima la percepción del 3% solo para cobros de contado en efectivo en moneda extranjera o criptoactivos, cuando la empresa esté designada agente de percepción. No calcula automáticamente transferencias bancarias en divisas: su tratamiento depende del supuesto legal concreto. En ventas a crédito, registre la percepción cuando ocurra el cobro sujeto, sin anticiparla ni duplicarla. Valide el caso con su contador antes de emitir el comprobante.</p>
           </div>
@@ -572,13 +572,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Tasa BCV aplicada ({invoiceDate}):</span>
-              <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar'}</span>
+              <span className="font-mono">{isBcvRateRequiredForDate(invoiceDate) ? (hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar') : '-'}</span>
             </div>
-            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV si esta operación requiere equivalencia en dólares. Para ventas en bolívares puede dejarla pendiente (0).</p>}
-            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
+            {isBcvRateRequiredForDate(invoiceDate) && !hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV si esta operación requiere equivalencia en dólares. Para ventas en bolívares puede dejarla pendiente (0).</p>}
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({isBcvRateRequiredForDate(invoiceDate) ? formatUsd(additionalLuxuryTaxUsd) : '-'})</span></div>}
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
-              <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
+              <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({isBcvRateRequiredForDate(invoiceDate) ? formatUsd(totalAmountUsd) : '-'})</span>
             </div>
             {clientIsSpecial && (
               <div className="flex justify-between items-center text-xs text-emerald-300">
