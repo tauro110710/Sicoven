@@ -679,6 +679,8 @@ export interface InventoryMovement {
   counterpartyRif?: string;
   counterpartyName?: string;
   warehouseId?: string;
+  /** Capas PEPS consumidas por salidas o restituidas por devoluciones, conservadas con su procedencia y costo original. */
+  consumedFifoLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
   /** Costo unitario aplicado por el método del artículo, distinto del costo digitado. */
   costingMethod?: InventoryCostingMethod;
   /** Fletes y gastos de importación asignados a esta entrada, en Bs. */

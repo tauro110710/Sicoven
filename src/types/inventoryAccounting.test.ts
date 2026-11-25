@@ -71,8 +71,8 @@ describe('motor de inventario contable', () => {
 
   it('descarga una devolución a proveedor de su capa PEPS original y no de la capa más antigua', () => {
     const layers = reconstructFifoLayers([
-      { id: 'purchase-old', type: 'ENTRADA', quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-OLD', balanceQty: 5 },
-      { id: 'purchase-target', type: 'ENTRADA', quantity: 3, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', documentRef: 'FAC-TARGET', balanceQty: 8 },
+      { id: 'purchase-old', type: 'ENTRADA', concept: 'COMPRA', quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-OLD', balanceQty: 5 },
+      { id: 'purchase-target', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', documentRef: 'FAC-TARGET', balanceQty: 8 },
       { id: 'supplier-return', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', correctionForMovementId: 'purchase-target',
         quantity: 1, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-03', documentRef: 'NC-PROV-1', balanceQty: 7 }
     ], 7);
@@ -82,9 +82,32 @@ describe('motor de inventario contable', () => {
 
   it('bloquea devoluciones PEPS históricas sin vínculo a la entrada original', () => {
     assert.throws(() => reconstructFifoLayers([
-      { id: 'purchase-1', type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'purchase-1', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 2 },
       { id: 'return-1', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-02', documentRef: 'NC-1', balanceQty: 1 }
     ], 1), /no identifica la entrada original/);
+  });
+
+  it('rechaza identificadores de movimiento duplicados que vuelven ambigua la capa PEPS', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'duplicate-id', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'duplicate-id', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', documentRef: 'FAC-2', balanceQty: 4 }
+    ], 4), /identificadores de movimiento duplicados/);
+  });
+
+  it('rechaza una devolución PEPS a proveedor con fecha anterior a su compra origen', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-02', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'supplier-return', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', correctionForMovementId: 'purchase-1', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'NC-1', balanceQty: 1 }
+    ], 1), /anterior a la devolución/);
+  });
+
+  it('rechaza devoluciones a proveedor enlazadas a capas de ajustes y no a compras', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', concept: 'COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 1 },
+      { id: 'adjustment-1', type: 'AJUSTE', quantity: 1, unitCostBs: 15, unitCostUsd: 1.5, date: '2026-01-02', documentRef: 'AJ-1', balanceQty: 2 },
+      { id: 'supplier-return', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', correctionForMovementId: 'adjustment-1',
+        quantity: 1, unitCostBs: 15, unitCostUsd: 1.5, date: '2026-01-03', documentRef: 'NC-PROV-1', balanceQty: 1 }
+    ], 1), /debe vincularse a una entrada de compra original válida/);
   });
 
   it('bloquea PEPS si faltan capas de apertura o un movimiento excede las capas existentes', () => {
@@ -236,6 +259,28 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
     assert.deepEqual(result, {provisionBs:850,provisionUsd:8.5,entryCount:3});
   });
 
+  it('rejects duplicate IDs in the VNR ledger chain instead of counting ambiguous entries', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'duplicate', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'duplicate', referenceDoc:'OTHER-1', items:[line({creditBs:200,creditUsd:2})] }
+    ]), /identificadores duplicados/);
+  });
+  it('rejects reversals with missing or duplicate IDs linked to a VNR provision', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'', reversalOfEntryId:'vnr-1', items:[line({debitBs:50,debitUsd:0.5})] }
+    ]), /identificador único/);
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({creditBs:100,creditUsd:1})] },
+      { id:'rev-dup', reversalOfEntryId:'vnr-1', items:[line({debitBs:50,debitUsd:0.5})] },
+      { id:'rev-dup', reversalOfEntryId:'rev-dup', items:[line({creditBs:10,creditUsd:0.1})] }
+    ]), /identificador único/);
+  });
+  it('rejects a self-reversal link in the VNR ledger chain', () => {
+    assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
+      { id:'vnr-self', referenceDoc:'VNR-ART-01-2026-01-31', reversalOfEntryId:'vnr-self', items:[line({creditBs:100,creditUsd:1})] }
+    ]), /identificador único/);
+  });
   it('rejects reversal balances below zero and malformed ledger values', () => {
     assert.throws(() => calculateVnrProvisionLedgerBalance('ART-01', [
       { id:'vnr-1', referenceDoc:'VNR-ART-01-2026-01-31', items:[line({debitBs:1})] }
@@ -282,3 +327,16 @@ describe('reconstrucción de provisión VNR desde el Libro Diario', () => {
   });
 
 });
+
+  it('registra el detalle de capas PEPS consumidas con origen, cantidad y costos', () => {
+    const result = calculateFifoIssue([
+      { sourceMovementId: 'compra-antigua', documentRef: 'FAC-1', date: '2026-01-01', quantity: 1, unitCostBs: 10, unitCostUsd: 1 },
+      { sourceMovementId: 'compra-nueva', documentRef: 'FAC-2', date: '2026-01-02', quantity: 2, unitCostBs: 20, unitCostUsd: 2 }
+    ], 1.5);
+    assert.deepEqual(result.consumedLayers, [
+      { sourceMovementId: 'compra-antigua', documentRef: 'FAC-1', date: '2026-01-01', quantity: 1, unitCostBs: 10, unitCostUsd: 1 },
+      { sourceMovementId: 'compra-nueva', documentRef: 'FAC-2', date: '2026-01-02', quantity: 0.5, unitCostBs: 20, unitCostUsd: 2 }
+    ]);
+    assert.equal(result.totalCostBs, 20);
+    assert.equal(result.totalCostUsd, 2);
+  });

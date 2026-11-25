@@ -20,6 +20,12 @@ test('automatic inventory BCV history does not duplicate an effective date', () 
   assert.equal(duplicate[0].rate, 890);
 });
 
+test('rejects malformed BCV records before they enter the saved history', () => {
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 0) }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-02-30', 890) }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 890), fetchedAt: 'invalid' }), /registro de tasa BCV/);
+  assert.throws(() => appendDailyInventoryBcvRate([], { ...entry('2026-11-06', 890), mode: 'MANUAL', provider: 'bcv.today' }), /registro de tasa BCV/);
+});
 test('manual BCV entry appends a same-day correction and becomes the effective value', () => {
   const automatic = appendDailyInventoryBcvRate([], entry('2026-11-06', 890));
   const corrected = appendDailyInventoryBcvRate(automatic, {
@@ -39,6 +45,24 @@ test('manual BCV entry appends a same-day correction and becomes the effective v
   assert.equal(resolveInventoryBcvRate(corrected, '2026-11-06')?.rate, 891.25);
 });
 
+test('same-day manual corrections take precedence even if their saved timestamp is earlier than automatic data', () => {
+  const history = [
+    { ...entry('2026-11-06', 890), fetchedAt: '2026-11-06T17:00:00.000Z' },
+    { ...entry('2026-11-06', 891.25), mode: 'MANUAL' as const, provider: 'manual' as const, source: 'Manual', fetchedAt: '2026-11-06T15:00:00.000Z', correctionOfId: 'auto-id' }
+  ];
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-06')?.rate, 891.25);
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-06')?.mode, 'MANUAL');
+});
+
+test('ignores invalid BCV effective dates and invalid requested dates', () => {
+  const history = [
+    entry('2026-02-30', 900),
+    entry('2026-11-06', 890)
+  ];
+  assert.equal(resolveInventoryBcvRate(history, '2026-02-28'), null);
+  assert.equal(resolveInventoryBcvRate(history, '2026-02-30'), null);
+  assert.equal(resolveInventoryBcvRate(history, '2026-11-99'), null);
+});
 test('inventory BCV date resolver selects the latest effective rate not after the date', () => {
   const history = [
     entry('2026-11-04', 870),

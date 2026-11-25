@@ -32,19 +32,34 @@ export function calculateVnrProvisionLedgerBalance(
     throw new Error('No se puede reconstruir la provisión VNR sin código de artículo, asientos y cuenta correctora válidos.');
   }
 
-  const includedIds = new Set(
-    journalEntries
-      .filter(entry => String(entry.referenceDoc || '').startsWith('VNR-' + code + '-'))
-      .map(entry => String(entry.id))
+  const idCounts = new Map<string, number>();
+  for (const entry of journalEntries) {
+    const id = String(entry.id || '').trim();
+    if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1);
+  }
+  const initialEntries = journalEntries.filter(entry =>
+    String(entry.referenceDoc || '').startsWith('VNR-' + code + '-')
   );
+  if (initialEntries.some(entry => !String(entry.id || '').trim())) {
+    throw new Error('El historial VNR contiene asientos iniciales sin identificador único.');
+  }
+  const includedIds = new Set(initialEntries.map(entry => String(entry.id).trim()));
+  if ([...includedIds].some(id => idCounts.get(id) !== 1)) {
+    throw new Error('El historial VNR contiene identificadores duplicados; no se puede reconstruir el saldo con trazabilidad.');
+  }
   let expanded = true;
   while (expanded) {
     expanded = false;
     for (const entry of journalEntries) {
-      if (entry.reversalOfEntryId && includedIds.has(String(entry.reversalOfEntryId)) && !includedIds.has(String(entry.id))) {
-        includedIds.add(String(entry.id));
-        expanded = true;
+      const targetId = String(entry.reversalOfEntryId || '').trim();
+      const entryId = String(entry.id || '').trim();
+      if (!targetId || !includedIds.has(targetId)) continue;
+      if (!entryId || idCounts.get(entryId) !== 1 || entryId === targetId) {
+        throw new Error('Una reversión del historial VNR no conserva un identificador único.');
       }
+      if (includedIds.has(entryId)) continue;
+      includedIds.add(entryId);
+      expanded = true;
     }
   }
 
@@ -97,6 +112,8 @@ export interface CostLayer {
 }
 
 export interface InventoryCostResult {
+  /** Capas PEPS consumidas por una salida; se omite en cálculos de promedio. */
+  consumedLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
   quantity: number;
   totalCostBs: number;
   totalCostUsd: number;
@@ -115,7 +132,10 @@ export interface FifoMovementSnapshot {
   id?: string;
   concept?: string;
   correctionForMovementId?: string;
+  /** Layer provenance restored by a customer return; quantities must match the movement. */
+  consumedFifoLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
 }
+
 
 /**
  * Reconstructs PEPS layers only from the real movement history.
@@ -130,6 +150,15 @@ export function reconstructFifoLayers(
   }
   const ordered = movementsInput.map((movement, index) => ({ movement, index }))
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
+  const movementIds = new Set<string>();
+  for (const { movement } of ordered) {
+    const movementId = String(movement.id || '').trim();
+    if (!movementId) continue;
+    if (movementIds.has(movementId)) {
+      throw new Error('El historial PEPS contiene identificadores de movimiento duplicados; no se puede determinar la capa de origen.');
+    }
+    movementIds.add(movementId);
+  }
   const layers: CostLayer[] = [];
   let runningQuantity = 0;
   const consumeLayers = (quantity: number, reference: string, sourceMovementId?: string) => {
@@ -164,12 +193,30 @@ export function reconstructFifoLayers(
     }
     if (movement.type === 'ENTRADA') {
       if (!validPositive(quantity)) throw new Error('Una entrada PEPS debe contener una cantidad positiva.');
-      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      if (movement.concept === 'DEVOLUCION_CLIENTE') {
+        const restored = movement.consumedFifoLayers || [];
+        const restoredQuantity = restored.reduce((sum, layer) => sum + Number(layer.quantity), 0);
+        if (!restored.length || Math.abs(restoredQuantity - quantity) > 1e-8 || restored.some(layer =>
+          !validPositive(Number(layer.quantity)) || !validNonNegative(Number(layer.unitCostBs)) ||
+          !validNonNegative(Number(layer.unitCostUsd)) || !String(layer.sourceMovementId || '').trim())) {
+          throw new Error('La devolución PEPS no conserva capas originales válidas o su cantidad no concilia.');
+        }
+        for (const layer of restored) {
+          layers.push({ quantity: Number(layer.quantity), unitCostBs: Number(layer.unitCostBs), unitCostUsd: Number(layer.unitCostUsd), date: layer.date || date, documentRef: layer.documentRef, sourceMovementId: layer.sourceMovementId });
+        }
+      } else {
+        layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+      }
       runningQuantity += quantity;
     } else if (movement.type === 'SALIDA') {
       if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
       if (movement.concept === 'DEVOLUCION_COMPRA') {
         if (!movement.correctionForMovementId) throw new Error('Una devolución PEPS a proveedor no identifica la entrada original que debe descargar.');
+        const originalPurchase = ordered.find(({ movement: candidate }) => candidate.id === movement.correctionForMovementId)?.movement;
+        if (!originalPurchase || originalPurchase.type !== 'ENTRADA' || originalPurchase.concept !== 'COMPRA' ||
+            originalPurchase.date > date) {
+          throw new Error('Una devolución PEPS a proveedor debe vincularse a una entrada de compra original válida y anterior a la devolución.');
+        }
         consumeLayers(quantity, movement.documentRef || date, movement.correctionForMovementId);
       } else {
         consumeLayers(quantity, movement.documentRef || date);
@@ -287,20 +334,24 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
   }
   let remaining = quantityToIssue;
-  const consumedLayers: Array<[number, number, number]> = [];
+  const consumedLayers: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }> = [];
   for (const layer of layers) {
     if (remaining <= 1e-8) break;
     const consumed = Math.min(remaining, layer.quantity);
-    consumedLayers.push([consumed, layer.unitCostBs, layer.unitCostUsd]);
+    consumedLayers.push({
+      sourceMovementId: layer.sourceMovementId, date: layer.date, documentRef: layer.documentRef,
+      quantity: consumed, unitCostBs: layer.unitCostBs, unitCostUsd: layer.unitCostUsd
+    });
     remaining -= consumed;
   }
   if (remaining > 1e-8) {
     throw new Error('No se pudo conciliar el consumo PEPS con las capas disponibles.');
   }
-  const totalCostBs = exactRoundedProductSum(consumedLayers.map(([q, bs]) => [q, bs] as [number, number]), 2);
-  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(([q, _bs, usd]) => [q, usd] as [number, number]), 6);
+  const totalCostBs = exactRoundedProductSum(consumedLayers.map(layer => [layer.quantity, layer.unitCostBs] as [number, number]), 2);
+  const totalCostUsd = exactRoundedProductSum(consumedLayers.map(layer => [layer.quantity, layer.unitCostUsd] as [number, number]), 6);
   return {
     quantity: quantityToIssue,
+    consumedLayers,
     totalCostBs,
     totalCostUsd,
     unitCostBs: exactQuotient(totalCostBs, quantityToIssue),

@@ -36,6 +36,8 @@ export interface PurchaseCreditNoteAmounts {
     quantity: number;
     unitCostBs: number;
     inventoryCostBs: number;
+    unitCostUsd: number;
+    inventoryCostUsd: number;
   }>;
 }
 
@@ -212,6 +214,8 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
     let returnUnitCostBs = Number(line.unitCostBs);
+    const returnUnitCostUsd = Number(movement.unitCostUsd ?? 0);
+    if (!Number.isFinite(returnUnitCostUsd) || returnUnitCostUsd < 0) throw new Error('El costo USD de la entrada original no es válido.');
     if (product.costingMethod === 'PEPS') {
       const availableOriginalLayer = Number(requested.fifoLayerAvailableQuantity);
       if (!Number.isFinite(availableOriginalLayer) || availableOriginalLayer + 0.000001 < quantity) {
@@ -229,7 +233,9 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     else taxableBaseBs += lineValue;
     lineAmounts.push({
       productId: product.id, originalMovementId: movement.id,
-      quantity, unitCostBs: returnUnitCostBs, inventoryCostBs: lineValue
+      quantity, unitCostBs: returnUnitCostBs, inventoryCostBs: lineValue,
+      unitCostUsd: returnUnitCostUsd,
+      inventoryCostUsd: Math.round((quantity * returnUnitCostUsd + Number.EPSILON) * 1000000) / 1000000
     });
   }
 
@@ -252,7 +258,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   return {
     inventoryCostBs, taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, vatWithheldBs,
     islrWithheldBs, igtfAmountBs, totalAmountBs, netPayableReductionBs, bcvRate: rate,
-    inventoryCostUsd: toUsd(inventoryCostBs), taxableBaseUsd: toUsd(taxableBaseBs),
+    inventoryCostUsd: lineAmounts.reduce((sum, item) => sum + item.inventoryCostUsd, 0), taxableBaseUsd: toUsd(taxableBaseBs),
     exemptAmountUsd: toUsd(exemptAmountBs), vatAmountUsd: toUsd(vatAmountBs), additionalLuxuryTaxUsd: toUsd(additionalLuxuryTaxBs),
     vatWithheldUsd: toUsd(vatWithheldBs), islrWithheldUsd: toUsd(islrWithheldBs),
     igtfAmountUsd: toUsd(igtfAmountBs), totalAmountUsd: toUsd(totalAmountBs),

@@ -19,7 +19,7 @@ const movement = (overrides: Partial<InventoryMovement> & Pick<InventoryMovement
   documentRef: overrides.documentRef || overrides.id,
   quantity: overrides.quantity, unitCostBs: overrides.unitCostBs,
   unitCostUsd: overrides.unitCostUsd, totalCostBs: 0, totalCostUsd: 0,
-  balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+  balanceQty: overrides.balanceQty ?? 0, balanceTotalBs: 0, balanceTotalUsd: 0,
   bcvRate: overrides.bcvRate,
   ...(overrides.correctionForMovementId ? { correctionForMovementId: overrides.correctionForMovementId } : {}),
   ...(overrides.additionalLandedCostsBs !== undefined ? { additionalLandedCostsBs: overrides.additionalLandedCostsBs } : {})
@@ -60,6 +60,10 @@ test('conserva el orden original de movimientos del mismo día para PEPS', () =>
   ]);
   assert.equal(result.movements[2].totalCostBs, 40);
   assert.equal(result.movements[2].totalCostUsd, 0.4);
+  assert.deepEqual(result.movements[2].consumedFifoLayers, [
+    { sourceMovementId: 'layer-first', documentRef: 'layer-first', date: '2010-01-01', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 },
+    { sourceMovementId: 'layer-second', documentRef: 'layer-second', date: '2010-01-01', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 }
+  ]);
   assert.equal(result.products[0].currentStock, 1);
   assert.equal(result.products[0].avgCostBs, 20);
 });
@@ -107,12 +111,41 @@ test('exige productos preparados y fechas válidas', () => {
   assert.equal(empty.products[0].currentStock, 0);
 });
 
-test('bloquea devolución PEPS si no se conserva el detalle de capas de la venta', () => {
-  assert.throws(() => replay([makeProduct('PEPS')], [
-    movement({ id: 'purchase-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
-    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
-    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100, correctionForMovementId: 'sale-1' })
-  ]), /detalle de capas consumidas/);
+test('PEPS devuelve unidades a las capas originales y las ventas posteriores las consumen con su costo fuente', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-first', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, bcvRate: 100 }),
+    movement({ id: 'layer-second', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 20, unitCostUsd: 0.2, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 3, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 2, unitCostBs: 999, unitCostUsd: 9.99, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'sale-after-return', date: '2010-01-04', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 })
+  ]);
+  assert.equal(result.movements[3].totalCostBs, 20);
+  assert.equal(result.movements[3].totalCostUsd, 0.2);
+  assert.deepEqual(result.movements[3].consumedFifoLayers, [
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
+  ]);
+  assert.equal(result.movements[4].totalCostBs, 30, 'consume primero la capa restante anterior y luego la capa restitituida, con sus costos fuente');
+  assert.deepEqual(result.movements[4].consumedFifoLayers, [
+    { sourceMovementId: 'layer-second', date: '2010-01-01', documentRef: 'layer-second', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 },
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1 }
+  ]);
+  assert.equal(result.products[0].currentStock, 1);
+});
+
+test('PEPS admite devoluciones parciales acumuladas y rechaza exceder la venta original', () => {
+  const source = [
+    movement({ id: 'layer-1', date: '2010-01-01', type: 'ENTRADA', concept: 'COMPRA', quantity: 3, unitCostBs: 12, unitCostUsd: 0.12, bcvRate: 100 }),
+    movement({ id: 'sale-1', date: '2010-01-02', type: 'SALIDA', concept: 'VENTA', quantity: 2, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100 }),
+    movement({ id: 'return-1', date: '2010-01-03', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' }),
+    movement({ id: 'return-2', date: '2010-01-04', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' })
+  ];
+  const result = replay([makeProduct('PEPS')], source);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.movements[2].totalCostBs, 12);
+  assert.equal(result.movements[3].totalCostBs, 12);
+  assert.throws(() => replay([makeProduct('PEPS')], [...source,
+    movement({ id: 'return-over', date: '2010-01-05', type: 'ENTRADA', concept: 'DEVOLUCION_CLIENTE', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, correctionForMovementId: 'sale-1' })
+  ]), /superan la cantidad de la venta original/);
 });
 
 
@@ -135,4 +168,66 @@ test('PEPS reconvierte las capas Bs antiguas al día de consumo sin alterar USD'
   assert.equal(result.movements[2].totalCostBs, 0);
   assert.equal(result.movements[2].totalCostUsd, 1);
   assert.equal(result.products[0].avgCostBs, 100);
+});
+
+test('PEPS reconvierte las capas antes de disminuir existencia con un ajuste posterior', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-2018', date: '2018-08-20', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100 }),
+    movement({ id: 'adjust-2021', date: '2021-10-01', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 100, balanceQty: 1 })
+  ]);
+  assert.equal(result.movements[1].balanceQty, 1, 'conserva la existencia objetivo del ajuste');
+  assert.equal(result.movements[1].totalCostBs, 0);
+  assert.equal(result.movements[1].totalCostUsd, 1);
+  assert.equal(result.movements[1].balanceTotalBs, 0);
+  assert.equal(result.movements[1].balanceTotalUsd, 1);
+  assert.equal(result.products[0].avgCostUsd, 1);
+});
+
+
+test('permite reconstruir movimientos anteriores a 2018 sin tasa BCV y conserva valoración solo en Bs', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-pre-bcv', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'sale-pre-bcv', date: '2014-03-11', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 })
+  ]);
+  assert.equal(result.movements[0].totalCostBs, 100);
+  assert.equal(result.movements[1].totalCostBs, 50);
+  assert.equal(result.movements[1].totalCostUsd, 0);
+  assert.equal(result.products[0].currentStock, 1);
+  assert.equal(result.products[0].avgCostUsd, 0);
+});
+
+test('permite reconstrucción PEPS pre-2018 sin tasa BCV, sin inventar USD', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'layer-pre-bcv', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0, bcvRate: 0 }),
+    movement({ id: 'sale-pre-bcv', date: '2014-03-11', type: 'SALIDA', concept: 'VENTA', quantity: 1, unitCostBs: 0, unitCostUsd: 0, bcvRate: 0 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 50);
+  assert.equal(result.movements[1].totalCostUsd, 0);
+  assert.equal(result.products[0].currentStock, 1);
+  assert.equal(result.products[0].avgCostUsd, 0);
+});
+
+test('ajuste positivo pre-2018 con BCV cero conserva el USD explícito en promedio ponderado', () => {
+  const result = replay([makeProduct()], [
+    movement({ id: 'purchase-old', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0.5, bcvRate: 0 }),
+    movement({ id: 'adjust-old', date: '2014-03-11', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 60, unitCostUsd: 0.6, bcvRate: 0, balanceQty: 3 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 60);
+  assert.equal(result.movements[1].totalCostUsd, 0.6);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 160 / 3);
+  assert.equal(result.products[0].avgCostUsd, 1.6 / 3);
+});
+
+test('ajuste positivo pre-2018 PEPS sin BCV agrega capa con USD explícito', () => {
+  const result = replay([makeProduct('PEPS')], [
+    movement({ id: 'purchase-old', date: '2014-03-10', type: 'ENTRADA', concept: 'COMPRA', quantity: 2, unitCostBs: 50, unitCostUsd: 0.5, bcvRate: 0 }),
+    movement({ id: 'adjust-old', date: '2014-03-11', type: 'AJUSTE', concept: 'AJUSTE_EXISTENCIA', quantity: 1, unitCostBs: 60, unitCostUsd: 0.6, bcvRate: 0, balanceQty: 3 })
+  ]);
+  assert.equal(result.movements[1].totalCostBs, 60);
+  assert.equal(result.movements[1].totalCostUsd, 0.6);
+  assert.equal(result.movements[1].unitCostUsd, 0.6);
+  assert.equal(result.products[0].currentStock, 3);
+  assert.equal(result.products[0].avgCostBs, 160 / 3);
+  assert.equal(result.products[0].avgCostUsd, 1.6 / 3);
 });

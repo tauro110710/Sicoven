@@ -4096,7 +4096,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
           unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
           balanceQty: item.balanceQty, id: item.id, concept: item.concept,
-          correctionForMovementId: item.correctionForMovementId
+          correctionForMovementId: item.correctionForMovementId,
+          consumedFifoLayers: item.consumedFifoLayers
         }));
       const layers = reconstructFifoLayers(history, product.currentStock).map(layer => ({ ...layer }));
       for (const returnedLine of valuation.lines.filter(item => item.productId === product.id)) {
@@ -4133,8 +4134,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           productName: product.name, productCode: product.code, date: request.returnDate,
           type: 'SALIDA' as const, concept: 'DEVOLUCION_COMPRA', documentRef: reference,
           quantity: returnedLine.quantity, unitCostBs: returnedLine.unitCostBs,
-          unitCostUsd: toUsd(returnedLine.unitCostBs),
-          totalCostBs: returnedLine.inventoryCostBs, totalCostUsd: toUsd(returnedLine.inventoryCostBs),
+          unitCostUsd: returnedLine.unitCostUsd,
+          totalCostBs: returnedLine.inventoryCostBs, totalCostUsd: returnedLine.inventoryCostUsd,
           balanceQty: newStock,
           balanceTotalBs: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.bs) : Math.round(newStock * product.avgCostBs * 100) / 100,
           balanceTotalUsd: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.usd) : Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
@@ -4927,6 +4928,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         let totalCostUsd = 0;
         let unitCostBs = 0;
         let unitCostUsd = 0;
+        let consumedFifoLayers: InventoryMovement['consumedFifoLayers'];
         if (product.costingMethod === 'PEPS') {
           const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
           const layers = reconstructFifoLayers(history, pState.currentStock);
@@ -4935,6 +4937,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           totalCostUsd = fifoResult.totalCostUsd;
           unitCostBs = fifoResult.unitCostBs;
           unitCostUsd = fifoResult.unitCostUsd;
+          consumedFifoLayers = fifoResult.consumedLayers;
         } else {
           unitCostBs = pState.avgCostBs;
           unitCostUsd = pState.avgCostUsd;
@@ -4967,6 +4970,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
         saleAutoMovements.push(saleAutoMov);
@@ -5591,6 +5595,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let newAverageUsd = Number(product.avgCostUsd || 0);
       let salidaFifoUsdCost: number | null = null;
       let salidaFifoUsdUnit: number | null = null;
+      let salidaFifoConsumedLayers: InventoryMovement['consumedFifoLayers'];
       let newStock = product.currentStock;
       let newAverageBs = product.avgCostBs;
       let movementQuantity = Number(row.quantity);
@@ -5613,6 +5618,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           totalCostBs = fifoIssue.totalCostBs;
           salidaFifoUsdCost = fifoIssue.totalCostUsd;
           salidaFifoUsdUnit = fifoIssue.unitCostUsd;
+          salidaFifoConsumedLayers = fifoIssue.consumedLayers;
           unitCostUsd = fifoIssue.unitCostUsd;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
@@ -5670,6 +5676,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...movementDraft, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
         companyId: targetCompany.id, productName: product.name, productCode: product.code, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostUsd, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
+        ...(salidaFifoConsumedLayers ? { consumedFifoLayers: salidaFifoConsumedLayers } : {}),
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
