@@ -374,8 +374,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
-          {isBcvRateRequiredForDate(invoiceDate) && (
           {/* Tasa BCV propia de esta operación */}
+          {isBcvRateRequiredForDate(invoiceDate) && (
           <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
               3. Tasa BCV aplicada a esta operación
