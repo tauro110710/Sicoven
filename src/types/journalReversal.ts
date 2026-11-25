@@ -1,4 +1,4 @@
-import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
+import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseInventoryLine, PurchaseRecord, SaleRecord } from './accounting';
 import { isJournalEntryBalanced } from './journalEntryValidation';
 
 /**
@@ -270,6 +270,20 @@ export function validatePurchaseInventoryReconciliation(input: {
   const rate = Number(purchase.bcvRate);
   const baseTotal = money(taxableBase + exemptBase);
   const lineTotal = money(lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0));
+  // Los fletes/gastos de importación de la línea se capitalizan en la entrada de
+  // Kardex; el asiento de la factura solo reconoce la base de la línea.
+  const effectiveUnitCostOf = (line: PurchaseInventoryLine) => {
+    const quantity = Number(line.quantity);
+    const unitCost = Number(line.unitCostBs);
+    const landedCosts = Number(line.additionalLandedCostsBs || 0);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) ||
+        !Number.isFinite(landedCosts) || landedCosts < 0) return NaN;
+    return unitCost + landedCosts / quantity;
+  };
+  const capitalizedLineTotal = money(lines.reduce((sum, line) => {
+    const effectiveUnitCost = effectiveUnitCostOf(line);
+    return sum + (Number.isFinite(effectiveUnitCost) ? Number(line.quantity) * effectiveUnitCost : NaN);
+  }, 0));
   const expectedTotal = money(baseTotal + vat + igtf);
   const expectedPayable = money(total - vatWithheld - islrWithheld);
   const validAmounts = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate,
@@ -307,10 +321,12 @@ export function validatePurchaseInventoryReconciliation(input: {
   const validLines = lines.length > 0 && lines.every(line => {
     const quantity = Number(line.quantity);
     const unitCost = Number(line.unitCostBs);
+    const landedCosts = Number(line.additionalLandedCostsBs || 0);
     if (!line.productId || productIds.has(String(line.productId)) ||
         (products !== undefined && !inventoryAccountByProduct.has(String(line.productId))) ||
         !Number.isFinite(quantity) || quantity <= 0 ||
-        !Number.isFinite(unitCost) || unitCost <= 0) return false;
+        !Number.isFinite(unitCost) || unitCost <= 0 ||
+        !Number.isFinite(landedCosts) || landedCosts < 0) return false;
     productIds.add(String(line.productId));
     return true;
   });
@@ -321,7 +337,7 @@ export function validatePurchaseInventoryReconciliation(input: {
       if (matches.length !== 1) return false;
       const movement = matches[0];
       const quantity = Number(line.quantity);
-      const unitCost = Number(line.unitCostBs);
+      const unitCost = effectiveUnitCostOf(line);
       const expectedBs = money(quantity * unitCost);
       const expectedUsd = expectedBs / rate;
       const movementRif = normalizeRif(movement.counterpartyRif);
@@ -335,7 +351,7 @@ export function validatePurchaseInventoryReconciliation(input: {
         Math.abs(money(Number(movement.totalCostBs)) - expectedBs) <= 0.02 &&
         Number.isFinite(Number(movement.totalCostUsd)) &&
         Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
-    }) && Math.abs(movementTotal - lineTotal) <= 0.02;
+    }) && Math.abs(movementTotal - capitalizedLineTotal) <= 0.02;
 
   const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', ...(payableAccountCode ? [payableAccountCode] : [])]);
   const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];

@@ -45,6 +45,37 @@ const draft = (options: {
   closedThroughDate: options.closedThroughDate
 });
 
+test('la nota de crédito capitaliza los fletes o gastos de importación de la línea original', () => {
+  const landedPurchase: PurchaseRecord = {
+    ...purchase,
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100, additionalLandedCostsBs: 20 }]
+  };
+  const landedProduct: InventoryProduct = { ...product, avgCostBs: 110, avgCostUsd: 1.1 };
+  const landedMovement: InventoryMovement = {
+    ...originalMovement, unitCostBs: 110, unitCostUsd: 1.1, totalCostBs: 220, totalCostUsd: 2.2
+  };
+  const result = calculatePurchaseCreditNote(draft({
+    purchase: landedPurchase, product: landedProduct,
+    lines: [{
+      product: landedProduct, originalMovement: landedMovement, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 110
+    }]
+  }));
+  assert.equal(result.lines[0].unitCostBs, 110);
+  assert.equal(result.inventoryCostBs, 110);
+  assert.equal(result.taxableBaseBs, 110);
+  assert.equal(result.vatAmountBs, 17.6);
+  assert.equal(result.igtfAmountBs, 3.83);
+  assert.equal(result.totalAmountBs, 131.43);
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: landedPurchase, product: landedProduct,
+    lines: [{
+      product: landedProduct, originalMovement, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 110
+    }]
+  })), /no concilia con la entrada original/);
+});
+
 test('rechaza una entrada de Kardex de otro proveedor aunque coincida factura y artículo', () => {
   const foreignSupplierMovement = {
     ...originalMovement, counterpartyRif: 'J-99999999-9'

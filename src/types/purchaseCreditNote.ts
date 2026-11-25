@@ -200,10 +200,16 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     const line = lineMatches.length === 1 ? lineMatches[0] : undefined;
     const movementQuantity = Number(movement.quantity);
     const movementUnitCost = Number(movement.unitCostBs);
-    if (!line || !Number.isFinite(movementQuantity) || movementQuantity <= 0 ||
+    const lineLandedCostsBs = Number(line?.additionalLandedCostsBs || 0);
+    // El flete/gasto de importación de la línea se capitaliza por unidad en la
+    // entrada de Kardex; la base de la factura no lo incluye.
+    const effectiveLineUnitCost = Number(line?.unitCostBs) +
+      (Number.isFinite(lineLandedCostsBs) && lineLandedCostsBs > 0 ? lineLandedCostsBs / Number(line?.quantity) : 0);
+    if (!line || !Number.isFinite(lineLandedCostsBs) || lineLandedCostsBs < 0 ||
+        !Number.isFinite(movementQuantity) || movementQuantity <= 0 ||
         !Number.isFinite(movementUnitCost) || movementUnitCost < 0 ||
         Math.abs(Number(line.quantity) - movementQuantity) > 0.000001 ||
-        Math.abs(Number(line.unitCostBs) - movementUnitCost) > 0.02) {
+        Math.abs(effectiveLineUnitCost - movementUnitCost) > 0.02) {
       throw new Error('La línea de factura no concilia con la entrada original del Kardex.');
     }
     if (requested.previouslyReturnedQuantity + quantity > Number(line.quantity) + 0.000001) {
@@ -213,7 +219,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     if (!Number.isFinite(currentStock) || currentStock < 0 || quantity > currentStock + 0.000001) {
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
-    let returnUnitCostBs = Number(line.unitCostBs);
+    let returnUnitCostBs = movementUnitCost;
     const returnUnitCostUsd = Number(movement.unitCostUsd ?? 0);
     if (!Number.isFinite(returnUnitCostUsd) || returnUnitCostUsd < 0) throw new Error('El costo USD de la entrada original no es válido.');
     if (product.costingMethod === 'PEPS') {
@@ -223,7 +229,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       }
       returnUnitCostBs = movementUnitCost;
     } else if (!Number.isFinite(Number(requested.currentAverageCostBs)) ||
-        Math.abs(Number(requested.currentAverageCostBs) - Number(line.unitCostBs)) > 0.01) {
+        Math.abs(Number(requested.currentAverageCostBs) - effectiveLineUnitCost) > 0.01) {
       throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
     }
     const lineValue = money(quantity * returnUnitCostBs);

@@ -408,6 +408,30 @@ test('certifica compra solo cuando factura, Kardex y asiento coinciden en ambas 
   assert.equal(result.journalInventoryDebitUsd, 2);
 });
 
+test('certifica la compra cuando el Kardex capitaliza fletes o gastos de importación de la línea', () => {
+  const landedPurchase = {
+    ...reconciledPurchase,
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100, additionalLandedCostsBs: 20 }]
+  };
+  const landedMovement = {
+    ...reconciledPurchaseMovement,
+    unitCostBs: 110, unitCostUsd: 1.1, totalCostBs: 220, totalCostUsd: 2.2
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: landedPurchase,
+    movements: [landedMovement], journalEntries: [reconciledPurchaseJournal]
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.lineTotal, 200);
+  assert.equal(result.movementTotal, 220);
+  assert.equal(result.journalInventoryDebit, 200);
+  const withoutLanded = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: landedPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [reconciledPurchaseJournal]
+  });
+  assert.equal(withoutLanded.ready, false);
+});
+
 test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventario configurada', () => {
   const alternateJournal: JournalEntry = {
     ...reconciledPurchaseJournal,

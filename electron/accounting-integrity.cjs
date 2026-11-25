@@ -3050,17 +3050,23 @@ function validateAccountingSnapshot(previousState, nextState) {
         const matches = sourceMovements.filter(item => String(item.productId) === String(sourceLine.productId));
         if (matches.length !== 1) return false;
         const sourceMovement = matches[0];
-        const expectedBs = money(Number(sourceLine.quantity) * Number(sourceLine.unitCostBs));
+        const landedCostsBs = Number(sourceLine.additionalLandedCostsBs || 0);
+        const validLandedCosts = Number.isFinite(landedCostsBs) && landedCostsBs >= 0;
+        // La entrada capitaliza los fletes/gastos de importación por unidad.
+        const effectiveUnitCostBs = Number(sourceLine.unitCostBs) +
+          (validLandedCosts && landedCostsBs > 0 ? landedCostsBs / Number(sourceLine.quantity) : 0);
+        const expectedBs = money(Number(sourceLine.quantity) * effectiveUnitCostBs);
         const movementRif = normalizeRif(sourceMovement.counterpartyRif);
         const supplierRif = normalizeRif(original.supplierRif);
-        return sourceMovement.date === original.invoiceDate && Boolean(movementRif) && Boolean(supplierRif) &&
+        return validLandedCosts &&
+          sourceMovement.date === original.invoiceDate && Boolean(movementRif) && Boolean(supplierRif) &&
           movementRif === supplierRif &&
           Number.isFinite(Number(sourceMovement.quantity)) &&
           Math.abs(Number(sourceMovement.quantity) - Number(sourceLine.quantity)) <= 0.000001 &&
           Number.isFinite(Number(sourceMovement.unitCostBs)) &&
-          Math.abs(Number(sourceMovement.unitCostBs) - Number(sourceLine.unitCostBs)) <= 0.02 &&
+          Math.abs(Number(sourceMovement.unitCostBs) - effectiveUnitCostBs) <= 0.02 &&
           Number.isFinite(Number(sourceMovement.unitCostUsd)) &&
-          Math.abs(Number(sourceMovement.unitCostUsd) - Number(sourceLine.unitCostBs) / sourceRate) <= 0.0001 &&
+          Math.abs(Number(sourceMovement.unitCostUsd) - effectiveUnitCostBs / sourceRate) <= 0.0001 &&
           Math.abs(money(Number(sourceMovement.totalCostBs)) - expectedBs) <= 0.02 &&
           Math.abs(Number(sourceMovement.bcvRate) - sourceRate) <= 0.000001 &&
           Math.abs(Number(sourceMovement.totalCostUsd) - expectedBs / sourceRate) <= 0.0001;
@@ -3105,6 +3111,12 @@ function validateAccountingSnapshot(previousState, nextState) {
       const returnMovement = asArray(nextState.movements).find(item =>
         item.id === line.movementId && item.companyId === note.companyId);
       const originalLine = sourceLines.find(item => item.productId === line.productId);
+      const originalLineUnitCostBs = Number(originalLine?.unitCostBs);
+      const originalLineLandedCostsBs = Number(originalLine?.additionalLandedCostsBs || 0);
+      const validOriginalLandedCosts = Number.isFinite(originalLineLandedCostsBs) && originalLineLandedCostsBs >= 0;
+      const originalEffectiveUnitCostBs = originalLineUnitCostBs +
+        (validOriginalLandedCosts && originalLineLandedCostsBs > 0
+          ? originalLineLandedCostsBs / Number(originalLine?.quantity) : 0);
       const product = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
           journalMovementIds.has(String(returnMovement.id)) || sourceMovementIds.has(String(line.originalMovementId)) ||
@@ -3114,9 +3126,10 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(Number(originalMovement.unitCostBs)) ||
           !Number.isFinite(Number(originalMovement.totalCostBs)) ||
           !Number.isFinite(Number(originalMovement.bcvRate)) ||
+          !validOriginalLandedCosts ||
           Math.abs(Number(originalMovement.quantity) - Number(originalLine.quantity)) > 0.000001 ||
-          Math.abs(Number(originalMovement.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
-          Math.abs(Number(originalMovement.totalCostBs) - Number(originalLine.quantity) * Number(originalLine.unitCostBs)) > 0.02 ||
+          Math.abs(Number(originalMovement.unitCostBs) - originalEffectiveUnitCostBs) > 0.02 ||
+          Math.abs(Number(originalMovement.totalCostBs) - Number(originalLine.quantity) * originalEffectiveUnitCostBs) > 0.02 ||
           originalMovement.date !== original.invoiceDate ||
           Math.abs(Number(originalMovement.bcvRate) - Number(original.bcvRate)) > 0.000001 ||
           normalizeRif(originalMovement.counterpartyRif) !== normalizeRif(original.supplierRif) ||
@@ -3143,7 +3156,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(Number(returnMovement.bcvRate)) ||
           Math.abs(Number(returnMovement.bcvRate) - Number(note.bcvRate)) > 0.000001 ||
           Math.abs(Number(returnMovement.unitCostUsd) - Number(line.unitCostBs) / Number(note.bcvRate)) > 0.0001 ||
-          Math.abs(Number(line.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
+          Math.abs(Number(line.unitCostBs) - originalEffectiveUnitCostBs) > 0.02 ||
           Math.abs(Number(line.inventoryCostBs) - Number(line.quantity) * Number(line.unitCostBs)) > 0.02) {
         throw new Error('SQLite rechazó una línea de nota de crédito: la salida física no concilia con la entrada original y el asiento enlazado.');
       }

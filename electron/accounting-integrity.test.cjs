@@ -1160,6 +1160,44 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
+test('SQLite acepta notas de crédito de proveedor sobre compras con fletes o gastos de importación', () => {
+  const { prior, next } = supplierCreditFixture();
+  // La factura conserva su base de 200 (2 x 100) y capitaliza 20 de flete en el Kardex.
+  prior.purchases[0].inventoryLines[0].additionalLandedCostsBs = 20;
+  Object.assign(prior.movements[0], {
+    unitCostBs: 110, unitCostUsd: 1.1, totalCostBs: 220, totalCostUsd: 2.2
+  });
+  const note = next.purchases.find(item => item.id === 'purchase-credit-note');
+  Object.assign(note, {
+    taxableBaseBs: 110, vatAmountBs: 17.6, igtfAmountBs: 3.83, totalAmountBs: 131.43,
+    taxableBaseUsd: 1.1, vatAmountUsd: 0.176, igtfAmountUsd: 0.0383, totalAmountUsd: 1.3143,
+    vatWithheldBs: 13.2, vatWithheldUsd: 0.132, islrWithheldBs: 1.1, islrWithheldUsd: 0.011,
+    netPayableReductionBs: 117.13, netPayableReductionUsd: 1.1713
+  });
+  note.creditNoteLines[0].unitCostBs = 110;
+  note.creditNoteLines[0].inventoryCostBs = 110;
+  const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
+  noteEntry.items = [
+    { accountCode: '2.1.1.01', debitBs: 117.13, creditBs: 0, debitUsd: 1.1713, creditUsd: 0 },
+    { accountCode: '2.1.2.03', debitBs: 13.2, creditBs: 0, debitUsd: 0.132, creditUsd: 0 },
+    { accountCode: '2.1.2.04', debitBs: 1.1, creditBs: 0, debitUsd: 0.011, creditUsd: 0 },
+    { accountCode: '1.1.4.01', debitBs: 0, creditBs: 110, debitUsd: 0, creditUsd: 1.1 },
+    { accountCode: '1.1.3.01', debitBs: 0, creditBs: 17.6, debitUsd: 0, creditUsd: 0.176 },
+    { accountCode: '6.1.1.11', debitBs: 0, creditBs: 3.83, debitUsd: 0, creditUsd: 0.0383 }
+  ];
+  Object.assign(next.movements.find(item => item.id === 'return-movement'), {
+    unitCostBs: 110, unitCostUsd: 1.1, totalCostBs: 110, totalCostUsd: 1.1
+  });
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  // Si la salida de Kardex no capitaliza el flete, la nota no concilia con la entrada original.
+  const sinFleteCapitalizado = structuredClone(next);
+  Object.assign(sinFleteCapitalizado.movements.find(item => item.id === 'return-movement'), {
+    unitCostBs: 100, unitCostUsd: 1, totalCostBs: 100, totalCostUsd: 1
+  });
+  assert.throws(() => validateAccountingSnapshot(prior, sinFleteCapitalizado),
+    /salida física no concilia/);
+});
+
 test('SQLite rejects duplicate references to the same original stock movement in one supplier credit note', () => {
   const { prior, next } = supplierCreditFixture();
   const note = next.purchases.find(item => item.id === 'purchase-credit-note');
