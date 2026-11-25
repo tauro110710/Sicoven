@@ -19,6 +19,13 @@ function isValidIsoDate(value) {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+// Regla monetaria central: desde 2018-01-01 se exige tasa BCV y equivalencia USD.
+// Antes de esa fecha la operación es nominal en bolívares.
+const USD_EQUIVALENCE_START_DATE = '2018-01-01';
+function requiresUsdEquivalence(date) {
+  return isValidIsoDate(date) && date >= USD_EQUIVALENCE_START_DATE;
+}
+
 function assertAppendOnlyCollection(previousState, nextState, collectionName, mutableKeys = [], monotonicKeys = []) {
   const oldItems = asArray(previousState[collectionName]);
   const newItems = asArray(nextState[collectionName]);
@@ -83,11 +90,14 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   const total = Number(purchase.totalAmountBs);
   const rate = Number(purchase.bcvRate);
   const taxRate = Number(purchase.taxRate);
+  // Antes de 2018 la operación es nominal en bolívares: no exige tasa BCV ni
+  // equivalencia USD (regla monetaria central del sistema).
+  const usdEquivalent = requiresUsdEquivalence(purchase.invoiceDate);
   const base = taxableBase + exemptBase;
   const payable = total - vatWithheld - islrWithheld;
   const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate, taxRate];
   if (!values.every(value => Number.isFinite(value) && value >= 0) ||
-      rate <= 0 || taxRate > 100 || payable <= 0 ||
+      (usdEquivalent && rate <= 0) || taxRate > 100 || payable <= 0 ||
       Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
       Math.abs(total - (base + vat + igtf)) > 0.02) return false;
 
@@ -156,15 +166,20 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   for (const [accountCode, amount] of expected) {
     const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
     if (Math.abs(actual.debitBs - amount.debitBs) > 0.02 ||
-        Math.abs(actual.creditBs - amount.creditBs) > 0.02 ||
-        Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
-        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001) return false;
+        Math.abs(actual.creditBs - amount.creditBs) > 0.02) return false;
+    if (usdEquivalent && (Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
+        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001)) return false;
   }
   const debitBs = items.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
   const creditBs = items.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
   const debitUsd = items.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
   const creditUsd = items.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
-  return Math.abs(debitBs - creditBs) <= 0.02 && Math.abs(debitUsd - creditUsd) <= 0.0001 &&
+  if (Math.abs(debitBs - creditBs) > 0.02) return false;
+  if (!usdEquivalent) {
+    // Operación previa a 2018: no existe equivalencia USD que conciliar.
+    return debitUsd === 0 && creditUsd === 0 && Number.isFinite(Number(entry.bcvRate)) && Number(entry.bcvRate) === 0;
+  }
+  return Math.abs(debitUsd - creditUsd) <= 0.0001 &&
     Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
@@ -2388,9 +2403,12 @@ function validateAccountingSnapshot(previousState, nextState) {
       sum.debitUsd += Number(item.debitUsd); sum.creditUsd += Number(item.creditUsd);
       return sum;
     }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    // Antes de 2018 el asiento es nominal en bolívares: la partida doble se exige
+    // en Bs. y no se obliga a registrar equivalente USD.
+    const requiresUsd = requiresUsdEquivalence(entry.date);
     if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
-        totals.debitBs <= 0 || totals.debitUsd <= 0) {
+        totals.debitBs <= 0 || (requiresUsd && totals.debitUsd <= 0)) {
       throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cuadra simultáneamente en Bs. y USD.');
     }
     if (entry.type === 'CIERRE') {
@@ -2726,21 +2744,30 @@ function validateAccountingSnapshot(previousState, nextState) {
       const invoiceRate = Number(purchase.bcvRate);
       const supplierRif = normalizeRif(purchase.supplierRif);
       const movementRif = normalizeRif(movement.counterpartyRif);
-      if (priorMovementIdsForIntegrity.has(String(movement.id)) ||
+      // Las compras anteriores a 2018 se guardan sin tasa BCV ni equivalencia USD.
+      const usdEquivalent = requiresUsdEquivalence(purchase.invoiceDate);
+      const commonMismatch =
+          priorMovementIdsForIntegrity.has(String(movement.id)) ||
           movement.date !== purchase.invoiceDate ||
           !Number.isFinite(movementQuantity) ||
           Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
           !Number.isFinite(lineUnitCostBs) || !Number.isFinite(movementUnitCostBs) ||
           Math.abs(movementUnitCostBs - lineUnitCostBs) > 0.02 ||
+          !Number.isFinite(movementCostBs) ||
+          Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
+          !supplierRif || !movementRif || movementRif !== supplierRif;
+      const usdMismatch = usdEquivalent && (
           !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
           !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
           !Number.isFinite(movementUnitCostUsd) ||
           Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) > 0.0001 ||
-          !Number.isFinite(movementCostBs) ||
-          Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
           !Number.isFinite(movementCostUsd) ||
-          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001 ||
-          !supplierRif || !movementRif || movementRif !== supplierRif) {
+          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001);
+      const historicalUsdMismatch = !usdEquivalent && (
+          !Number.isFinite(movementRate) || movementRate !== 0 ||
+          !Number.isFinite(movementUnitCostUsd) || movementUnitCostUsd < 0 ||
+          !Number.isFinite(movementCostUsd) || movementCostUsd < 0);
+      if (commonMismatch || usdMismatch || historicalUsdMismatch) {
         throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.');
       }
     }
@@ -2761,11 +2788,13 @@ function validateAccountingSnapshot(previousState, nextState) {
       sum + (inventoryExpectedByAccount.has(String(item.accountCode)) ? Number(item.debitBs || 0) : 0), 0);
     const inventoryDebitUsd = purchaseEntry?.items?.reduce((sum, item) =>
       sum + (inventoryExpectedByAccount.has(String(item.accountCode)) ? Number(item.debitUsd || 0) : 0), 0);
+    const purchaseUsdEquivalent = requiresUsdEquivalence(purchase.invoiceDate);
     if (!purchaseEntry || purchaseEntry.companyId !== purchase.companyId ||
         purchaseEntry.type !== 'COMPRA' ||
         !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
-        !Number.isFinite(Number(inventoryDebitUsd)) ||
-        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
+        (purchaseUsdEquivalent && (!Number.isFinite(Number(inventoryDebitUsd)) ||
+        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001)) ||
+        (!purchaseUsdEquivalent && (!Number.isFinite(Number(inventoryDebitUsd)) || Number(inventoryDebitUsd) !== 0)) ||
         !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts, asArray(nextState.accounts))) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }

@@ -476,6 +476,40 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
+test('SQLite acepta compras anteriores a 2018 sin tasa BCV ni equivalencia USD', () => {
+  const purchase = {
+    id: 'purchase-historica', companyId: 'company-1', invoiceDate: '2017-05-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'H-100', documentType: '01',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 0,
+    totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-historica-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-historica-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2017-05-10', description: 'Compra histórica', type: 'COMPRA', bcvRate: 0, referenceDoc: 'FAC-H-100',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 0, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 0 }
+    ],
+    createdAt: '2017-05-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-historica', companyId: 'company-1', productId: 'p-1',
+    date: '2017-05-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-H-100', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, unitCostUsd: 0, totalCostBs: 200, totalCostUsd: 0, bcvRate: 0
+  };
+  const state = { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state));
+  // Una compra histórica no puede introducir una tasa BCV/USD encubierta.
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...state, movements: [{ ...movement, bcvRate: 100, unitCostUsd: 1 }] }
+  ), /una entrada de Kardex no coincide/);
+});
+
 test('SQLite accepts cash purchase posted directly to selected cash/bank account with no payable', () => {
   const purchase = {
     id: 'purchase-cash', companyId: 'company-1', invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
