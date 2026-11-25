@@ -476,7 +476,7 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
-test('SQLite accepts a pre-2018 purchase with Bs-only accounting and no BCV rate', () => {
+test('SQLite accepts pre-2018 purchase and balanced journal with USD fields at zero', () => {
   const purchase = {
     id: 'purchase-2017', companyId: 'company-1', invoiceDate: '2017-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: '2017-100', documentType: '01',
