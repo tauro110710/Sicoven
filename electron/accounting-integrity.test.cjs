@@ -476,6 +476,37 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
+test('SQLite accepts a pre-2018 purchase with Bs-only accounting and no BCV rate', () => {
+  const purchase = {
+    id: 'purchase-2017', companyId: 'company-1', invoiceDate: '2017-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '2017-100', documentType: '01',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 0,
+    totalAmountUsd: 0, taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-entry-2017',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-entry-2017', companyId: 'company-1', entryNumber: 1,
+    date: '2017-10-10', description: 'Compra histórica Bs-only', type: 'COMPRA', bcvRate: 0, referenceDoc: 'FAC-2017-100',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 0, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 0 }
+    ],
+    createdAt: '2017-10-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-2017', companyId: 'company-1', productId: 'p-1',
+    date: '2017-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-2017-100', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, unitCostUsd: 0, totalCostBs: 200, totalCostUsd: 0, bcvRate: 0
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] }
+  ));
+});
+
 test('SQLite accepts cash purchase posted directly to selected cash/bank account with no payable', () => {
   const purchase = {
     id: 'purchase-cash', companyId: 'company-1', invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
