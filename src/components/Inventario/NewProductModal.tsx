@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { Package, X, Check } from 'lucide-react';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatUsd } from '../../utils/formatters';
+import { CostValuationPanel } from './CostValuationPanel';
 import type { InventoryProduct } from '../../types/accounting';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { calculateInventoryPrices, DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -105,11 +106,21 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     }
   }, [isOpen, product, openingDate, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory]);
 
+  // La fijación automática trabaja en USD: antes de 2018 solo cabe el modo manual.
+  useEffect(() => {
+    if (!isOpen || getReglaMonetariaPorFecha(openingDate).allowsUsd) return;
+    setPricingConfiguration(previous => previous.mode === 'AUTOMATIC' ? { ...previous, mode: 'MANUAL' } : previous);
+  }, [isOpen, openingDate]);
+
   if (!isOpen) return null;
 
-  const bcvRate = parseDecimalInput(openingBcvRateInput);
+  // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni valoración USD.
+  const monetaryRule = getReglaMonetariaPorFecha(openingDate);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const bcvRate = usdEnabled ? parseDecimalInput(openingBcvRateInput) : 0;
   const effectivePricingConfiguration = withoutInventoryExchangeRates(pricingConfiguration);
-  const avgCostUsd = parseDecimalInput(avgCostInput);
+  const avgCostUsd = usdEnabled ? parseDecimalInput(avgCostInput) : 0;
+  const effectivePriceCurrency = usdEnabled ? priceCurrency : 'BS';
   const historicalBsCost = parseDecimalInput(openingCostBsInput);
   const avgCostBs = bcvRate > 0 ? Number((avgCostUsd * bcvRate).toFixed(2)) : historicalBsCost;
   let pricingCalculationError = '';
@@ -136,9 +147,10 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     e.preventDefault();
     setError('');
     if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
+    if (pricingConfiguration.mode === 'AUTOMATIC' && !usdEnabled) { setError('La fijación automática se calcula en USD y no está disponible antes de 2018; fije los precios manualmente en bolívares.'); return; }
     if (pricingConfiguration.mode === 'AUTOMATIC' && (avgCostUsd <= 0 || pricingCalculationError)) { setError(pricingCalculationError || 'Ingrese un costo de inventario positivo y su tasa histórica antes de calcular precios automáticos.'); return; }
-    if (!product && currentStock > 0 && avgCostBs <= 0) { setError(openingDate < '2018-01-01' && bcvRate <= 0 ? 'Ingrese el costo histórico unitario en Bs. del inventario inicial; la tasa BCV antes de 2018 es opcional.' : 'Ingrese el costo histórico unitario del inventario inicial.'); return; }
-    if (!product && (currentStock > 0 || avgCostBs > 0) && isBcvRateRequiredForDate(openingDate) && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial desde 2018.'); return; }
+    if (!product && currentStock > 0 && avgCostBs <= 0) { setError('Ingrese el costo histórico unitario del inventario inicial.'); return; }
+    if (!product && (currentStock > 0 || avgCostBs > 0) && usdEnabled && (!Number.isFinite(bcvRate) || bcvRate <= 0)) { setError('Ingrese la tasa BCV histórica aplicable al inventario inicial desde 2018.'); return; }
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -155,7 +167,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price2: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[1].trim() ? effectivePriceValues[1] : null,
         price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
         price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
-        priceCurrency,
+        priceCurrency: effectivePriceCurrency,
         pricingConfiguration: effectivePricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
@@ -177,7 +189,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
         price2: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[1].trim() ? effectivePriceValues[1] : null,
         price3: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[2].trim() ? effectivePriceValues[2] : null,
         price4: pricingConfiguration.mode === 'AUTOMATIC' || priceInputs[3].trim() ? effectivePriceValues[3] : null,
-        priceCurrency,
+        priceCurrency: effectivePriceCurrency,
         pricingConfiguration: effectivePricingConfiguration,
         salesPriceBs: 0,
         salesPriceUsd: 0,
@@ -319,23 +331,18 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               </select>
             </div>
           </div>
-          {openingDate < '2018-01-01' && bcvRate <= 0 && !product && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <label className="block font-semibold text-slate-700 mb-1">Costo histórico unitario de inventario en Bs. (tasa BCV opcional)</label>
-              <input type="text" inputMode="decimal" value={openingCostBsInput} onChange={e => setOpeningCostBsInput(e.target.value)} placeholder="Costo unitario en bolívares de la fecha" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
-              <p className="mt-1 text-xs text-slate-600">Se conserva la valoración nominal en Bs. sin convertir a USD ni inventar una tasa.</p>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Fecha del inventario inicial</label>
               <input type="date" required value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {isBcvRateRequiredForDate(openingDate) ? '*' : '(opcional)'}</label>
-              <input type="text" inputMode="decimal" required={isBcvRateRequiredForDate(openingDate)} value={openingBcvRateInput} onChange={e => setOpeningBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
-            </div>
+            {usdEnabled ? <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+              <input type="text" inputMode="decimal" required value={openingBcvRateInput} onChange={e => setOpeningBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            </div> : <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Moneda del inventario</span>
+              <span className="block text-xs font-bold text-slate-800">{monetaryRule.currencyLabel} · sin tasa BCV ni USD antes de 2018</span>
+            </div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -362,21 +369,18 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Costo base unitario de adquisición (USD)</label>
-              <input type="text" inputMode="decimal" value={avgCostInput} disabled={Boolean(product)} placeholder="0.00" onChange={e => setAvgCostInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none" />
-              <span className="text-[11px] text-slate-500 font-mono">Costo histórico calculado en Bs.: {formatBs(avgCostBs)} · Tasa de adquisición: {bcvRate > 0 ? bcvRate.toLocaleString('es-VE') : 'Pendiente'}</span>
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Moneda de referencia de los precios</label>
-              <select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value as 'USD' | 'BS')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold">
-                <option value="USD">USD — Dólares (predeterminado)</option>
-                <option value="BS">Bs. — Bolívares</option>
-              </select>
-              <span className="text-[11px] text-slate-500">La misma moneda aplica a los cuatro niveles.</span>
-            </div>
-          </div>
+          <CostValuationPanel
+            rule={monetaryRule}
+            usdCostInput={avgCostInput}
+            onUsdCostChange={setAvgCostInput}
+            historicalBsCostInput={openingCostBsInput}
+            onHistoricalBsCostChange={setOpeningCostBsInput}
+            historicalCostBs={avgCostBs}
+            bcvRate={bcvRate}
+            priceCurrency={effectivePriceCurrency}
+            onPriceCurrencyChange={setPriceCurrency}
+            disabled={Boolean(product)}
+          />
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div><strong className="text-slate-800">Estrategia de precios comerciales</strong><p className="text-[10px] text-slate-500">La regla puede ser distinta por empresa y sobrescribirse por artículo.</p></div>
@@ -384,7 +388,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="block font-semibold text-slate-700">Método de fijación
                 <select value={pricingConfiguration.mode} onChange={e => setPricingConfiguration(previous => ({ ...previous, mode: e.target.value as InventoryPricingConfiguration['mode'] }))} className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white">
-                  <option value="MANUAL">Manual</option><option value="AUTOMATIC">Automático por porcentaje</option>
+                  <option value="MANUAL">Manual</option><option value="AUTOMATIC" disabled={!usdEnabled}>Automático por porcentaje{usdEnabled ? '' : ' (solo desde 2018)'}</option>
                 </select>
               </label>
               <label className="block font-semibold text-slate-700">Base de cálculo

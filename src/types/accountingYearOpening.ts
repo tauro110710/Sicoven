@@ -22,6 +22,40 @@ const roundUsd = (value: number) => Math.round((value + Number.EPSILON) * 1_000_
 type Totals = { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number };
 const emptyTotals = (): Totals => ({ debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
 
+/**
+ * La reexpresión de escala y el redondeo por línea pueden dejar residuos de un
+ * centavo de bolívar o de una millonésima de dólar. Se absorben en el renglón
+ * de mayor importe para no bloquear una apertura que económicamente cuadra;
+ * un descuadre mayor al centavo sigue informándose como error real.
+ */
+function absorbRoundingResidue(
+  items: JournalEntryItem[],
+  debitKey: 'debitBs' | 'debitUsd',
+  creditKey: 'creditBs' | 'creditUsd',
+  unit: number
+): void {
+  const sum = (key: 'debitBs' | 'debitUsd' | 'creditBs' | 'creditUsd') =>
+    items.reduce((total, item) => total + Number(item[key] || 0), 0);
+  const residual = Math.round((sum(debitKey) - sum(creditKey)) / unit) * unit;
+  if (Math.abs(residual) < unit || Math.abs(residual) > 0.01) return;
+  const creditLine = [...items]
+    .filter(item => Number(item[creditKey]) > 0)
+    .sort((a, b) => Number(b[creditKey]) - Number(a[creditKey]))[0];
+  if (creditLine) {
+    const adjusted = Math.round((Number(creditLine[creditKey]) + residual) / unit) * unit;
+    if (adjusted >= 0) {
+      creditLine[creditKey] = Number(adjusted.toFixed(unit === 0.01 ? 2 : 6));
+      return;
+    }
+  }
+  const debitLine = [...items]
+    .filter(item => Number(item[debitKey]) > 0)
+    .sort((a, b) => Number(b[debitKey]) - Number(a[debitKey]))[0];
+  if (!debitLine) return;
+  const adjusted = Math.round((Number(debitLine[debitKey]) - residual) / unit) * unit;
+  if (adjusted >= 0) debitLine[debitKey] = Number(adjusted.toFixed(unit === 0.01 ? 2 : 6));
+}
+
 /** Prepares an APERTURA draft only; it never persists or posts accounting data. */
 export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEntryItem[] {
   const { companyId, periodEndDate, openingDate, accounts, journalEntries } = input;
@@ -153,6 +187,8 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     }
   }
   if (items.length < 2) throw new Error('No existen saldos de balance suficientes para generar un asiento de apertura.');
+  absorbRoundingResidue(items, 'debitBs', 'creditBs', 0.01);
+  absorbRoundingResidue(items, 'debitUsd', 'creditUsd', 0.000001);
   const total = items.reduce((sum, item) => ({
     debitBs: sum.debitBs + item.debitBs, creditBs: sum.creditBs + item.creditBs,
     debitUsd: sum.debitUsd + item.debitUsd, creditUsd: sum.creditUsd + item.creditUsd

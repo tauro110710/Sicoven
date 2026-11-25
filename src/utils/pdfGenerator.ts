@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Company, JournalEntry, PurchaseRecord, SaleRecord } from '../types/accounting';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from './formatters';
+import { allowsUsdForOperationDate, formatUsdForDate } from './monetaryPolicy';
 import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 import { resolveVatOwnDailySalesSources } from '../types/vatOwnDeclaration';
 
@@ -84,7 +85,8 @@ async function addPdfHeader(
   doc: jsPDF,
   company: Company,
   reportTitle: string,
-  subtitle: string
+  subtitle: string,
+  currencyNote = 'Moneda: Bs. y USD'
 ): Promise<number> {
   const pageWidth = doc.internal.pageSize.getWidth();
   let currentY = 14;
@@ -136,7 +138,7 @@ async function addPdfHeader(
   doc.setTextColor(100, 116, 139);
   doc.text(subtitle, 14, currentY + 4.5);
 
-  doc.text('Moneda: Bs. y USD', pageWidth - 14, currentY + 4.5, { align: 'right' });
+  doc.text(currencyNote, pageWidth - 14, currentY + 4.5, { align: 'right' });
 
   return currentY + 9;
 }
@@ -229,11 +231,15 @@ export async function exportDiarioPdf(
   // Landscape is preferred for accounting journals to accommodate dual currencies
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
 
+  // El libro completo puede ser histórico: cada renglón decide si admite USD
+  // con la regla monetaria de su propia fecha contable.
+  const hasUsdEntries = entries.some(entry => allowsUsdForOperationDate(entry.date));
   const startY = await addPdfHeader(
     doc,
     company,
     'Libro Diario General',
-    `Ejercicio Económico ${company.fiscalYear} • Principios VEN-NIF (FCCPV)`
+    `Ejercicio Económico ${company.fiscalYear} • Principios VEN-NIF (FCCPV)`,
+    hasUsdEntries ? 'Moneda: Bs. y USD' : 'Moneda: Bs. (sin USD antes de 2018)'
   );
 
   const tableBody: any[] = [];
@@ -252,19 +258,20 @@ export async function exportDiarioPdf(
       }
     ]);
 
+    const usdAllowed = allowsUsdForOperationDate(entry.date);
     for (const item of entry.items) {
       totalDebitBs += item.debitBs || 0;
       totalCreditBs += item.creditBs || 0;
-      totalDebitUsd += item.debitUsd || 0;
-      totalCreditUsd += item.creditUsd || 0;
+      totalDebitUsd += usdAllowed ? item.debitUsd || 0 : 0;
+      totalCreditUsd += usdAllowed ? item.creditUsd || 0 : 0;
 
       tableBody.push([
         item.accountCode,
         item.accountName,
         item.debitBs > 0 ? formatNumberVe(item.debitBs) : '-',
         item.creditBs > 0 ? formatNumberVe(item.creditBs) : '-',
-        item.debitUsd > 0 ? `$ ${item.debitUsd.toFixed(2)}` : '-',
-        item.creditUsd > 0 ? `$ ${item.creditUsd.toFixed(2)}` : '-'
+        usdAllowed && item.debitUsd > 0 ? `$ ${item.debitUsd.toFixed(2)}` : '-',
+        usdAllowed && item.creditUsd > 0 ? `$ ${item.creditUsd.toFixed(2)}` : '-'
       ]);
     }
   }
@@ -274,8 +281,8 @@ export async function exportDiarioPdf(
     { content: 'TOTALES SUMAS IGUALES:', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } },
     { content: formatNumberVe(totalDebitBs), styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } },
     { content: formatNumberVe(totalCreditBs), styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } },
-    { content: `$ ${totalDebitUsd.toFixed(2)}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } },
-    { content: `$ ${totalCreditUsd.toFixed(2)}`, styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } }
+    { content: hasUsdEntries ? `$ ${totalDebitUsd.toFixed(2)}` : '-', styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } },
+    { content: hasUsdEntries ? `$ ${totalCreditUsd.toFixed(2)}` : '-', styles: { halign: 'right', fontStyle: 'bold', fillColor: [226, 232, 240] } }
   ]);
 
   autoTable(doc, {
@@ -314,11 +321,15 @@ export async function exportMayorPdf(
 ) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
 
+  const hasUsdMovements = accountsWithMovements.some(acc =>
+    (acc.movements || []).some((mov: any) => allowsUsdForOperationDate(mov.date))
+  );
   const startY = await addPdfHeader(
     doc,
     company,
     'Libro Mayor Analítico',
-    `Movimientos y Saldos por Cuenta • Normas VEN-NIF • Ejercicio ${company.fiscalYear}`
+    `Movimientos y Saldos por Cuenta • Normas VEN-NIF • Ejercicio ${company.fiscalYear}`,
+    hasUsdMovements ? 'Moneda: Bs. y USD' : 'Moneda: Bs. (sin USD antes de 2018)'
   );
 
   const tableBody: any[] = [];
@@ -327,7 +338,7 @@ export async function exportMayorPdf(
     // Account section header
     tableBody.push([
       {
-        content: `CUENTA: ${acc.code} - ${acc.name} (${acc.type}) | SALDO: ${formatBs(acc.balanceBs)} (${formatUsd(acc.balanceUsd)}) [${acc.balanceNature}]`,
+        content: `CUENTA: ${acc.code} - ${acc.name} (${acc.type}) | SALDO: ${formatBs(acc.balanceBs)} (${formatUsdForDate(acc.balanceUsd, acc.movements?.at(-1)?.date)}) [${acc.balanceNature}]`,
         colSpan: 5,
         styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }
       }
@@ -912,11 +923,15 @@ export async function exportVentasPdf(
     ? `Período Fiscal: ${monthFilter}`
     : `Ejercicio Económico ${company.fiscalYear}`;
 
+  const hasUsdSales = sales.some(s => allowsUsdForOperationDate(s.invoiceDate)) ||
+    zReportEntries.some(entry => entry.companyId === company.id && entry.fiscalZReport &&
+      allowsUsdForOperationDate(entry.fiscalZReport.date || entry.date));
   const startY = await addPdfHeader(
     doc,
     company,
     'Libro de Ventas Fiscal',
-    `${periodLabel} • Providencia Administrativa SNAT/2015/0049 • SENIAT`
+    `${periodLabel} • Providencia Administrativa SNAT/2015/0049 • SENIAT`,
+    hasUsdSales ? 'Moneda: Bs. y USD' : 'Moneda: Bs. (sin USD antes de 2018)'
   );
 
   let totalMonto = 0;
@@ -951,9 +966,10 @@ export async function exportVentasPdf(
     const sign = s.documentType === '03' ? -1 : 1;
     const included = selectedIndividualIds.has(s.id);
     const saleLuxuryTax = s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? (s.taxableBaseBs || 0) * 0.15) : 0;
+    const saleUsdAllowed = allowsUsdForOperationDate(s.invoiceDate);
     if (included) {
       totalMonto += sign * (s.totalAmountBs || 0);
-      totalMontoUsd += sign * (s.totalAmountUsd || 0);
+      totalMontoUsd += saleUsdAllowed ? sign * (s.totalAmountUsd || 0) : 0;
       totalExento += sign * (s.exemptAmountBs || 0);
       totalBase += sign * (s.taxableBaseBs || 0);
       totalLuxuryTax += sign * saleLuxuryTax;
@@ -971,7 +987,7 @@ export async function exportVentasPdf(
       s.documentType === '03' ? 'NOTA CRÉDITO' : s.documentType === '02' ? 'NOTA DÉBITO' : 'FACTURA',
       s.controlNumber,
       formatNumberVe(sign * s.totalAmountBs),
-      formatUsd(sign * (s.totalAmountUsd || 0)),
+      formatUsdForDate(sign * (s.totalAmountUsd || 0), s.invoiceDate),
       s.exemptAmountBs > 0 ? formatNumberVe(sign * s.exemptAmountBs) : '-',
       formatNumberVe(sign * s.taxableBaseBs),
       `${s.taxRate}%`,
@@ -981,7 +997,7 @@ export async function exportVentasPdf(
       s.retentionVoucherNumber || '-',
       s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-',
       (s.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * (s.igtfAmountBs || 0)) : '-',
-      s.bcvRate > 0 ? formatNumberVe(s.bcvRate) : '—',
+      !saleUsdAllowed ? '-' : s.bcvRate > 0 ? formatNumberVe(s.bcvRate) : '—',
       included ? 'INCLUIDO' : unresolvedDates.has(s.invoiceDate) ? 'PENDIENTE' : s.isCancelled ? 'ANULADA' : 'FUENTE ALTERNATIVA'
     ];
   });
@@ -1010,7 +1026,7 @@ export async function exportVentasPdf(
       'REPORTE Z',
       z.controlStart ? z.controlStart + '–' + z.controlEnd : '—',
       formatNumberVe(z.totalSalesBs),
-      entry.bcvRate > 0 ? formatUsd(z.totalSalesBs / entry.bcvRate) : '—',
+      entry.bcvRate > 0 ? formatUsdForDate(z.totalSalesBs / entry.bcvRate, z.date) : allowsUsdForOperationDate(z.date) ? '—' : '-',
       z.exemptSalesBs > 0 ? formatNumberVe(z.exemptSalesBs) : '-',
       formatNumberVe(base),
       '16 / 8 / 31',
@@ -1018,7 +1034,7 @@ export async function exportVentasPdf(
       (z.additionalLuxuryTaxBs || 0) > 0 ? formatNumberVe(z.additionalLuxuryTaxBs) : '-',
       '-', '-', '-',
       z.igtfBs > 0 ? formatNumberVe(z.igtfBs) : '-',
-      entry.bcvRate > 0 ? formatNumberVe(entry.bcvRate) : '—',
+      !allowsUsdForOperationDate(z.date) ? '-' : entry.bcvRate > 0 ? formatNumberVe(entry.bcvRate) : '—',
       included ? 'INCLUIDO' : unresolvedDates.has(z.date) ? 'PENDIENTE' : 'FUENTE ALTERNATIVA'
     ]);
   });
@@ -1029,7 +1045,7 @@ export async function exportVentasPdf(
   tableBody.push([
     { content: (hasSalesCorrectionNotes ? 'TOTALES AJUSTADOS' : 'TOTALES') + (fiscalZEntries.length ? ' · INCLUYE REPORTES Z:' : ' DEL PERÍODO:'), colSpan: 7, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
-    { content: formatUsd(totalMontoUsd), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: hasUsdSales ? formatUsd(totalMontoUsd) : '-', styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },

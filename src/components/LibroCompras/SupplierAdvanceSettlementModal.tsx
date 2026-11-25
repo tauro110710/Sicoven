@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { allocateSupplierAdvanceCreditNotes } from '../../types/supplierAdvanceSettlement';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 interface Props { onClose: () => void; }
 
@@ -44,9 +44,11 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const rate = parseAmount(bcvRate);
   const usd = parseAmount(amountUsd);
-  const rateRequired = isBcvRateRequiredForDate(date);
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  // Los anticipos de este módulo se llevan en divisas: antes de 2018 no existen.
+  const usdEnabled = monetaryRule.allowsUsd;
   const historicalBookValueBs = balance && balance.outstandingUsd > 0 ? Math.round(balance.outstandingBs * usd / balance.outstandingUsd * 100) / 100 : 0;
-  const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate >= 0 && (!rateRequired || rate > 0);
+  const validAmount = usdEnabled && Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
   const allocationPreview = useMemo(() => {
     if (!supplierRif || !Number.isFinite(usd) || usd <= 0) return { rows: [], error: '' };
     const rif = supplierRif.trim().toUpperCase();
@@ -82,6 +84,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     if (saving) return;
     setError('');
     if (!sqliteAvailable || !isStorageReady) { setError(storageError || 'La edición de escritorio con SQLite local no está disponible.'); return; }
+    if (!usdEnabled) { setError('Antes de 2018 no se registran anticipos en dólares ni tasas BCV. La operación debe registrarse en bolívares en el Libro de Compras del período.'); return; }
     if (!balance || !validAmount) { setError('Seleccione proveedor e indique un importe válido y la tasa BCV cuando corresponda desde 2018.'); return; }
     if (kind === 'REFUND_RECEIVED' && parseAmount(cashReceivedBs) <= 0) { setError('Indique el importe real recibido en Bs.'); return; }
     if (kind === 'APPLIED_TO_PURCHASE' && !targetPurchaseId) { setError('Seleccione la factura destino para aplicar el anticipo.'); return; }
@@ -133,8 +136,10 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
           </label>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-xs font-semibold text-slate-700">Fecha<input required type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="text" inputMode="decimal" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            {usdEnabled ? <>
+              <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="text" inputMode="decimal" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+              <label className="text-xs font-semibold text-slate-700">Tasa BCV *<input required type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
+            </> : <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700">Moneda contable: {monetaryRule.currencyLabel}</span><span className="block text-xs text-amber-900">Antes de 2018 no se registran tasas BCV ni anticipos en dólares. Registre la operación en el Libro de Compras del período en bolívares.</span></div>}
           </div>
           {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
             <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>
@@ -163,7 +168,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
         </>}
         <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold">Cancelar</button>
-          <button type="submit" disabled={saving || suppliers.length === 0 || !isStorageReady || !sqliteAvailable} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button>
+          <button type="submit" disabled={saving || suppliers.length === 0 || !isStorageReady || !sqliteAvailable || !usdEnabled} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button>
         </footer>
       </form>
     </div>

@@ -3,7 +3,7 @@ import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { PurchaseRecord } from '../../types/accounting';
 import type { SupplierDebitNoteEconomicCause } from '../../types/supplierDebitNote';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 interface Props {
   purchase: PurchaseRecord;
@@ -78,7 +78,9 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const taxRateValue = parseAmount(taxRate || '0');
   const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + Number.EPSILON) * 100) / 100;
   const isInventoryCause = economicCause === 'ADDITIONAL_GOODS_RECEIVED' || economicCause === 'INVENTORY_COST_ADJUSTMENT';
-  const rateRequired = isBcvRateRequiredForDate(recognitionDate);
+  const monetaryRule = getReglaMonetariaPorFecha(recognitionDate);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const rateRequired = monetaryRule.requiresBcvRate;
   const parsedBcvRate = parseAmount(bcvRate);
 
   const submit = async (event: React.FormEvent) => {
@@ -136,7 +138,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
         debitAccountCode, payableAccountCode: payableAccountCode || suggestedPayableCode,
         vatAccountCode: vatAccountCode || undefined,
         taxableBaseBs, exemptAmountBs, vatAmountBs, totalAmountBs, taxRate: taxRateValue,
-        bcvRate: parseAmount(bcvRate), fiscalBreakdownReviewed,
+        bcvRate: usdEnabled ? parseAmount(bcvRate) : 0, fiscalBreakdownReviewed,
         withholdingNotApplicableConfirmed, igtfNotApplicableConfirmed,
         fiscalReviewNote: fiscalReviewNote.trim()
       });
@@ -169,7 +171,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Factura afectada<input readOnly value={purchase.invoiceNumber} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de emisión<input required type="date" value={issueDate} onChange={e=>setIssueDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs font-semibold text-slate-700">Fecha de reconocimiento / abono<input required type="date" value={recognitionDate} onChange={e=>setRecognitionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+            {usdEnabled ? <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND *<input required type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label> : <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Moneda de la ND</span><span className="block text-xs font-bold text-slate-800">{monetaryRule.currencyLabel} · sin tasa BCV ni USD antes de 2018</span></div>}
           </div>
             <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
           <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">

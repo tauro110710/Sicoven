@@ -2,7 +2,6 @@ import {
   VENEZUELAN_MONETARY_ERAS,
   convertVenezuelanAmountBetweenDates,
   getVenezuelanMonetaryEra,
-  normalizeVenezuelanAmountToCurrentScale,
   type VenezuelanMonetaryEraId
 } from '../types/historicalAccountingCalendar';
 import { BCV_REQUIRED_FROM_DATE, isBcvRateRequiredForDate } from './bcvRatePolicy';
@@ -82,11 +81,6 @@ export function getReglaMonetariaPorFecha(fecha: string | null | undefined): Mon
   };
 }
 
-/** Atajo: ¿la operación de esa fecha debe mostrar y exigir tasa BCV? */
-export function requiresBcvRateForOperationDate(fecha: string | null | undefined): boolean {
-  return getReglaMonetariaPorFecha(fecha).requiresBcvRate;
-}
-
 /** Atajo: ¿la operación de esa fecha admite registro o presentación en USD? */
 export function allowsUsdForOperationDate(fecha: string | null | undefined): boolean {
   return getReglaMonetariaPorFecha(fecha).allowsUsd;
@@ -100,37 +94,6 @@ export function formatUsdForDate(amount: number | null | undefined, fecha: strin
   if (!getReglaMonetariaPorFecha(fecha).allowsUsd) return '-';
   if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) return '-';
   return formatUsd(Number(amount));
-}
-
-/**
- * Presentación dual Bs./USD coherente con la fecha contable. Antes de 2018
- * queda solo el monto en bolívares; el tramo USD se expresa como "-".
- */
-export function formatDualCurrencyForDate(
-  amountBs: number | null | undefined,
-  bcvRate: number | null | undefined,
-  fecha: string | null | undefined
-): string {
-  const bs = Number.isFinite(Number(amountBs)) ? Number(amountBs) : 0;
-  const formattedBs = formatBsForDate(bs);
-  const rule = getReglaMonetariaPorFecha(fecha);
-  if (!rule.allowsUsd) return formattedBs;
-  const rate = Number(bcvRate);
-  if (!Number.isFinite(rate) || rate <= 0) return formattedBs;
-  return formattedBs + ' (' + formatUsd(bs / rate) + ')';
-}
-
-function formatBsForDate(amount: number): string {
-  return 'Bs. ' + amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/**
- * Reexpresa un monto nominal de bolívares desde la escala de su fecha contable
- * a la escala vigente (bolívar digital). Devuelve un decimal exacto en texto.
- */
-export function normalizeAmountToCurrentScale(amount: string | number, fecha: string): string {
-  if (!isValidIsoCalendarDate(fecha)) throw new Error('La fecha contable no es válida para normalizar su escala monetaria.');
-  return normalizeVenezuelanAmountToCurrentScale(amount, fecha);
 }
 
 /**
@@ -176,10 +139,4 @@ export const RECONVERSION_BOUNDARIES: readonly ReconversionBoundary[] = VENEZUEL
 export function getReconversionBoundariesInRange(fromDate: string, toDate: string): ReconversionBoundary[] {
   if (!isValidIsoCalendarDate(fromDate) || !isValidIsoCalendarDate(toDate) || fromDate > toDate) return [];
   return RECONVERSION_BOUNDARIES.filter(boundary => boundary.date >= fromDate && boundary.date <= toDate);
-}
-
-/** Siguiente frontera de reconversión posterior a una fecha, o null si ya es la escala vigente. */
-export function getNextReconversionBoundary(date: string): ReconversionBoundary | null {
-  if (!isValidIsoCalendarDate(date)) return null;
-  return RECONVERSION_BOUNDARIES.find(boundary => boundary.date > date) || null;
 }
