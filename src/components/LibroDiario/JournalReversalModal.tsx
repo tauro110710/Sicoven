@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { JournalEntry } from '../../types/accounting';
+import { todayLocalIso } from '../../utils/localDate';
 
 interface JournalReversalModalProps {
   source: JournalEntry | null;
@@ -9,7 +10,7 @@ interface JournalReversalModalProps {
 
 export const JournalReversalModal: React.FC<JournalReversalModalProps> = ({ source, onClose }) => {
   const { currentCompany, accounts, reverseJournalEntry } = useAccounting();
-  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
+  const [effectiveDate, setEffectiveDate] = useState(todayLocalIso());
   const [reason, setReason] = useState('');
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsAccountCode, setRetainedEarningsAccountCode] = useState('');

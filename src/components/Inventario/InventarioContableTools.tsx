@@ -8,6 +8,7 @@ import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { HistoricalAccountingReplayPanel } from './HistoricalAccountingReplayPanel';
 import { allowsUsdForOperationDate } from '../../utils/monetaryPolicy';
+import { todayLocalIso } from '../../utils/localDate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -66,7 +67,7 @@ export const InventarioContableTools: React.FC = () => {
   const [completionCost, setCompletionCost] = useState('0');
   const [sellingCost, setSellingCost] = useState('0');
   const [periodStart, setPeriodStart] = useState(new Date().getFullYear() + '-01-01');
-  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodEnd, setPeriodEnd] = useState(todayLocalIso());
   const [closingRate, setClosingRate] = useState(String(currentCompany.inventoryBcvRate || ''));
   const [closingBusy, setClosingBusy] = useState(false);
   const [productionBusy, setProductionBusy] = useState(false);
@@ -75,7 +76,7 @@ export const InventarioContableTools: React.FC = () => {
   const [componentId, setComponentId] = useState('');
   const [componentQty, setComponentQty] = useState('1');
   const [productionQty, setProductionQty] = useState('1');
-  const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0,10));
+  const [productionDate, setProductionDate] = useState(todayLocalIso());
   const [productionRate, setProductionRate] = useState(String(currentCompany.inventoryBcvRate || ''));
   const [productionRef, setProductionRef] = useState('');
   const [reconstructionStartDate, setReconstructionStartDate] = useState('2026-01-01');
@@ -272,7 +273,7 @@ export const InventarioContableTools: React.FC = () => {
     doc.setFontSize(13);
     doc.text(currentCompany.name || 'Empresa', 14, 12);
     doc.setFontSize(8);
-    doc.text('RIF: ' + currentCompany.rif + ' · Fecha de corte: ' + new Date().toISOString().slice(0,10), 14, 18);
+    doc.text('RIF: ' + currentCompany.rif + ' · Fecha de corte: ' + todayLocalIso(), 14, 18);
     doc.setFontSize(11);
     doc.text('RESUMEN CONSOLIDADO DE INVENTARIO PARA LIBRO DE INVENTARIOS Y BALANCES', 14, 25);
     doc.setFontSize(7);
@@ -408,14 +409,14 @@ export const InventarioContableTools: React.FC = () => {
         { accountCode: lossAccount.code, accountName: lossAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Reversión de pérdida por desvalorización · ' + selectedProduct.code }
       ];
       addJournalEntry({
-        entryNumber: 0, date: new Date().toISOString().slice(0,10),
+        entryNumber: 0, date: todayLocalIso(),
         description: (delta > 0 ? 'Provisión' : 'Reversión') + ' por VNR de inventario · ' + selectedProduct.code,
-        type: 'AJUSTE', bcvRate: rate, referenceDoc: 'VNR-' + selectedProduct.code + '-' + new Date().toISOString().slice(0,10), items
+        type: 'AJUSTE', bcvRate: rate, referenceDoc: 'VNR-' + selectedProduct.code + '-' + todayLocalIso(), items
       });
       updateProduct({
         ...selectedProduct, vnrProvisionBs: vnr.writeDownBs,
         vnrEstimatedSellingPriceBs: Number(sellingPrice), vnrCompletionCostBs: Number(completionCost),
-        vnrSellingCostBs: Number(sellingCost), vnrLastTestDate: new Date().toISOString().slice(0,10)
+        vnrSellingCostBs: Number(sellingCost), vnrLastTestDate: todayLocalIso()
       }, 'Actualización de la provisión por valor neto realizable (VNR).', 'Cálculo VNR revisado y respaldado por precio estimado de venta, costos de terminación y costos de venta.');
       setMessage('Evaluación VNR registrada en el producto y en el Libro Diario.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la provisión VNR.'); }

@@ -4,6 +4,7 @@ import { useAccounting } from '../../context/AccountingContext';
 
 import { buildPayrollJournalItems } from '../../utils/payrollAccounting';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { todayLocalIso } from '../../utils/localDate';
 import { Users, UserPlus, RefreshCw, AlertCircle, CheckCircle2, Calculator, FileText, Printer, BookCheck } from 'lucide-react';
 
 type SalaryHistory = { id: string; effectiveFrom: string; effectiveTo: string | null; baseSalary: number; source: string };
@@ -30,8 +31,8 @@ type ProfitSharingResult = {
 };
 
 const emptyForm: { fiscalId: string; fullName: string; hireDate: string; position: string; costCenter: string; frequency: 'WEEKLY' | 'BIWEEKLY'; baseSalary: string; salaryEffectiveFrom: string } = {
-  fiscalId: '', fullName: '', hireDate: new Date().toISOString().slice(0, 10),
-  position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: '', salaryEffectiveFrom: new Date().toISOString().slice(0,10)
+  fiscalId: '', fullName: '', hireDate: todayLocalIso(),
+  position: '', costCenter: '', frequency: 'BIWEEKLY' as const, baseSalary: '', salaryEffectiveFrom: todayLocalIso()
 };
 
 export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
@@ -48,8 +49,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [success, setSuccess] = useState('');
   const [runs, setRuns] = useState<Array<{id:string;frequency:'WEEKLY'|'BIWEEKLY';periodStart:string;periodEnd:string;status:'DRAFT'|'CONFIRMED'|'VOIDED';totals:Record<string,number>;createdAt:string;confirmedAt:string|null; journalEntryId:string|null}>>([]);
   const [runFrequency, setRunFrequency] = useState<'WEEKLY'|'BIWEEKLY'>('BIWEEKLY');
-  const [periodStart, setPeriodStart] = useState(new Date().toISOString().slice(0,10));
-  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0,10));
+  const [periodStart, setPeriodStart] = useState(todayLocalIso());
+  const [periodEnd, setPeriodEnd] = useState(todayLocalIso());
   const [payInputs, setPayInputs] = useState<Record<string,{earning:string;normal:string;integral:string;gross:string}>>({});
   const [creatingRun, setCreatingRun] = useState(false);
   const [postingRun, setPostingRun] = useState<string | null>(null);
@@ -62,15 +63,15 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [ruleForm, setRuleForm] = useState({
     code: '', description: '', base: 'normalSalary' as 'normalSalary'|'integralSalary'|'grossSalary',
     frequencyScope: 'ALL' as 'ALL'|'WEEKLY'|'BIWEEKLY', workerRate: '', employerRate: '',
-    baseCap: '', effectiveFrom: new Date().toISOString().slice(0,10), effectiveTo: '',
-    sourceReference: '', verifiedAt: new Date().toISOString().slice(0,10)
+    baseCap: '', effectiveFrom: todayLocalIso(), effectiveTo: '',
+    sourceReference: '', verifiedAt: todayLocalIso()
   });
   const [savingRule, setSavingRule] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [profitSharingInputs, setProfitSharingInputs] = useState({
     fiscalYearStart: new Date().getFullYear() + '-01-01',
     fiscalYearEnd: new Date().getFullYear() + '-12-31',
-    netProfits: '', sourceReference: '', verifiedAt: new Date().toISOString().slice(0,10)
+    netProfits: '', sourceReference: '', verifiedAt: todayLocalIso()
   });
   const [profitSharingBases, setProfitSharingBases] = useState<Record<string,{monthlyNormalSalary:string;monthsWorked:string}>>({});
   const [profitSharingLoading, setProfitSharingLoading] = useState(false);
@@ -80,12 +81,12 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
   const [severanceBusy, setSeveranceBusy] = useState<string | null>(null);
   const [severanceResult, setSeveranceResult] = useState<Record<string, Record<string,unknown>>>({});
   const [interestResult, setInterestResult] = useState<Record<string, Record<string,unknown>>>({});
-  const [depositForm, setDepositForm] = useState({depositDate:new Date().toISOString().slice(0,10),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',serviceYear:'1',serviceQuarter:'1',dailyIntegralSalary:'',advancePurpose:'HOUSING',advanceAuthorizationReference:'',sourceReference:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
-  const [interestForm, setInterestForm] = useState({month:new Date().toISOString().slice(0,7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:new Date().toISOString().slice(0,10),supersedesId:''});
-  const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:new Date().toISOString().slice(0,10),salaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthlyIntegratedSalary:'',month1:'',month2:'',month3:'',month4:'',month5:'',month6:''});
+  const [depositForm, setDepositForm] = useState({depositDate:todayLocalIso(),kind:'QUARTERLY' as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:'15',serviceYear:'1',serviceQuarter:'1',dailyIntegralSalary:'',advancePurpose:'HOUSING',advanceAuthorizationReference:'',sourceReference:'',verifiedAt:todayLocalIso(),supersedesId:''});
+  const [interestForm, setInterestForm] = useState({month:todayLocalIso().slice(0, 7),mode:'UNDEPOSITED' as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:'',monthlyRate:'',sourceReference:'',modeEvidence:'',verifiedAt:todayLocalIso(),supersedesId:''});
+  const [severanceCalcForm, setSeveranceCalcForm] = useState({asOfDate:todayLocalIso(),salaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthlyIntegratedSalary:'',month1:'',month2:'',month3:'',month4:'',month5:'',month6:''});
 
   const [liquidationForm,setLiquidationForm] = useState({
-    terminationDate:new Date().toISOString().slice(0,10),
+    terminationDate:todayLocalIso(),
     terminationReason:'VOLUNTARY_RESIGNATION' as 'VOLUNTARY_RESIGNATION'|'JUSTIFIED_WITHDRAWAL_ART80'|'JUSTIFIED_DISMISSAL_ART79'|'UNJUSTIFIED_DISMISSAL_ART92'|'CAUSE_BEYOND_WORKER_WILL_ART92'|'FORCE_MAJEURE_ART92'|'MUTUAL_AGREEMENT'|'CONTRACT_EXPIRATION'|'WORK_COMPLETION'|'EARLY_FIXED_TERM_WITHDRAWAL_ART83'|'DEATH_ART145'|'TEMPORARY_SUSPENSION',
     vacationSalaryType:'FIXED' as 'FIXED'|'VARIABLE',lastMonthNormalSalary:'',vacationMonth1:'',vacationMonth2:'',vacationMonth3:'',
     vacationDaysOutstanding:'0',vacationBonusDaysOutstanding:'0',vacationAnnualDays:'',vacationBonusAnnualDays:'',vacationEntitlementEvidence:'',vacationBalanceSource:'',
@@ -241,7 +242,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
     if (legalCalcLoading || !window.sicovenStore) return;
     const values = legalCalcInputs[employeeId] || {
       salaryType: 'FIXED' as const, lastMonth: '', month1: '', month2: '', month3: '',
-      asOfDate: new Date().toISOString().slice(0,10), fiscalYearStart: new Date().getFullYear() + '-01-01'
+      asOfDate: todayLocalIso(), fiscalYearStart: new Date().getFullYear() + '-01-01'
     };
     if (values.salaryType === 'FIXED' && (!Number.isFinite(Number(values.lastMonth)) || Number(values.lastMonth) <= 0)) {
       setError('Indique el salario normal del mes anterior para calcular vacaciones y beneficios.');
@@ -677,7 +678,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 <button type="button" onClick={() => void toggleSalaryHistory(employee.id)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">{historyLoading === employee.id ? 'Cargando…' : historyOpen === employee.id ? 'Ocultar historial' : 'Historial'}</button>
                 <button type="button" onClick={() => setLegalCalcOpen(current => current === employee.id ? null : employee.id)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50">{legalCalcOpen === employee.id ? 'Cerrar cálculos' : 'Cálculos LOTTT'}</button>
                 <button type="button" onClick={() => void openSeverance(employee.id)} className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50">{severanceOpen === employee.id ? 'Cerrar prestaciones' : 'Prestaciones e intereses'}</button>
-                <button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: new Date().toISOString().slice(0,10) }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button>
+                <button type="button" onClick={() => { setEditingId(employee.id); setForm({ fiscalId: employee.fiscalId, fullName: employee.fullName, hireDate: employee.hireDate, position: employee.position || '', costCenter: employee.costCenter || '', frequency: employee.frequency, baseSalary: String(employee.baseSalary), salaryEffectiveFrom: todayLocalIso() }); setError(''); setSuccess(''); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</button>
               </div>
             </div>
             {historyOpen === employee.id && <div className="mt-3 rounded-lg bg-slate-50 p-3">
@@ -723,8 +724,8 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
                 {severanceResult[employee.id] && <div className="mt-2 rounded-lg bg-white p-3 text-sm">{severanceResult[employee.id].error ? <p className="text-rose-700">{String(severanceResult[employee.id].error)}</p> : <div className="grid gap-2 sm:grid-cols-2"><p>Garantía histórica: <strong>Bs. {Number(severanceResult[employee.id].guaranteeAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Terminación: <strong>Bs. {Number(severanceResult[employee.id].terminationAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Mayor importe legal: <strong>Bs. {Number(severanceResult[employee.id].greaterAmount||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Anticipos: <strong>Bs. {Number(severanceResult[employee.id].advanceTotal||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p><p>Saldo luego de anticipos: <strong>Bs. {Number(severanceResult[employee.id].netAfterAdvances||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p></div>}</div>}
               </div>
               <div className="border-t border-amber-200 pt-3"><p className="text-xs font-bold text-slate-700">Historial vigente · Depósitos {severanceHistory[employee.id]?.deposits.length||0} · Meses de intereses {severanceHistory[employee.id]?.interests.length||0}</p>
-                {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setDepositForm({depositDate:String(item.depositDate),kind:item.kind as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:String(item.days),serviceYear:String(item.serviceYear||'1'),serviceQuarter:String(item.serviceQuarter??''),dailyIntegralSalary:String(item.dailyIntegralSalary),advancePurpose:String(item.advancePurpose||'HOUSING'),advanceAuthorizationReference:String(item.advanceAuthorizationReference||''),sourceReference:String(item.sourceReference),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
-                {(severanceHistory[employee.id]?.interests||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.month)} · {String(item.mode)} · tasa {(Number(item.monthlyRate)*100).toFixed(4)}% · interés Bs. {Number(item.interest).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setInterestForm({month:String(item.month),mode:item.mode as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:String(item.capital),monthlyRate:String(Number(item.monthlyRate)*100),sourceReference:String(item.sourceReference),modeEvidence:String(item.modeEvidence||''),verifiedAt:String(item.verifiedAt||new Date().toISOString().slice(0,10)),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
+                {(severanceHistory[employee.id]?.deposits||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.depositDate)} · {String(item.kind)} · {Number(item.days)} días × Bs. {Number(item.dailyIntegralSalary).toFixed(2)} · Bs. {Number(item.amount).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setDepositForm({depositDate:String(item.depositDate),kind:item.kind as 'QUARTERLY'|'SENIORITY'|'ADVANCE',days:String(item.days),serviceYear:String(item.serviceYear||'1'),serviceQuarter:String(item.serviceQuarter??''),dailyIntegralSalary:String(item.dailyIntegralSalary),advancePurpose:String(item.advancePurpose||'HOUSING'),advanceAuthorizationReference:String(item.advanceAuthorizationReference||''),sourceReference:String(item.sourceReference),verifiedAt:String(item.verifiedAt||todayLocalIso()),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
+                {(severanceHistory[employee.id]?.interests||[]).map((item:any)=><div key={String(item.id)} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><span>{String(item.month)} · {String(item.mode)} · tasa {(Number(item.monthlyRate)*100).toFixed(4)}% · interés Bs. {Number(item.interest).toFixed(2)} · {String(item.sourceReference)}</span><button type="button" onClick={()=>setInterestForm({month:String(item.month),mode:item.mode as 'TRUST_OR_FUND'|'AUTHORIZED_BOOK_CREDIT'|'UNDEPOSITED',capital:String(item.capital),monthlyRate:String(Number(item.monthlyRate)*100),sourceReference:String(item.sourceReference),modeEvidence:String(item.modeEvidence||''),verifiedAt:String(item.verifiedAt||todayLocalIso()),supersedesId:String(item.id)})} className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900">Rectificar</button></div>)}
               </div>
               <div className="border-t border-amber-200 pt-3 space-y-3">
                 <div><p className="font-semibold text-slate-800">Liquidación final del trabajador</p><p className="text-xs text-slate-600">Consolida prestaciones, vacaciones vencidas/fraccionadas, bono vacacional, utilidades, intereses y la indemnización que corresponda. Verifique los saldos de vacaciones con el registro histórico antes de guardar.</p></div>
@@ -770,7 +771,7 @@ export const PayrollView: React.FC<{ token: string }> = ({ token }) => {
               {(() => {
                 const values = legalCalcInputs[employee.id] || {
                   salaryType: 'FIXED' as const, lastMonth: '', month1: '', month2: '', month3: '',
-                  asOfDate: new Date().toISOString().slice(0,10), fiscalYearStart: new Date().getFullYear() + '-01-01'
+                  asOfDate: todayLocalIso(), fiscalYearStart: new Date().getFullYear() + '-01-01'
                 };
                 const setField = <K extends keyof typeof values,>(field: K, value: (typeof values)[K]) => setLegalCalcInputs(current => ({
                   ...current, [employee.id]: { ...values, [field]: value }

@@ -87,20 +87,26 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   const vatWithheld = Number(purchase.vatWithheldBs ?? 0);
   const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
   const igtf = Number(purchase.igtfAmountBs ?? 0);
+  const luxuryTax = Number(purchase.additionalLuxuryTaxBs ?? 0);
   const total = Number(purchase.totalAmountBs);
   const rate = Number(purchase.bcvRate);
   const taxRate = Number(purchase.taxRate);
+  // La alícuota combinada 31% son 16% de IVA más 15% de impuesto suntuario.
+  const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAccountCode = taxRate === 8 ? '1.1.3.02' : '1.1.3.01';
   // Antes de 2018 la operación es nominal en bolívares: no exige tasa BCV ni
   // equivalencia USD (regla monetaria central del sistema).
   const usdEquivalent = requiresUsdEquivalence(purchase.invoiceDate);
   const base = taxableBase + exemptBase;
   const payable = total - vatWithheld - islrWithheld;
-  const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate, taxRate];
+  const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, luxuryTax, total, rate, taxRate];
   if (!values.every(value => Number.isFinite(value) && value >= 0) ||
       (usdEquivalent && rate <= 0) || taxRate > 100 || payable <= 0 ||
-      Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
-      Math.abs(total - (base + vat + igtf)) > 0.02) return false;
+      Math.abs(vat - Math.round((taxableBase * effectiveVatRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
+      (taxRate === 31 && Math.abs(luxuryTax - Math.round((taxableBase * 15 / 100 + Number.EPSILON) * 100) / 100) > 0.02) ||
+      Math.abs(total - (base + vat + luxuryTax + igtf)) > 0.02) return false;
 
+  const items = asArray(entry.items);
   const inventoryByAccount = new Map();
   if (Array.isArray(purchase.inventoryLines) && purchase.inventoryLines.length > 0) {
     for (const line of purchase.inventoryLines) {
@@ -113,15 +119,21 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
       inventoryByAccount.set(code, (inventoryByAccount.get(code) || 0) + amount);
     }
   } else {
-    // Las facturas sin detalle de inventario se registran como gasto operativo
-    // en el flujo actual. Se conserva compatibilidad con asientos históricos
-    // que ya fueron contabilizados contra inventario.
-    const expenseDebit = asArray(entry.items).some(item =>
+    // Las facturas sin detalle de inventario se debitan a la cuenta explícita
+    // que eligió el contador (gasto, costo o activo). Los respaldos históricos
+    // sin esa clasificación se reconocen por su único débito no fiscal o, en su
+    // defecto, por las cuentas que usaba el flujo anterior.
+    const taxAccounts = new Set(['1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13']);
+    const explicitDebit = String(purchase.purchaseDebitAccountCode || '').trim();
+    const nonTaxDebits = [...new Set(items
+      .filter(item => Number(item.debitBs || 0) > 0 && !taxAccounts.has(String(item.accountCode)))
+      .map(item => String(item.accountCode)))];
+    const expenseDebit = items.some(item =>
       String(item.accountCode) === '6.1.1.04' && Number(item.debitBs || 0) > 0);
-    if (expenseDebit) inventoryByAccount.set('6.1.1.04', base);
-    else inventoryByAccount.set('1.1.4.01', base);
+    const debitAccountCode = explicitDebit ||
+      (nonTaxDebits.length === 1 ? nonTaxDebits[0] : (expenseDebit ? '6.1.1.04' : '1.1.4.01'));
+    inventoryByAccount.set(debitAccountCode, base);
   }
-  const items = asArray(entry.items);
   const cashPurchase = purchase.paymentTerm === 'CONTADO';
   const payableAccounts = [...new Set(items
     .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
@@ -138,7 +150,7 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     if (payableAccounts.length !== 1) return false;
     payableAccountCode = payableAccounts[0];
   }
-  const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', payableAccountCode]);
+  const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13', '2.1.2.03', '2.1.2.04', payableAccountCode]);
   if (!items.length || !items.every(item => {
     const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
     return Boolean(item.accountCode) && allowed.has(item.accountCode) &&
@@ -157,8 +169,10 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   }
   const expected = new Map([
     ...[...inventoryByAccount.entries()].map(([code, amount]) => [code, { debitBs: money(amount), creditBs: 0 }]),
-    ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
+    [vatAccountCode, { debitBs: vat, creditBs: 0 }],
+    [vatAccountCode === '1.1.3.01' ? '1.1.3.02' : '1.1.3.01', { debitBs: 0, creditBs: 0 }],
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
+    ['6.1.1.13', { debitBs: luxuryTax, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
     ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
     [payableAccountCode, { debitBs: 0, creditBs: payable }]
@@ -182,6 +196,7 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   return Math.abs(debitUsd - creditUsd) <= 0.0001 &&
     Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.additionalLuxuryTaxUsd ?? 0) - luxuryTax / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
@@ -1660,27 +1675,34 @@ function saleJournalMatchesInvoice(sale, entry, company) {
   const vat = Number(sale.vatAmountBs);
   const withheld = Number(sale.vatWithheldBs || 0);
   const igtf = Number(sale.igtfAmountBs || 0);
+  const luxuryTax = Number(sale.additionalLuxuryTaxBs || 0);
   const total = Number(sale.totalAmountBs);
   const taxRate = Number(sale.taxRate);
+  // La alícuota combinada 31% son 16% de IVA más 15% de impuesto suntuario.
+  const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
+  const vatAccountCode = taxRate === 8 ? '2.1.2.02' : '2.1.2.01';
   const igtfApplicable = sale.igtfApplicable === true;
   if (igtf > 0 || igtfApplicable) {
     const eligibleIgtf = company?.isIgtfPerceptionAgent === true &&
       sale.paymentTerm === 'CONTADO' &&
       ['FOREIGN_CASH', 'CRYPTO'].includes(sale.paymentCurrency);
-    const expectedIgtf = Math.round((taxableBase + exempt + vat) * 3) / 100;
+    const expectedIgtf = Math.round((taxableBase + exempt + vat + luxuryTax) * 3) / 100;
     if (!eligibleIgtf || Number(sale.igtfRate || 0) !== 3 ||
         Math.abs(igtf - expectedIgtf) > 0.01) return false;
   }
-  const values = [rate, taxableBase, exempt, vat, withheld, igtf, total, taxRate,
+  const values = [rate, taxableBase, exempt, vat, withheld, igtf, luxuryTax, total, taxRate,
     Number(sale.totalAmountUsd), Number(sale.taxableBaseUsd), Number(sale.vatAmountUsd),
+    Number(sale.additionalLuxuryTaxUsd || 0),
     Number(sale.vatWithheldUsd || 0), Number(sale.igtfAmountUsd || 0)];
   if (values.some(value => !Number.isFinite(value) || value < 0) || rate <= 0 ||
       taxRate > 100 || total <= 0 || withheld > vat + 0.01 ||
-      Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.01 ||
-      Math.abs(total - (taxableBase + exempt + vat + igtf)) > 0.01 ||
+      Math.abs(vat - Math.round((taxableBase * effectiveVatRate / 100 + Number.EPSILON) * 100) / 100) > 0.01 ||
+      (taxRate === 31 && Math.abs(luxuryTax - Math.round((taxableBase * 15 / 100 + Number.EPSILON) * 100) / 100) > 0.01) ||
+      Math.abs(total - (taxableBase + exempt + vat + luxuryTax + igtf)) > 0.01 ||
       Math.abs(Number(sale.totalAmountUsd) - total / rate) > 0.0001 ||
       Math.abs(Number(sale.taxableBaseUsd) - taxableBase / rate) > 0.0001 ||
       Math.abs(Number(sale.vatAmountUsd) - vat / rate) > 0.0001 ||
+      Math.abs(Number(sale.additionalLuxuryTaxUsd || 0) - luxuryTax / rate) > 0.0001 ||
       Math.abs(Number(sale.vatWithheldUsd || 0) - withheld / rate) > 0.0001 ||
       Math.abs(Number(sale.igtfAmountUsd || 0) - igtf / rate) > 0.0001 ||
       Math.abs(Number(entry.bcvRate) - rate) > 0.000001) return false;
@@ -1690,7 +1712,9 @@ function saleJournalMatchesInvoice(sale, entry, company) {
     ['1.1.3.03', { debitBs: withheld, creditBs: 0, debitUsd: withheld / rate, creditUsd: 0 }],
     ['2.1.2.06', { debitBs: 0, creditBs: igtf, debitUsd: 0, creditUsd: igtf / rate }],
     ['4.1.1.01', { debitBs: 0, creditBs: taxableBase + exempt, debitUsd: 0, creditUsd: (taxableBase + exempt) / rate }],
-    ['2.1.2.01', { debitBs: 0, creditBs: vat, debitUsd: 0, creditUsd: vat / rate }]
+    [vatAccountCode, { debitBs: 0, creditBs: vat, debitUsd: 0, creditUsd: vat / rate }],
+    [vatAccountCode === '2.1.2.01' ? '2.1.2.02' : '2.1.2.01', { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 }],
+    ['2.1.2.08', { debitBs: 0, creditBs: luxuryTax, debitUsd: 0, creditUsd: luxuryTax / rate }]
   ]);
   const actual = new Map();
   for (const item of entry.items) {
@@ -1923,11 +1947,15 @@ function validateSaleCorrectionNotes(previousState, nextState) {
     const base = Number(note.taxableBaseBs || 0);
     const exempt = Number(note.exemptAmountBs || 0);
     const vat = Number(note.vatAmountBs || 0);
+    const luxuryTax = Number(note.additionalLuxuryTaxBs || 0);
     const total = Number(note.totalAmountBs || 0);
     const rate = Number(note.bcvRate || 0);
     const taxRate = Number(note.taxRate || 0);
-    const expectedVat = round2(base * taxRate / 100);
-    const expectedTotal = round2(base + exempt + vat);
+    const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
+    const expectedLuxuryTax = taxRate === 31 ? round2(base * 15 / 100) : 0;
+    const noteVatAccountCode = taxRate === 8 ? '2.1.2.02' : '2.1.2.01';
+    const expectedVat = round2(base * effectiveVatRate / 100);
+    const expectedTotal = round2(base + exempt + vat + luxuryTax);
     const expectedRef = (isCredit ? 'NC-CLI-' : 'ND-CLI-') + number;
     const duplicateNumber = nextSales.some(item => item.id !== note.id && item.companyId === note.companyId &&
       normalize(item.invoiceNumber) === normalize(note.invoiceNumber));
@@ -1941,13 +1969,17 @@ function validateSaleCorrectionNotes(previousState, nextState) {
     }
     const revenue = amountsByAccount.get('4.1.1.01') || {};
     const receivable = amountsByAccount.get('1.1.2.01') || {};
-    const vatAccount = amountsByAccount.get('2.1.2.01') || {};
+    const vatAccount = amountsByAccount.get(noteVatAccountCode) || {};
+    const luxuryAccount = amountsByAccount.get('2.1.2.08') || {};
     const baseUsd = round6((base + exempt) / rate);
     const vatUsd = round6(vat / rate);
+    const luxuryUsd = round6(luxuryTax / rate);
     const totalUsd = round6(total / rate);
-    const expectedLineCount = vat > 0 ? 3 : 2;
+    const expectedLineCount = 2 + (vat > 0 ? 1 : 0) + (luxuryTax > 0 ? 1 : 0);
     const journalMatches = Boolean(journal && entries.length === expectedLineCount &&
-      entries.every(line => ['4.1.1.01', '1.1.2.01', ...(vat > 0 ? ['2.1.2.01'] : [])].includes(String(line.accountCode))) &&
+      entries.every(line => ['4.1.1.01', '1.1.2.01',
+        ...(vat > 0 ? [noteVatAccountCode] : []),
+        ...(luxuryTax > 0 ? ['2.1.2.08'] : [])].includes(String(line.accountCode))) &&
       journal.type === 'AJUSTE' && journal.date === note.invoiceDate &&
       close(journal.bcvRate, rate, 0.000001) && normalize(journal.referenceDoc) === normalize(expectedRef) &&
       close(revenue.debitBs || 0, isCredit ? base + exempt : 0) &&
@@ -1962,6 +1994,10 @@ function validateSaleCorrectionNotes(previousState, nextState) {
       close(vatAccount.creditBs || 0, isCredit ? 0 : vat) &&
       close(vatAccount.debitUsd || 0, isCredit ? vatUsd : 0, 0.0001) &&
       close(vatAccount.creditUsd || 0, isCredit ? 0 : vatUsd, 0.0001) &&
+      close(luxuryAccount.debitBs || 0, isCredit ? luxuryTax : 0) &&
+      close(luxuryAccount.creditBs || 0, isCredit ? 0 : luxuryTax) &&
+      close(luxuryAccount.debitUsd || 0, isCredit ? luxuryUsd : 0, 0.0001) &&
+      close(luxuryAccount.creditUsd || 0, isCredit ? 0 : luxuryUsd, 0.0001) &&
       close(entries.reduce((sum, line) => sum + Number(line.debitBs || 0), 0),
         entries.reduce((sum, line) => sum + Number(line.creditBs || 0), 0)) &&
       close(entries.reduce((sum, line) => sum + Number(line.debitUsd || 0), 0),
@@ -1990,10 +2026,12 @@ function validateSaleCorrectionNotes(previousState, nextState) {
         !Number.isFinite(base) || !Number.isFinite(exempt) || base < 0 || exempt < 0 || base + exempt <= 0 ||
         !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
         !close(vat, expectedVat) || !close(total, expectedTotal) ||
+        !close(luxuryTax, expectedLuxuryTax) ||
         !close(note.totalAmountUsd, totalUsd, 0.0001) ||
         !close(note.taxableBaseUsd, round6(base / rate), 0.0001) ||
         !close(note.exemptAmountUsd, round6(exempt / rate), 0.0001) ||
         !close(note.vatAmountUsd, vatUsd, 0.0001) ||
+        !close(note.additionalLuxuryTaxUsd || 0, luxuryUsd, 0.0001) ||
         !close(note.taxRate, source.taxRate, 0.000001) ||
         Number(note.vatWithheldBs || 0) !== 0 || Number(note.igtfAmountBs || 0) !== 0 ||
         Number(note.igtfAmountUsd || 0) !== 0 ||
@@ -2900,11 +2938,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       const rate = Number(original.bcvRate);
       const baseBs = Number(note.taxableBaseBs || 0) + Number(note.exemptAmountBs || 0);
       const baseUsd = Number(note.taxableBaseUsd || 0) + Number(note.exemptAmountUsd || 0);
+      const luxuryBs = Number(note.additionalLuxuryTaxBs || 0);
+      const luxuryUsd = Number(note.additionalLuxuryTaxUsd || 0);
       const vatBs = Number(note.vatAmountBs || 0);
       const vatUsd = Number(note.vatAmountUsd || 0);
       const totalBs = Number(note.totalAmountBs || 0);
       const totalUsd = Number(note.totalAmountUsd || 0);
-      const sourceBaseBs = Number(original.taxableBaseBs || 0) + Number(original.exemptAmountBs || 0);
+      const sourceBaseBs = Number(original.taxableBaseBs || 0) + Number(original.exemptAmountBs || 0) +
+        Number(original.additionalLuxuryTaxBs || 0);
       const expenseLines = asArray(sourceEntry?.items).filter(line => {
         const account = asArray(nextState.accounts).find(item => item.code === line.accountCode);
         return Number(line.debitBs || 0) > 0 && account?.isMovement &&
@@ -2919,11 +2960,15 @@ function validateAccountingSnapshot(previousState, nextState) {
       const payableAppliedUsd = Math.round((totalUsd - Number(note.supplierAdvanceUsd || 0)) * 1000000) / 1000000;
       const journal = nextById.get(String(note.journalEntryId));
       const expectedCredits = new Map();
+      // El impuesto suntuario se revierte dentro de las mismas cuentas de gasto,
+      // igual que en el asiento que genera la NC de servicios.
+      const expenseReversalBs = baseBs + luxuryBs;
+      const expenseReversalUsd = baseUsd + luxuryUsd;
       for (const line of expenseLines) {
         const code = String(line.accountCode);
         const prior = expectedCredits.get(code) || { bs: 0, usd: 0 };
-        prior.bs += Number(line.debitBs || 0) / sourceExpenseBs * baseBs;
-        prior.usd += Number(line.debitUsd || 0) / sourceExpenseUsd * baseUsd;
+        prior.bs += Number(line.debitBs || 0) / sourceExpenseBs * expenseReversalBs;
+        prior.usd += Number(line.debitUsd || 0) / sourceExpenseUsd * expenseReversalUsd;
         expectedCredits.set(code, prior);
       }
       const journalRows = asArray(journal?.items);
@@ -2942,6 +2987,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       const noteTaxableBs = Number(note.taxableBaseBs || 0);
       const noteExemptBs = Number(note.exemptAmountBs || 0);
       const noteTaxRate = Number(note.taxRate || 0);
+      const noteEffectiveVatRate = noteTaxRate === 31 ? 16 : noteTaxRate;
+      const expectedNoteLuxury = noteTaxRate === 31
+        ? Math.round((noteTaxableBs * 15 / 100 + Number.EPSILON) * 100) / 100 : 0;
       const expectedLineCount = expenseLines.length + (vatBs > 0 ? 1 : 0) +
         (payableAppliedBs > 0.02 ? 1 : 0) + (Number(note.supplierAdvanceBs || 0) > 0.02 ? 1 : 0);
       const validExpenseCredits = [...expectedCredits.entries()].every(([code, expected]) => {
@@ -2968,9 +3016,10 @@ function validateAccountingSnapshot(previousState, nextState) {
           (Number(original.vatAmountBs || 0) > 0 && (sourceVatLines.length !== 1 ||
             Math.abs(Number(sourceVatLines[0].debitBs) - Number(original.vatAmountBs)) > 0.02)) ||
           Math.abs(Number(note.bcvRate) - rate) > 0.000001 ||
-          Math.abs(totalBs - baseBs - vatBs) > 0.02 ||
-          Math.abs(totalUsd - baseUsd - vatUsd) > 0.0001 ||
-          Math.abs(noteTaxableBs * noteTaxRate / 100 - vatBs) > 0.02 ||
+          Math.abs(totalBs - baseBs - vatBs - luxuryBs) > 0.02 ||
+          Math.abs(totalUsd - baseUsd - vatUsd - luxuryUsd) > 0.0001 ||
+          Math.abs(noteTaxableBs * noteEffectiveVatRate / 100 - vatBs) > 0.02 ||
+          Math.abs(luxuryBs - expectedNoteLuxury) > 0.02 ||
           Math.abs(noteTaxRate - Number(original.taxRate || 0)) > 0.000001 ||
           cumulativeServiceTaxable > Number(original.taxableBaseBs || 0) + 0.01 ||
           cumulativeServiceExempt > Number(original.exemptAmountBs || 0) + 0.01 ||
@@ -2980,6 +3029,9 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(Number(note.exemptAmountUsd || 0) - noteExemptBs / rate) > 0.0001 ||
           Math.abs(baseUsd - baseBs / rate) > 0.0001 ||
           Math.abs(vatUsd - vatBs / rate) > 0.0001 ||
+          Math.abs(luxuryUsd - luxuryBs / rate) > 0.0001 ||
+          Math.abs(Number(note.additionalLuxuryTaxUsd || 0) - luxuryBs / rate) > 0.0001 ||
+          !Number.isFinite(luxuryBs) || luxuryBs < 0 ||
           Math.abs(totalUsd - totalBs / rate) > 0.0001 ||
           Math.abs(Number(note.netPayableReductionBs) - totalBs) > 0.02 ||
           Math.abs(Number(note.netPayableReductionUsd) - totalUsd) > 0.0001 ||
@@ -3201,8 +3253,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       Math.abs(accountSum(code, 'credit', 'Usd') - amount / Number(note.bcvRate)) <= 0.0001);
     const allowedCreditNoteAccounts = new Set([
       ...inventoryByAccount.keys(), sourcePayableAccountCode, '1.1.2.03',
-      '1.1.3.01', '2.1.2.03', '2.1.2.04', '6.1.1.11'
+      '1.1.3.01', '1.1.3.02', '2.1.2.03', '2.1.2.04', '6.1.1.11', '6.1.1.13'
     ]);
+    const noteVatAccountCode = Number(original.taxRate) === 8 ? '1.1.3.02' : '1.1.3.01';
     const journalLinesValid = journal.items.length > 0 && journal.items.every(item => {
       const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd]
         .map(value => Number(value ?? 0));
@@ -3214,6 +3267,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (!journalLinesValid ||
         Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
         Math.abs(totalInventoryCost - Number(note.taxableBaseBs || 0) - Number(note.exemptAmountBs || 0)) > 0.02 ||
+        !Number.isFinite(Number(note.additionalLuxuryTaxBs || 0)) || Number(note.additionalLuxuryTaxBs || 0) < 0 ||
+        !Number.isFinite(Number(note.additionalLuxuryTaxUsd || 0)) || Number(note.additionalLuxuryTaxUsd || 0) < 0 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
         accountSum(sourcePayableAccountCode, 'credit', 'Bs') > 0.02 || accountSum(sourcePayableAccountCode, 'credit', 'Usd') > 0.0001 ||
@@ -3222,9 +3277,14 @@ function validateAccountingSnapshot(previousState, nextState) {
         accountSum('1.1.2.03', 'credit', 'Bs') > 0.02 || accountSum('1.1.2.03', 'credit', 'Usd') > 0.0001 ||
         !inventoryAccountsMatch ||
         [...inventoryByAccount.keys()].some(code => accountSum(code, 'debit', 'Bs') > 0.02 || accountSum(code, 'debit', 'Usd') > 0.0001) ||
-        Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
-        Math.abs(accountSum('1.1.3.01', 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
-        accountSum('1.1.3.01', 'debit', 'Bs') > 0.02 || accountSum('1.1.3.01', 'debit', 'Usd') > 0.0001 ||
+        Math.abs(accountSum(noteVatAccountCode, 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
+        Math.abs(accountSum(noteVatAccountCode, 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
+        accountSum(noteVatAccountCode, 'debit', 'Bs') > 0.02 || accountSum(noteVatAccountCode, 'debit', 'Usd') > 0.0001 ||
+        accountSum(noteVatAccountCode === '1.1.3.01' ? '1.1.3.02' : '1.1.3.01', 'credit', 'Bs') > 0.02 ||
+        accountSum(noteVatAccountCode === '1.1.3.01' ? '1.1.3.02' : '1.1.3.01', 'credit', 'Usd') > 0.0001 ||
+        Math.abs(accountSum('6.1.1.13', 'credit', 'Bs') - Number(note.additionalLuxuryTaxBs || 0)) > 0.02 ||
+        Math.abs(accountSum('6.1.1.13', 'credit', 'Usd') - Number(note.additionalLuxuryTaxUsd || 0)) > 0.0001 ||
+        accountSum('6.1.1.13', 'debit', 'Bs') > 0.02 || accountSum('6.1.1.13', 'debit', 'Usd') > 0.0001 ||
         Math.abs(accountSum('2.1.2.03', 'debit', 'Bs') - Number(note.vatWithheldBs || 0)) > 0.02 ||
         Math.abs(accountSum('2.1.2.03', 'debit', 'Usd') - Number(note.vatWithheldUsd || 0)) > 0.0001 ||
         accountSum('2.1.2.03', 'credit', 'Bs') > 0.02 || accountSum('2.1.2.03', 'credit', 'Usd') > 0.0001 ||
@@ -3243,11 +3303,12 @@ function validateAccountingSnapshot(previousState, nextState) {
         !Number.isFinite(Number(note.igtfAmountUsd || 0)) ||
         !Number.isFinite(Number(note.supplierAdvanceUsd || 0)) ||
         !Number.isFinite(Number(note.netPayableReductionUsd)) ||
-        Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.igtfAmountBs || 0)) > 0.02 ||
+        Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.additionalLuxuryTaxBs || 0) - Number(note.igtfAmountBs || 0)) > 0.02 ||
         Math.abs(Number(note.totalAmountUsd) - Number(note.totalAmountBs) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.taxableBaseUsd || 0) - Number(note.taxableBaseBs || 0) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.exemptAmountUsd || 0) - Number(note.exemptAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.vatAmountUsd || 0) - Number(note.vatAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.additionalLuxuryTaxUsd || 0) - Number(note.additionalLuxuryTaxBs || 0) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.vatWithheldUsd || 0) - Number(note.vatWithheldBs || 0) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.islrWithheldUsd || 0) - Number(note.islrWithheldBs || 0) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.igtfAmountUsd || 0) - Number(note.igtfAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||

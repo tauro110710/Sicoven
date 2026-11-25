@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, ClipboardList, RefreshCw } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { VatFiscalIncident, VatFiscalIncidentEventInput } from '../../types/vatFiscalIncidents';
+import { todayLocalIso } from '../../utils/localDate';
 
 export const VatFiscalIncidentPanel: React.FC = () => {
   const { currentCompany, purchases, vatVouchers, listVatFiscalIncidents, createVatFiscalIncident, recordVatFiscalIncidentEvent } = useAccounting();
@@ -49,7 +50,7 @@ export const VatFiscalIncidentPanel: React.FC = () => {
         purchaseId: purchase.id,
         ...(voucher ? { vatVoucherId: voucher.id } : {}),
         reason: reason.trim(),
-        detectedAt: new Date().toISOString().slice(0, 10)
+        detectedAt: todayLocalIso()
       });
       setIncidents(previous => [created, ...previous.filter(item => item.id !== created.id)]);
       setSelectedPurchaseId(''); setReason('');

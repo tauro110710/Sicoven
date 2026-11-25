@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
+import { todayLocalIso } from '../../utils/localDate';
 import {
   Settings,
   Building2,
@@ -492,7 +493,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `SICOVEN_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `SICOVEN_Backup_${todayLocalIso()}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

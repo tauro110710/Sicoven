@@ -266,8 +266,10 @@ export function validatePurchaseInventoryReconciliation(input: {
   const vatWithheld = Number(purchase.vatWithheldBs ?? 0);
   const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
   const igtf = Number(purchase.igtfAmountBs ?? 0);
+  const luxuryTax = Number(purchase.additionalLuxuryTaxBs ?? 0);
   const total = Number(purchase.totalAmountBs);
   const rate = Number(purchase.bcvRate);
+  const vatAccountCode = Number(purchase.taxRate) === 8 ? '1.1.3.02' : '1.1.3.01';
   const baseTotal = money(taxableBase + exemptBase);
   const lineTotal = money(lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0));
   // Los fletes/gastos de importación de la línea se capitalizan en la entrada de
@@ -284,9 +286,9 @@ export function validatePurchaseInventoryReconciliation(input: {
     const effectiveUnitCost = effectiveUnitCostOf(line);
     return sum + (Number.isFinite(effectiveUnitCost) ? Number(line.quantity) * effectiveUnitCost : NaN);
   }, 0));
-  const expectedTotal = money(baseTotal + vat + igtf);
+  const expectedTotal = money(baseTotal + vat + luxuryTax + igtf);
   const expectedPayable = money(total - vatWithheld - islrWithheld);
-  const validAmounts = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate,
+  const validAmounts = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, luxuryTax, total, rate,
     Number(purchase.taxRate)].every(value => Number.isFinite(value) && value >= 0) &&
     rate > 0 && Number(purchase.taxRate) <= 100 &&
     vatWithheld <= vat + 0.02 && islrWithheld <= taxableBase + 0.02 &&
@@ -353,7 +355,7 @@ export function validatePurchaseInventoryReconciliation(input: {
         Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
     }) && Math.abs(movementTotal - capitalizedLineTotal) <= 0.02;
 
-  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', ...(payableAccountCode ? [payableAccountCode] : [])]);
+  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '1.1.3.02', '6.1.1.11', '6.1.1.13', '2.1.2.03', '2.1.2.04', ...(payableAccountCode ? [payableAccountCode] : [])]);
   const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
   const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
     const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
@@ -372,8 +374,10 @@ export function validatePurchaseInventoryReconciliation(input: {
   }
   const expectedAccounts = new Map<string, { debitBs: number; creditBs: number }>([
     ...[...expectedInventoryByAccount.entries()].map(([code, amount]) => [code, { debitBs: amount, creditBs: 0 }] as [string, { debitBs: number; creditBs: number }]),
-    ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
+    [vatAccountCode, { debitBs: vat, creditBs: 0 }],
+    [vatAccountCode === '1.1.3.01' ? '1.1.3.02' : '1.1.3.01', { debitBs: 0, creditBs: 0 }],
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
+    ['6.1.1.13', { debitBs: luxuryTax, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
     ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
     ...(payableAccountCode ? [[payableAccountCode, { debitBs: 0, creditBs: expectedPayable }] as [string, { debitBs: number; creditBs: number }]] : [])
@@ -395,6 +399,7 @@ export function validatePurchaseInventoryReconciliation(input: {
   });
   const purchaseUsdMatches = Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.additionalLuxuryTaxUsd ?? 0) - luxuryTax / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&

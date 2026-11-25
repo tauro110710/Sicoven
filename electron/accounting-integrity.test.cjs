@@ -517,6 +517,91 @@ test('SQLite acepta compras cuya línea capitaliza fletes o gastos de importaci�
   ), /una entrada de Kardex no coincide/);
 });
 
+test('SQLite acepta compras con IVA 8% y con impuesto adicional al consumo suntuario 31%', () => {
+  const purchase8 = {
+    id: 'purchase-iva8', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '300', documentType: '01',
+    totalAmountBs: 216, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 8, vatAmountBs: 16,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, additionalLuxuryTaxBs: 0, bcvRate: 100,
+    totalAmountUsd: 2.16, taxableBaseUsd: 2, vatAmountUsd: 0.16, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, additionalLuxuryTaxUsd: 0, journalEntryId: 'purchase-iva8-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry8 = {
+    id: 'purchase-iva8-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra IVA 8%', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-300',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.02', debitBs: 16, creditBs: 0, debitUsd: 0.16, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 216, debitUsd: 0, creditUsd: 2.16 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const movement8 = {
+    id: 'movement-iva8', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-300', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
+  };
+  const product = { id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry8]), purchases: [purchase8], movements: [movement8], products: [product] }
+  ));
+
+  const purchase31 = {
+    ...purchase8, id: 'purchase-iva31', invoiceNumber: '301', taxRate: 31,
+    vatAmountBs: 32, additionalLuxuryTaxBs: 30, totalAmountBs: 262,
+    vatAmountUsd: 0.32, additionalLuxuryTaxUsd: 0.3, totalAmountUsd: 2.62,
+    journalEntryId: 'purchase-iva31-entry'
+  };
+  const entry31 = {
+    ...entry8, id: 'purchase-iva31-entry', description: 'Compra 31%', referenceDoc: 'FAC-301',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '6.1.1.13', debitBs: 30, creditBs: 0, debitUsd: 0.3, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 262, debitUsd: 0, creditUsd: 2.62 }
+    ]
+  };
+  const movement31 = { ...movement8, id: 'movement-iva31', documentRef: 'FAC-301' };
+  const state31 = { ...emptyState([entry31]), purchases: [purchase31], movements: [movement31], products: [product] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state31));
+  const wrongLuxury = structuredClone(state31);
+  wrongLuxury.purchases[0].additionalLuxuryTaxBs = 29;
+  wrongLuxury.purchases[0].totalAmountBs = 261;
+  wrongLuxury.purchases[0].totalAmountUsd = 2.61;
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongLuxury),
+    /no reconoce en Bs\. y USD|factura de compra: el asiento no concilia/);
+});
+
+test('SQLite acepta compras de servicios o activos debitadas a la cuenta elegida por el contador', () => {
+  const purchase = {
+    id: 'purchase-service', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '302', documentType: '01',
+    totalAmountBs: 500, taxableBaseBs: 500, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 5, taxableBaseUsd: 5, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-service-entry',
+    purchaseDebitAccountCode: '5.1.1.02'
+  };
+  const entry = {
+    id: 'purchase-service-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Servicio', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-302',
+    items: [
+      { accountCode: '5.1.1.02', debitBs: 500, creditBs: 0, debitUsd: 5, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 500, debitUsd: 0, creditUsd: 5 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const state = { ...emptyState([entry]), purchases: [purchase] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state));
+  const wrongDebit = structuredClone(state);
+  wrongDebit.journalEntries[0].items[0].accountCode = '6.1.1.04';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), wrongDebit),
+    /factura de compra: el asiento no concilia/);
+});
+
 test('SQLite acepta compras anteriores a 2018 sin tasa BCV ni equivalencia USD', () => {
   const purchase = {
     id: 'purchase-historica', companyId: 'company-1', invoiceDate: '2017-05-10',
@@ -755,6 +840,58 @@ test('SQLite validates a sales invoice and its collection created in the same at
     ...next,
     creditSettlements: [...priorDuplicate.creditSettlements, settlement]
   }), /referencia/);
+});
+
+test('SQLite acepta ventas con IVA 8% y con impuesto adicional al consumo suntuario 31%', () => {
+  const prior = { ...emptyState(), sales: [], journalEntries: [] };
+  const baseSale = {
+    id: 'sale-iva8', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-10', customerRif: 'J-12345678-9', customerName: 'Cliente',
+    invoiceNumber: 'S-200', controlNumber: 'CTRL-S-200', documentType: '01',
+    totalAmountBs: 216, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 8,
+    vatAmountBs: 16, vatWithheldBs: 0, vatWithheldUsd: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, igtfApplicable: false,
+    bcvRate: 100, totalAmountUsd: 2.16, taxableBaseUsd: 2,
+    vatAmountUsd: 0.16, additionalLuxuryTaxBs: 0, additionalLuxuryTaxUsd: 0,
+    paymentTerm: 'CREDITO', journalEntryId: 'sale-iva8-entry', inventoryLines: []
+  };
+  const entry8 = {
+    id: 'sale-iva8-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Venta IVA 8%', type: 'VENTA',
+    bcvRate: 100, referenceDoc: 'FAC-S-200',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 216, creditBs: 0, debitUsd: 2.16, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 },
+      { accountCode: '2.1.2.02', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, sales: [baseSale], journalEntries: [entry8]
+  }));
+
+  const sale31 = {
+    ...baseSale, id: 'sale-iva31', invoiceNumber: 'S-201', taxRate: 31,
+    vatAmountBs: 32, vatAmountUsd: 0.32, additionalLuxuryTaxBs: 30,
+    additionalLuxuryTaxUsd: 0.3, totalAmountBs: 262, totalAmountUsd: 2.62,
+    journalEntryId: 'sale-iva31-entry'
+  };
+  const entry31 = {
+    ...entry8, id: 'sale-iva31-entry', referenceDoc: 'FAC-S-201',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: 262, creditBs: 0, debitUsd: 2.62, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: 32, debitUsd: 0, creditUsd: 0.32 },
+      { accountCode: '2.1.2.08', debitBs: 0, creditBs: 30, debitUsd: 0, creditUsd: 0.3 }
+    ]
+  };
+  const state31 = { ...prior, sales: [sale31], journalEntries: [entry31] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, state31));
+  const wrongLuxury = structuredClone(state31);
+  wrongLuxury.sales[0].additionalLuxuryTaxBs = 29;
+  wrongLuxury.sales[0].totalAmountBs = 261;
+  wrongLuxury.sales[0].totalAmountUsd = 2.61;
+  assert.throws(() => validateAccountingSnapshot(prior, wrongLuxury),
+    /SQLite rechazó la venta/);
 });
 
 test('SQLite rejects sales collections that exceed net receivable after withholding', () => {
@@ -1004,6 +1141,156 @@ test('SQLite audit_events table rejects UPDATE and DELETE operations', () => {
   }
 });
 
+
+function inventoryCreditFixtureWithTaxes(taxRate, vatAmountBs, luxuryTaxBs) {
+  const purchaseTotal = 200 + vatAmountBs + luxuryTaxBs;
+  const noteVat = vatAmountBs / 2;
+  const noteLuxury = luxuryTaxBs / 2;
+  const noteTotal = 100 + noteVat + noteLuxury;
+  const vatAccount = taxRate === 8 ? '1.1.3.02' : '1.1.3.01';
+  const originalPurchase = {
+    id: 'purchase-taxed', companyId: 'company-1', invoiceDate: '2026-10-01',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: '400',
+    controlNumber: '00-400', documentType: '01', totalAmountBs: purchaseTotal,
+    taxableBaseBs: 200, exemptAmountBs: 0, taxRate, vatAmountBs, vatWithheldBs: 0,
+    islrWithheldBs: 0, igtfAmountBs: 0, additionalLuxuryTaxBs: luxuryTaxBs,
+    bcvRate: 100, totalAmountUsd: purchaseTotal / 100, taxableBaseUsd: 2,
+    vatAmountUsd: vatAmountBs / 100, vatWithheldUsd: 0, islrWithheldUsd: 0,
+    igtfAmountUsd: 0, additionalLuxuryTaxUsd: luxuryTaxBs / 100,
+    paymentTerm: 'CREDITO', journalEntryId: 'purchase-taxed-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const originalEntry = {
+    id: 'purchase-taxed-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-01', description: 'Compra', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-400',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: vatAccount, debitBs: vatAmountBs, creditBs: 0, debitUsd: vatAmountBs / 100, creditUsd: 0 },
+      ...(luxuryTaxBs > 0 ? [{ accountCode: '6.1.1.13', debitBs: luxuryTaxBs, creditBs: 0, debitUsd: luxuryTaxBs / 100, creditUsd: 0 }] : []),
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: purchaseTotal, debitUsd: 0, creditUsd: purchaseTotal / 100 }
+    ], createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const originalMovement = {
+    id: 'purchase-taxed-movement', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-01', type: 'ENTRADA', concept: 'COMPRA', documentRef: 'FAC-400',
+    counterpartyRif: 'J-12345678-9', quantity: 2, unitCostBs: 100, unitCostUsd: 1,
+    totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
+  };
+  const noteEntry = {
+    id: 'credit-taxed-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'NC', type: 'AJUSTE', bcvRate: 100,
+    referenceDoc: 'NC-PROV-NC-400',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: noteTotal, creditBs: 0, debitUsd: noteTotal / 100, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: vatAccount, debitBs: 0, creditBs: noteVat, debitUsd: 0, creditUsd: noteVat / 100 },
+      ...(noteLuxury > 0 ? [{ accountCode: '6.1.1.13', debitBs: 0, creditBs: noteLuxury, debitUsd: 0, creditUsd: noteLuxury / 100 }] : [])
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const returnMovement = {
+    id: 'return-taxed-movement', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA',
+    documentRef: 'NC-PROV-NC-400', quantity: 1, unitCostBs: 100, unitCostUsd: 1, bcvRate: 100,
+    totalCostBs: 100, totalCostUsd: 1, balanceQty: 1,
+    correctionForMovementId: 'purchase-taxed-movement', journalEntryId: 'credit-taxed-entry',
+    counterpartyRif: 'J-12345678-9'
+  };
+  const note = {
+    id: 'purchase-taxed-note', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: 'NC-400',
+    controlNumber: '00-NC-400', creditNoteNumber: 'NC-400', affectedInvoiceNumber: '400',
+    affectedInvoiceDate: '2026-10-01', affectedInvoiceControlNumber: '00-400',
+    affectedInvoiceTotalAmountBs: purchaseTotal, affectedInvoiceTotalAmountUsd: purchaseTotal / 100,
+    fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true, documentType: '03',
+    totalAmountBs: noteTotal, taxableBaseBs: 100, exemptAmountBs: 0, taxRate,
+    vatAmountBs: noteVat, additionalLuxuryTaxBs: noteLuxury, bcvRate: 100,
+    totalAmountUsd: noteTotal / 100, taxableBaseUsd: 1, vatAmountUsd: noteVat / 100,
+    additionalLuxuryTaxUsd: noteLuxury / 100, vatWithheldBs: 0, vatWithheldUsd: 0,
+    islrWithheldBs: 0, islrWithheldUsd: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
+    journalEntryId: 'credit-taxed-entry', originalPurchaseId: 'purchase-taxed',
+    netPayableReductionBs: noteTotal, netPayableReductionUsd: noteTotal / 100,
+    notes: 'Devolución de mercancía con impuestos',
+    creditNoteLines: [{ productId: 'p-1', originalMovementId: 'purchase-taxed-movement',
+      movementId: 'return-taxed-movement', quantity: 1, unitCostBs: 100, inventoryCostBs: 100 }]
+  };
+  const prior = { ...emptyState([originalEntry]), purchases: [originalPurchase],
+    movements: [originalMovement], products: [{ id: 'p-1', companyId: 'company-1', currentStock: 2, inventoryAccountCode: '1.1.4.01' }] };
+  const next = { ...emptyState([originalEntry, noteEntry]), purchases: [originalPurchase, note],
+    movements: [originalMovement, returnMovement], products: [{ id: 'p-1', companyId: 'company-1', currentStock: 1, inventoryAccountCode: '1.1.4.01' }] };
+  return { prior, next };
+}
+
+test('SQLite acepta notas de crédito de inventario con IVA 8% y con impuesto suntuario 31%', () => {
+  for (const [taxRate, vat, luxury] of [[8, 16, 0], [31, 32, 30]]) {
+    const { prior, next } = inventoryCreditFixtureWithTaxes(taxRate, vat, luxury);
+    assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  }
+  const { prior, next } = inventoryCreditFixtureWithTaxes(31, 32, 30);
+  const wrongLuxury = structuredClone(next);
+  wrongLuxury.purchases[1].additionalLuxuryTaxBs = 14;
+  assert.throws(() => validateAccountingSnapshot(prior, wrongLuxury),
+    /nota de crédito/);
+});
+
+test('SQLite acepta notas de crédito de servicios con IVA 31% (16% IVA + 15% suntuario)', () => {
+  const originalPurchase = {
+    id: 'service-purchase', companyId: 'company-1', invoiceDate: '2026-10-01',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: '500',
+    controlNumber: '00-500', documentType: '01', totalAmountBs: 262,
+    taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 31, vatAmountBs: 32,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, additionalLuxuryTaxBs: 30,
+    bcvRate: 100, totalAmountUsd: 2.62, taxableBaseUsd: 2, vatAmountUsd: 0.32,
+    vatWithheldUsd: 0, islrWithheldUsd: 0, igtfAmountUsd: 0, additionalLuxuryTaxUsd: 0.3,
+    paymentTerm: 'CREDITO', purchaseDebitAccountCode: '5.1.1.02', journalEntryId: 'service-entry'
+  };
+  const originalEntry = {
+    id: 'service-entry', companyId: 'company-1', entryNumber: 1, date: '2026-10-01',
+    description: 'Servicio', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-500',
+    items: [
+      { accountCode: '5.1.1.02', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '6.1.1.13', debitBs: 30, creditBs: 0, debitUsd: 0.3, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 262, debitUsd: 0, creditUsd: 2.62 }
+    ], createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const noteEntry = {
+    id: 'service-credit-entry', companyId: 'company-1', entryNumber: 2, date: '2026-10-10',
+    description: 'NC servicio', type: 'AJUSTE', bcvRate: 100, referenceDoc: 'NC-PROV-NC-500',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 131, creditBs: 0, debitUsd: 1.31, creditUsd: 0 },
+      { accountCode: '5.1.1.02', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '6.1.1.13', debitBs: 0, creditBs: 15, debitUsd: 0, creditUsd: 0.15 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const note = {
+    id: 'service-credit-note', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: 'NC-500',
+    controlNumber: '00-NC-500', creditNoteNumber: 'NC-500', affectedInvoiceNumber: '500',
+    affectedInvoiceDate: '2026-10-01', affectedInvoiceControlNumber: '00-500',
+    affectedInvoiceTotalAmountBs: 262, affectedInvoiceTotalAmountUsd: 2.62,
+    fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true, documentType: '03',
+    totalAmountBs: 131, taxableBaseBs: 100, exemptAmountBs: 0, taxRate: 31,
+    vatAmountBs: 16, additionalLuxuryTaxBs: 15, bcvRate: 100,
+    totalAmountUsd: 1.31, taxableBaseUsd: 1, vatAmountUsd: 0.16, additionalLuxuryTaxUsd: 0.15,
+    vatWithheldBs: 0, vatWithheldUsd: 0, islrWithheldBs: 0, islrWithheldUsd: 0,
+    igtfAmountBs: 0, igtfAmountUsd: 0, journalEntryId: 'service-credit-entry',
+    originalPurchaseId: 'service-purchase', netPayableReductionBs: 131, netPayableReductionUsd: 1.31,
+    notes: 'Nota de crédito de servicio con suntuario', creditNoteLines: []
+  };
+  const accounts = [
+    { code: '5.1.1.02', name: 'Costo de servicios', type: 'COSTOS', isMovement: true },
+    { code: '6.1.1.13', name: 'Impuesto suntuario', type: 'GASTOS', isMovement: true },
+    { code: '1.1.3.01', name: 'IVA crédito fiscal', type: 'ACTIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'CxP', type: 'PASIVO', isMovement: true }
+  ];
+  const prior = { ...emptyState([originalEntry]), purchases: [originalPurchase], accounts };
+  const next = { ...emptyState([originalEntry, noteEntry]), purchases: [originalPurchase, note], accounts };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  const wrongVat = structuredClone(next);
+  wrongVat.purchases[1].vatAmountBs = 31;
+  assert.throws(() => validateAccountingSnapshot(prior, wrongVat), /NC de servicios/);
+});
 
 const supplierCreditFixture = () => {
   const originalPurchase = {
@@ -4096,6 +4383,74 @@ test('SQLite compares supplier payable applications at USD cent precision', () =
   const roundedPayment = 1116.79;
   assert.equal(exceedsUsdPayable(roundedPayment, netPayable), false);
   assert.equal(exceedsUsdPayable(1116.80, netPayable), true);
+});
+
+test('SQLite acepta NC/ND de venta con IVA 8% y con impuesto suntuario 31%', () => {
+  const fixture = (taxRate, vat, luxury) => {
+    const sourceTotal = 200 + vat + luxury;
+    const noteVat = vat / 2;
+    const noteLuxury = luxury / 2;
+    const noteTotal = 100 + noteVat + noteLuxury;
+    const vatAccount = taxRate === 8 ? '2.1.2.02' : '2.1.2.01';
+    const source = {
+      id: 'sale-source-' + taxRate, companyId: 'company-1', opNumber: 1,
+      invoiceDate: '2026-10-01', customerRif: 'J-12345678-9', customerName: 'Cliente',
+      invoiceNumber: 'F-' + taxRate, controlNumber: 'CTRL-' + taxRate, documentType: '01',
+      totalAmountBs: sourceTotal, taxableBaseBs: 200, exemptAmountBs: 0, taxRate,
+      vatAmountBs: vat, additionalLuxuryTaxBs: luxury, vatWithheldBs: 0,
+      bcvRate: 100, totalAmountUsd: sourceTotal / 100, taxableBaseUsd: 2,
+      vatAmountUsd: vat / 100, additionalLuxuryTaxUsd: luxury / 100, vatWithheldUsd: 0,
+      paymentTerm: 'CREDITO', journalEntryId: 'sale-source-entry-' + taxRate
+    };
+    const sourceEntry = {
+      id: source.journalEntryId, companyId: 'company-1', entryNumber: 1, date: '2026-10-01',
+      description: 'Venta', type: 'VENTA', bcvRate: 100, referenceDoc: 'FAC-' + source.invoiceNumber,
+      items: [
+        { accountCode: '1.1.2.01', debitBs: sourceTotal, creditBs: 0, debitUsd: sourceTotal / 100, creditUsd: 0 },
+        { accountCode: '4.1.1.01', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 },
+        { accountCode: vatAccount, debitBs: 0, creditBs: vat, debitUsd: 0, creditUsd: vat / 100 },
+        ...(luxury > 0 ? [{ accountCode: '2.1.2.08', debitBs: 0, creditBs: luxury, debitUsd: 0, creditUsd: luxury / 100 }] : [])
+      ], createdAt: '2026-10-01T10:00:00.000Z'
+    };
+    const note = {
+      ...source, id: 'sale-note-' + taxRate, opNumber: 2, invoiceDate: '2026-10-10',
+      invoiceNumber: 'NC-' + taxRate, controlNumber: 'CTRL-NC-' + taxRate, documentType: '03',
+      creditNoteNumber: 'NC-' + taxRate, originalSaleId: source.id,
+      affectedInvoiceNumber: source.invoiceNumber, affectedInvoiceDate: source.invoiceDate,
+      affectedInvoiceControlNumber: source.controlNumber,
+      affectedInvoiceTotalAmountBs: source.totalAmountBs, affectedInvoiceTotalAmountUsd: source.totalAmountUsd,
+      fiscalEmissionMedium: 'DIGITAL', sameMediumAsOriginal: true,
+      taxableBaseBs: 100, exemptAmountBs: 0, taxRate, vatAmountBs: noteVat,
+      additionalLuxuryTaxBs: noteLuxury, totalAmountBs: noteTotal, bcvRate: 100,
+      taxableBaseUsd: 1, exemptAmountUsd: 0, vatAmountUsd: noteVat / 100,
+      additionalLuxuryTaxUsd: noteLuxury / 100, totalAmountUsd: noteTotal / 100,
+      netReceivableAdjustmentBs: noteTotal, netReceivableAdjustmentUsd: noteTotal / 100,
+      journalEntryId: 'sale-note-entry-' + taxRate,
+      correctionReason: 'Devolución parcial documentada de la venta.',
+      correctionWorkpaper: 'Se verificó el soporte y el ajuste fiscal de la nota.'
+    };
+    const noteEntry = {
+      id: note.journalEntryId, companyId: 'company-1', entryNumber: 2, date: '2026-10-10',
+      description: 'NC de venta', type: 'AJUSTE', bcvRate: 100, referenceDoc: 'NC-CLI-' + note.creditNoteNumber,
+      items: [
+        { accountCode: '4.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: vatAccount, debitBs: noteVat, creditBs: 0, debitUsd: noteVat / 100, creditUsd: 0 },
+        ...(noteLuxury > 0 ? [{ accountCode: '2.1.2.08', debitBs: noteLuxury, creditBs: 0, debitUsd: noteLuxury / 100, creditUsd: 0 }] : []),
+        { accountCode: '1.1.2.01', debitBs: 0, creditBs: noteTotal, debitUsd: 0, creditUsd: noteTotal / 100 }
+      ], createdAt: '2026-10-10T10:00:00.000Z'
+    };
+    const prior = { ...emptyState([sourceEntry]), sales: [source], journalEntries: [sourceEntry] };
+    const next = { ...prior, sales: [source, note], journalEntries: [sourceEntry, noteEntry] };
+    return { prior, next };
+  };
+  for (const [taxRate, vat, luxury] of [[8, 16, 0], [31, 32, 30]]) {
+    const { prior, next } = fixture(taxRate, vat, luxury);
+    assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  }
+  const { prior, next } = fixture(31, 32, 30);
+  const wrongLuxury = structuredClone(next);
+  wrongLuxury.sales[1].additionalLuxuryTaxBs = 14;
+  assert.throws(() => validateAccountingSnapshot(prior, wrongLuxury), /NC\/ND de venta/);
 });
 
 test('SQLite accepts a sales credit note only when linked merchandise was fully returned with dual-currency cost entries', () => {

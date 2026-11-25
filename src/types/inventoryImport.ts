@@ -1,3 +1,5 @@
+import { todayLocalIso } from '../utils/localDate';
+
 export type ImportRow = Record<string, string | undefined>;
 
 export const isValidIsoDate = (value: string): boolean => {
@@ -39,7 +41,7 @@ export const validateOpeningInventoryRow = (row: ImportRow, line: number, defaul
   if (!Number.isFinite(openingBcvRate) || openingBcvRate <= 0) {
     throw new Error(prefix + 'openingBcvRate debe ser mayor que cero; indique la tasa BCV histórica.');
   }
-  const openingDate = row.openingdate?.trim() || new Date().toISOString().slice(0, 10);
+  const openingDate = row.openingdate?.trim() || todayLocalIso();
   if (!isValidIsoDate(openingDate)) throw new Error(prefix + 'openingDate debe ser una fecha real con formato AAAA-MM-DD.');
   const costingMethod = row.costingmethod || 'PROMEDIO_PONDERADO';
   if (!['PEPS', 'PROMEDIO_PONDERADO'].includes(costingMethod)) throw new Error(prefix + 'costingMethod inválido.');

@@ -8,6 +8,7 @@ import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { calculateInventoryPrices, DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import type { InventoryPricingConfiguration } from '../../types/accounting';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import { todayLocalIso } from '../../utils/localDate';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const minStock = parseDecimalInput(minStockInput);
   const [currentStockInput, setCurrentStockInput] = useState('0');
   const currentStock = parseDecimalInput(currentStockInput);
-  const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10));
+  const [openingDate, setOpeningDate] = useState(todayLocalIso());
   const [openingBcvRateInput, setOpeningBcvRateInput] = useState('');
   const [avgCostInput, setAvgCostInput] = useState('');
   const [openingCostBsInput, setOpeningCostBsInput] = useState('');
@@ -66,7 +67,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
     if (product) {
       setCode(product.code || ''); setName(product.name || ''); setCategory(product.category || 'Mercancías Generales'); setUnit(product.unit || 'Unidad');
       setMinStockInput(String(product.minStock)); setCurrentStockInput(String(product.currentStock));
-      setOpeningDate(product.openingDate || new Date().toISOString().slice(0, 10));
+      setOpeningDate(product.openingDate || todayLocalIso());
       setOpeningBcvRateInput(String(product.openingBcvRate || ''));
       setAvgCostInput(String(product.avgCostUsd));
       setOpeningCostBsInput(String(product.avgCostBs || ''));
@@ -85,7 +86,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       setCostingMethod(product.costingMethod || 'PROMEDIO_PONDERADO'); setVatTreatment(product.vatTreatment || 'GENERAL_16'); setItemType(product.itemType || 'MERCANCIA');
     } else {
       setCode(''); setName(''); setCategory('Mercancías Generales'); setUnit('Unidad');
-      setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(new Date().toISOString().slice(0, 10));
+      setMinStockInput('10'); setCurrentStockInput('0'); setOpeningDate(todayLocalIso());
       setOpeningBcvRateInput(String(currentCompany.inventoryBcvRate || '')); setAvgCostInput(''); setOpeningCostBsInput(''); setPriceCurrency('USD'); setPriceInputs(['', '', '', '']);
       setPricingConfiguration(withoutInventoryExchangeRates(currentCompany.inventoryPricingDefaults || DEFAULT_INVENTORY_PRICING));
       setInventoryAccountCode('1.1.4.01'); setCostOfSalesAccountCode('5.1.1.01');

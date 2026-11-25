@@ -49,6 +49,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { requestNonBlockingConfirm } from '../utils/safeAlert';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+import { todayLocalIso } from '../utils/localDate';
 import { validateRetentionVoucherSupplierEmail } from '../types/retentionVoucherCompliance';
 import { formatIslrVoucherNumber, getMaxIslrVoucherSequence } from '../utils/islrVoucherNumber';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus } from '../types/ivaRetentionEligibility';
@@ -1717,7 +1718,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // sobrescriban una tasa válida con NaN, infinito, cero o fecha inválida.
     if (!currentCompany || !Number.isFinite(newRate) || newRate <= 0) return;
 
-    const today = effectiveDate || new Date().toISOString().slice(0, 10);
+    const today = effectiveDate || todayLocalIso();
     const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(today);
     const parsedDate = dateMatch ? new Date(`${today}T00:00:00.000Z`) : null;
     const validDate = Boolean(
@@ -3280,7 +3281,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // comprobantes IVA/ISLR desde el 19-04-2027. No se altera ningún histórico.
     const retentionIssueDates: string[] = [];
     if (Number(purchaseData.vatWithheldBs) > 0) {
-      retentionIssueDates.push(new Date().toISOString().slice(0, 10));
+      retentionIssueDates.push(todayLocalIso());
     }
     if (Number(purchaseData.islrWithheldBs || 0) > 0) {
       retentionIssueDates.push(String(purchaseData.accountCreditDate || ''));
@@ -3809,7 +3810,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: `vouch-iva-${purchaseId}`,
         companyId: targetCompany.id,
         voucherNumber: voucherNum,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalIso(),
         period: vatFiscalEvent!.period,
         fiscalTrigger: vatFiscalEvent!.trigger,
         fiscalDate: vatFiscalEvent!.fiscalDate,
@@ -5360,7 +5361,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const rate = Number(prodData.openingBcvRate ?? 0);
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
-    const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
+    const openingDateValue = prodData.openingDate || todayLocalIso();
     if (!Number.isFinite(rate) || rate < 0 ||
         (isBcvRateRequiredForDate(openingDateValue) && (initialQuantity > 0 || initialCostBs > 0) && rate <= 0)) {
       throw new Error('Ingrese la tasa BCV histórica aplicable a la valoración inicial del artículo desde 2018.');
@@ -5462,7 +5463,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const openingMovements: InventoryMovement[] = [];
     const openingEntries: JournalEntry[] = [];
     let nextEntryNumber = journalEntries.filter(e => e.companyId === targetCompanyId).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     for (const row of rows) {
       const code = String(row.code || '').trim().toLocaleUpperCase();
       const name = String(row.name || '').trim();
@@ -7205,7 +7206,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const hasOpeningBalance = bankData.currency === 'USD' ? rawUsd > 0 : rawBs > 0;
     const rate = Number(bankData.bcvRate);
-    if (hasOpeningBalance && isBcvRateRequiredForDate(bankData.openingDate || new Date().toISOString().slice(0, 10)) && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta desde 2018.');
+    if (hasOpeningBalance && isBcvRateRequiredForDate(bankData.openingDate || todayLocalIso()) && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Ingrese la tasa BCV aplicable al saldo inicial de esta cuenta desde 2018.');
 
     // El importe introducido en la moneda de la cuenta es la autoridad; la otra
     // moneda se calcula con la tasa BCV para evitar saldos de apertura incoherentes.

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAccounting } from '../context/AccountingContext';
 import { X, TrendingUp, Check, Calendar, AlertCircle } from 'lucide-react';
+import { todayLocalIso } from '../utils/localDate';
 
 interface BcvRateModalProps {
   isOpen: boolean;
@@ -17,13 +18,13 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
   const [saving, setSaving] = useState(false);
   const [rate, setRate] = useState<string>(currentCompany.bcvRate ? String(currentCompany.bcvRate) : '');
   const [effectiveDate, setEffectiveDate] = useState<string>(
-    currentCompany.lastRateUpdate || new Date().toISOString().slice(0, 10)
+    currentCompany.lastRateUpdate || todayLocalIso()
   );
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     setRate(currentCompany.bcvRate ? String(currentCompany.bcvRate) : '');
-    setEffectiveDate(currentCompany.lastRateUpdate || new Date().toISOString().slice(0, 10));
+    setEffectiveDate(currentCompany.lastRateUpdate || todayLocalIso());
     setValidationError(null);
   }, [currentCompany]);
 

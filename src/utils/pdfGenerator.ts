@@ -4,6 +4,7 @@ import { Company, JournalEntry, PurchaseRecord, SaleRecord } from '../types/acco
 import { formatBs, formatUsd, formatDate, formatNumberVe } from './formatters';
 import { allowsUsdForOperationDate, formatUsdForDate } from './monetaryPolicy';
 import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
+import { todayLocalIso } from './localDate';
 import { resolveVatOwnDailySalesSources } from '../types/vatOwnDeclaration';
 
 /**
@@ -308,7 +309,7 @@ export async function exportDiarioPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Libro_Diario_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Diario_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -384,7 +385,7 @@ export async function exportMayorPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Libro_Mayor_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Mayor_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -464,7 +465,7 @@ export async function exportBalanceComprobacionPdf(company: Company, accounts: a
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Balance_Comprobacion_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_Comprobacion_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -556,7 +557,7 @@ export async function exportBalanceGeneralPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Balance_General_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_General_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -647,7 +648,7 @@ export async function exportBalanceAjustadoPdf(company: Company, accounts: any[]
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Balance_Comprobacion_Ajustado_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Balance_Comprobacion_Ajustado_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -789,7 +790,7 @@ export async function exportConciliacionPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Conciliacion_Bancaria_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Conciliacion_Bancaria_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -913,7 +914,7 @@ export async function exportComprasPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Libro_Compras_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Compras_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 /**
@@ -1126,7 +1127,7 @@ export async function exportVentasPdf(
   addPdfFooter(doc);
 
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
-  await downloadPdf(doc, `Libro_Ventas_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  await downloadPdf(doc, `Libro_Ventas_${cleanName}_${todayLocalIso()}.pdf`);
 }
 
 

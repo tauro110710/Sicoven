@@ -432,6 +432,48 @@ test('certifica la compra cuando el Kardex capitaliza fletes o gastos de importa
   assert.equal(withoutLanded.ready, false);
 });
 
+test('certifica compras con IVA 8% y con impuesto suntuario 31% en la cuenta correcta', () => {
+  const purchase8 = {
+    ...reconciledPurchase, taxRate: 8, vatAmountBs: 16, totalAmountBs: 216,
+    totalAmountUsd: 2.16, vatAmountUsd: 0.16
+  };
+  const journal8 = {
+    ...reconciledPurchaseJournal,
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.02', accountName: 'IVA 8%', debitBs: 16, creditBs: 0, debitUsd: 0.16, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 216, debitUsd: 0, creditUsd: 2.16 }
+    ]
+  };
+  assert.equal(validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: purchase8,
+    movements: [reconciledPurchaseMovement], journalEntries: [journal8]
+  }).ready, true);
+
+  const purchase31 = {
+    ...reconciledPurchase, taxRate: 31, vatAmountBs: 32, additionalLuxuryTaxBs: 30,
+    additionalLuxuryTaxUsd: 0.3, totalAmountBs: 262, totalAmountUsd: 2.62
+  };
+  const journal31 = {
+    ...reconciledPurchaseJournal,
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA 16%', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '6.1.1.13', accountName: 'Impuesto suntuario', debitBs: 30, creditBs: 0, debitUsd: 0.3, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 262, debitUsd: 0, creditUsd: 2.62 }
+    ]
+  };
+  assert.equal(validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: purchase31,
+    movements: [reconciledPurchaseMovement], journalEntries: [journal31]
+  }).ready, true);
+  const wrongLuxury = { ...purchase31, additionalLuxuryTaxBs: 29 };
+  assert.equal(validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: wrongLuxury,
+    movements: [reconciledPurchaseMovement], journalEntries: [journal31]
+  }).ready, false);
+});
+
 test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventario configurada', () => {
   const alternateJournal: JournalEntry = {
     ...reconciledPurchaseJournal,

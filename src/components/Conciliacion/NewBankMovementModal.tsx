@@ -5,6 +5,7 @@ import { Landmark, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
+import { todayLocalIso } from '../../utils/localDate';
 
 interface NewBankMovementModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   const [date, setDate] = useState<string>(() => {
     const s = currentCompany?.accountingStartDate;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     return (s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today;
   });
   const [reference, setReference] = useState<string>('');
@@ -36,7 +37,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   // Actualizar la fecha cuando se cambia de empresa mientras el modal permanece montado.
   React.useEffect(() => {
     const s = currentCompany?.accountingStartDate;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     setDate((s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s < today) ? s : today);
   }, [currentCompany.id, currentCompany.accountingStartDate]);
 

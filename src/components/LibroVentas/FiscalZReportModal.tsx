@@ -4,6 +4,7 @@ import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting'
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { todayLocalIso } from '../../utils/localDate';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
 const PAYMENT_ROWS: Array<{ key: PaymentKey; label: string; defaultAccount: string }> = [
@@ -26,7 +27,7 @@ const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 10
 interface Props { isOpen: boolean; onClose: () => void; }
 export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const { currentCompany, accounts, journalEntries, addJournalEntry, waitForPersistence } = useAccounting();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayLocalIso());
   const [sourceType, setSourceType] = useState<'FISCAL_MACHINE' | 'POS' | 'DIGITAL'>('FISCAL_MACHINE');
   const [sourceSystemName, setSourceSystemName] = useState('');
   const [sourceTerminalId, setSourceTerminalId] = useState('');
