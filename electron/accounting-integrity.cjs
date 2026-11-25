@@ -86,8 +86,9 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
   const base = taxableBase + exemptBase;
   const payable = total - vatWithheld - islrWithheld;
   const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate, taxRate];
+  const historicalPreBcv = String(purchase.invoiceDate || '').slice(0, 10) < '2018-01-01';
   if (!values.every(value => Number.isFinite(value) && value >= 0) ||
-      rate <= 0 || taxRate > 100 || payable <= 0 ||
+      (!historicalPreBcv && rate <= 0) || taxRate > 100 || payable <= 0 ||
       Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
       Math.abs(total - (base + vat + igtf)) > 0.02) return false;
 
@@ -157,20 +158,20 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
     if (Math.abs(actual.debitBs - amount.debitBs) > 0.02 ||
         Math.abs(actual.creditBs - amount.creditBs) > 0.02 ||
-        Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
-        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001) return false;
+        Math.abs(actual.debitUsd - (rate > 0 ? amount.debitBs / rate : 0)) > 0.0001 ||
+        Math.abs(actual.creditUsd - (rate > 0 ? amount.creditBs / rate : 0)) > 0.0001) return false;
   }
   const debitBs = items.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
   const creditBs = items.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
   const debitUsd = items.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
   const creditUsd = items.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
   return Math.abs(debitBs - creditBs) <= 0.02 && Math.abs(debitUsd - creditUsd) <= 0.0001 &&
-    Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.totalAmountUsd) - (rate > 0 ? total / rate : 0)) <= 0.0001 &&
+    Math.abs(Number(purchase.taxableBaseUsd) - (rate > 0 ? taxableBase / rate : 0)) <= 0.0001 &&
+    Math.abs(Number(purchase.vatAmountUsd) - (rate > 0 ? vat / rate : 0)) <= 0.0001 &&
+    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - (rate > 0 ? vatWithheld / rate : 0)) <= 0.0001 &&
+    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - (rate > 0 ? islrWithheld / rate : 0)) <= 0.0001 &&
+    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - (rate > 0 ? igtf / rate : 0)) <= 0.0001 &&
     Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001;
 }
 
@@ -2732,14 +2733,14 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
           !Number.isFinite(lineUnitCostBs) || !Number.isFinite(movementUnitCostBs) ||
           Math.abs(movementUnitCostBs - lineUnitCostBs) > 0.02 ||
-          !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+          !Number.isFinite(invoiceRate) || (purchase.invoiceDate >= '2018-01-01' && invoiceRate <= 0) ||
           !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
           !Number.isFinite(movementUnitCostUsd) ||
-          Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) > 0.0001 ||
+          Math.abs(movementUnitCostUsd - (invoiceRate > 0 ? lineUnitCostBs / invoiceRate : 0)) > 0.0001 ||
           !Number.isFinite(movementCostBs) ||
           Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
           !Number.isFinite(movementCostUsd) ||
-          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001 ||
+          Math.abs(movementCostUsd - (invoiceRate > 0 ? movementCostBs / invoiceRate : 0)) > 0.0001 ||
           !supplierRif || !movementRif || movementRif !== supplierRif) {
         throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.');
       }
