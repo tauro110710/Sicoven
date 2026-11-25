@@ -12,6 +12,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { NewSaleModal } from './NewSaleModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
@@ -344,7 +345,7 @@ export const LibroVentasView: React.FC = () => {
                       {formatBs(s.totalAmountBs)}
                       {(
                         <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(s.totalAmountUsd)}
+                          {formatUsdForDate(s.totalAmountUsd, s.invoiceDate)}
                         </div>
                       )}
                     </td>
@@ -358,7 +359,7 @@ export const LibroVentasView: React.FC = () => {
                         {s.taxRate === 8 && <div>Base 8%: {formatBs(s.taxableBaseBs)}</div>}
                         {s.taxRate === 31 && <div>Base 31% comp.: {formatBs(s.taxableBaseBs)}</div>}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-normal">{formatUsd(s.taxableBaseUsd)}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">{formatUsdForDate(s.taxableBaseUsd, s.invoiceDate)}</div>
                     </td>
                     <td className="py-2 px-2 text-center font-mono text-slate-600">
                       {s.taxRate}%
@@ -370,11 +371,11 @@ export const LibroVentasView: React.FC = () => {
                         {s.taxRate === 8 && <div>IVA 8%: {formatBs(s.vatAmountBs)}</div>}
                         {s.taxRate === 31 && <div>IVA comp. 16%: {formatBs(s.taxableBaseBs * 0.16)}</div>}
                       </div>
-                      <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsd(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd)}</div>
+                      <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsdForDate(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd, s.invoiceDate)}</div>
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
                       {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}
-                      {s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsd(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0))}</div>}
+                      {s.taxRate === 31 && <div className="text-[10px] text-amber-600/70 font-normal">{formatUsdForDate(s.additionalLuxuryTaxUsd ?? (s.bcvRate > 0 ? s.taxableBaseBs * 0.15 / s.bcvRate : 0), s.invoiceDate)}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {s.vatWithheldBs > 0 ? (

@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatUsdForDate, allowsUsdForOperationDate } from '../../utils/monetaryPolicy';
 import { NewEntryModal } from './NewEntryModal';
 import { EntryType } from '../../types/accounting';
 
@@ -109,11 +110,14 @@ export const LibroDiarioView: React.FC = () => {
     (acc, e) => acc + e.items.reduce((sum, it) => sum + (it.creditBs || 0), 0),
     0
   );
-  const totalDebitsUsd = filteredEntries.reduce(
+  // Solo los asientos desde 2018 tienen equivalencia USD; antes no se inventa.
+  const usdEntries = filteredEntries.filter(entry => allowsUsdForOperationDate(entry.date));
+  const hasUsdEntries = usdEntries.length > 0;
+  const totalDebitsUsd = usdEntries.reduce(
     (acc, e) => acc + e.items.reduce((sum, it) => sum + (it.debitUsd || 0), 0),
     0
   );
-  const totalCreditsUsd = filteredEntries.reduce(
+  const totalCreditsUsd = usdEntries.reduce(
     (acc, e) => acc + e.items.reduce((sum, it) => sum + (it.creditUsd || 0), 0),
     0
   );
@@ -495,10 +499,10 @@ export const LibroDiarioView: React.FC = () => {
                           {displayCurrency !== 'BS' && (
                             <>
                               <td className="py-2 px-4 text-right font-mono text-slate-600">
-                                {item.debitUsd > 0 ? formatUsd(item.debitUsd) : '-'}
+                                {item.debitUsd > 0 ? formatUsdForDate(item.debitUsd, entry.date) : '-'}
                               </td>
                               <td className="py-2 px-4 text-right font-mono text-slate-600">
-                                {item.creditUsd > 0 ? formatUsd(item.creditUsd) : '-'}
+                                {item.creditUsd > 0 ? formatUsdForDate(item.creditUsd, entry.date) : '-'}
                               </td>
                             </>
                           )}
@@ -523,10 +527,10 @@ export const LibroDiarioView: React.FC = () => {
                         {displayCurrency !== 'BS' && (
                           <>
                             <td className="py-2.5 px-4 text-right font-mono text-slate-700">
-                              {formatUsd(sumDebitUsd)}
+                              {formatUsdForDate(sumDebitUsd, entry.date)}
                             </td>
                             <td className="py-2.5 px-4 text-right font-mono text-slate-700">
-                              {formatUsd(sumCreditUsd)}
+                              {formatUsdForDate(sumCreditUsd, entry.date)}
                             </td>
                           </>
                         )}
@@ -558,7 +562,7 @@ export const LibroDiarioView: React.FC = () => {
                 {formatBs(totalDebitsBs)}
               </div>
               <div className="text-xs font-mono text-slate-400">
-                {formatUsd(totalDebitsUsd)}
+                {hasUsdEntries ? formatUsd(totalDebitsUsd) : '-'}
               </div>
             </div>
             <div>
@@ -567,7 +571,7 @@ export const LibroDiarioView: React.FC = () => {
                 {formatBs(totalCreditsBs)}
               </div>
               <div className="text-xs font-mono text-slate-400">
-                {formatUsd(totalCreditsUsd)}
+                {hasUsdEntries ? formatUsd(totalCreditsUsd) : '-'}
               </div>
             </div>
           </div>

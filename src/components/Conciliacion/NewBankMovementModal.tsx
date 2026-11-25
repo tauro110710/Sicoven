@@ -4,7 +4,7 @@ import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
 
 interface NewBankMovementModalProps {
   isOpen: boolean;
@@ -43,6 +43,12 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   // La tasa sugerida debe corresponder siempre a la fecha del movimiento,
   // tanto para cuentas Bs como USD (la equivalencia USD también se calcula en cuentas Bs).
   React.useEffect(() => {
+    // Antes de 2018 no se registra tasa BCV ni equivalencia USD.
+    if (!getReglaMonetariaPorFecha(date).allowsUsd) {
+      setMovementBcvRate('');
+      setBcvRateEffectiveDate('');
+      return;
+    }
     const history = currentCompany.accountingBcvRateHistory || [];
     let best;
     for (const entry of history) {
@@ -58,15 +64,19 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   if (!isOpen) return null;
 
   const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
-  const bcvRate = parseDecimalInput(movementBcvRate) || 0;
-  const rateRequired = isBcvRateRequiredForDate(date);
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const bcvRate = usdEnabled ? (parseDecimalInput(movementBcvRate) || 0) : 0;
+  const rateRequired = monetaryRule.requiresBcvRate;
   const parsedAmount = parseDecimalInput(amountBs) || 0;
   const parsedAmountBs = bankAccount.currency === 'USD'
     ? (bcvRate > 0 ? Math.round(parsedAmount * bcvRate * 100) / 100 : 0)
     : Math.round(parsedAmount * 100) / 100;
-  const amountUsd = bankAccount.currency === 'USD'
-    ? Math.round(parsedAmount * 1000000) / 1000000
-    : (bcvRate > 0 ? Math.round((parsedAmountBs / bcvRate) * 1000000) / 1000000 : 0);
+  const amountUsd = !usdEnabled
+    ? 0
+    : bankAccount.currency === 'USD'
+      ? Math.round(parsedAmount * 1000000) / 1000000
+      : (bcvRate > 0 ? Math.round((parsedAmountBs / bcvRate) * 1000000) / 1000000 : 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,20 +168,26 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Fecha de vigencia BCV {rateRequired ? '*' : '(opcional)'}</label>
-              <input type="date" required={rateRequired} value={bcvRateEffectiveDate} max={date}
-                onChange={e => setBcvRateEffectiveDate(e.target.value)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+          {usdEnabled ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Fecha de vigencia BCV {rateRequired ? '*' : ''}</label>
+                <input type="date" required={rateRequired} value={bcvRateEffectiveDate} max={date}
+                  onChange={e => setBcvRateEffectiveDate(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) {rateRequired ? '*' : ''}</label>
+                <input type="text" inputMode="decimal" required={rateRequired} placeholder="Ej.: 889,67" value={movementBcvRate}
+                  onChange={e => setMovementBcvRate(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+              </div>
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV (Bs/USD) {rateRequired ? '*' : '(opcional antes de 2018)' }</label>
-              <input type="text" inputMode="decimal" required={rateRequired} placeholder="Ej.: 889,67" value={movementBcvRate}
-                onChange={e => setMovementBcvRate(e.target.value)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
-            </div>
-          </div>
+          ) : (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+              Movimiento del {date} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.
+            </p>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -216,9 +232,11 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
               />
             </div>
             <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-              {bankAccount.currency === 'USD'
-                ? `Equivalente en Bs.: ${formatBs(parsedAmountBs)}`
-                : `Equivalente en USD: ${formatUsd(amountUsd)}`} {bcvRate > 0 ? `(Tasa BCV: Bs. ${bcvRate.toFixed(2)})` : '(Tasa BCV no configurada)'}
+              {!usdEnabled
+                ? `Operación en ${monetaryRule.currencyLabel}: sin tasa BCV antes de 2018`
+                : bankAccount.currency === 'USD'
+                  ? `Equivalente en Bs.: ${formatBs(parsedAmountBs)}`
+                  : `Equivalente en USD: ${formatUsdForDate(amountUsd, date)}`} {usdEnabled && bcvRate > 0 ? `(Tasa BCV: Bs. ${bcvRate.toFixed(2)})` : usdEnabled ? '(Tasa BCV no configurada)' : ''}
             </span>
           </div>
 

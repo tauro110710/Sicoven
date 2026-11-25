@@ -5,7 +5,7 @@ import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, Re
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -37,7 +37,10 @@ export const TesoreriaView: React.FC = () => {
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedAmount = parseAmount(amount);
   const parsedBcvRate = parseAmount(bcvRateInput);
-  const rateRequired = isBcvRateRequiredForDate(date);
+  // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni USD.
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const rateRequired = monetaryRule.requiresBcvRate;
   const [counterpartCode, setCounterpartCode] = useState('');
   const [destinationBankId, setDestinationBankId] = useState('');
   const [message, setMessage] = useState('');
@@ -64,6 +67,7 @@ export const TesoreriaView: React.FC = () => {
     // Antes de 2018 se permite movimiento nominal sin equivalencia USD.
     const isUsdAccount = activeBank?.currency === 'USD';
     const resolvedBcvRate = (() => {
+      if (!monetaryRule.allowsUsd) return 0;
       if (parsedBcvRate > 0) return parsedBcvRate;
       if (!isUsdAccount) {
         const historical = resolveBcvRateForDate(
@@ -150,24 +154,30 @@ export const TesoreriaView: React.FC = () => {
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Referencia / cheque / transferencia</label><input required value={reference} onChange={e=>setReference(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="N.º de operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Concepto</label><input required value={description} onChange={e=>setDescription(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs" placeholder="Descripción de la operación"/></div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-700">Importe ({activeBank?.currency === 'USD' ? '$ USD' : 'Bs.'})</label><input required type="text" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm" placeholder="0,00"/></div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-700">
-              Tasa BCV aplicable (Bs./USD){rateRequired ? ' *' : ' — opcional antes de 2018'}
-            </label>
-            <input
-              type="text" inputMode="decimal"
-              value={bcvRateInput}
-              onChange={e=>setBcvRateInput(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-              placeholder={rateRequired ? 'Obligatoria desde 2018' : 'Opcional antes de 2018'}
-            />
-            {activeBank?.currency !== 'USD' && (() => {
-              const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
-              return suggested
-                ? <p className="mt-1 text-[10px] text-slate-500">Tasa en historial para {date}: <strong>{suggested.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> Bs./USD — se usará si deja el campo vacío.</p>
-                : <p className="mt-1 text-[10px] text-amber-600">No hay tasa BCV registrada para {date}. Regîstrela en Configuración o ingrésela aquí.</p>;
-            })()}
-          </div>
+          {usdEnabled ? (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Tasa BCV aplicable (Bs./USD) *
+              </label>
+              <input
+                type="text" inputMode="decimal"
+                value={bcvRateInput}
+                onChange={e=>setBcvRateInput(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+                placeholder="Obligatoria desde 2018"
+              />
+              {activeBank?.currency !== 'USD' && (() => {
+                const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
+                return suggested
+                  ? <p className="mt-1 text-[10px] text-slate-500">Tasa en historial para {date}: <strong>{suggested.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> Bs./USD — se usará si deja el campo vacío.</p>
+                  : <p className="mt-1 text-[10px] text-amber-600">No hay tasa BCV registrada para {date}. Regístrela en Configuración o ingrésela aquí.</p>;
+              })()}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+              Movimiento del {date} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.
+            </p>
+          )}
           <button type="submit" disabled={saving} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-40">{saving ? "Confirmando SQLite..." : "Contabilizar movimiento"}</button>
           {message && <p role="status" className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{message}</p>}
         </form>
@@ -177,7 +187,7 @@ export const TesoreriaView: React.FC = () => {
           <div className="max-h-[620px] overflow-auto">
             {companyEntries.filter(e=>e.items.some(i=>i.accountCode===activeBank?.accountCode)).sort((a,b)=>b.date.localeCompare(a.date)||b.entryNumber-a.entryNumber).map(entry=><div key={entry.id} className="border-b border-slate-100 p-4 last:border-0">
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-extrabold text-slate-900">#{entry.entryNumber} · {entry.description}</p><p className="mt-1 text-[11px] text-slate-500">{formatDate(entry.date)} · Ref. {entry.referenceDoc || '—'}</p></div><span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{entry.type}</span></div>
-              {entry.items.filter(i=>i.accountCode===activeBank?.accountCode).map((item,index)=><p key={index} className="mt-2 text-xs text-slate-700">{item.debitBs>0?'Entrada':'Salida'}: {formatBs(item.debitBs || item.creditBs)} <span className="text-slate-500">({formatUsd(item.debitUsd || item.creditUsd)})</span></p>)}
+              {entry.items.filter(i=>i.accountCode===activeBank?.accountCode).map((item,index)=><p key={index} className="mt-2 text-xs text-slate-700">{item.debitBs>0?'Entrada':'Salida'}: {formatBs(item.debitBs || item.creditBs)} <span className="text-slate-500">({formatUsdForDate(item.debitUsd || item.creditUsd, entry.date)})</span></p>)}
             </div>)}
             {!companyEntries.some(e=>e.items.some(i=>i.accountCode===activeBank?.accountCode)) && <p className="p-8 text-center text-xs text-slate-400">Sin movimientos contables para esta cuenta.</p>}
           </div>

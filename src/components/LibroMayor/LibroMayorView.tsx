@@ -11,6 +11,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
 import { filterEntriesByCompany, getAccountBalanceNature } from '../../types/accountingReportIntegrity';
@@ -336,13 +337,13 @@ export const LibroMayorView: React.FC = () => {
                         {displayCurrency !== 'BS' && (
                           <>
                             <td className="py-2 px-3 text-right font-mono text-slate-600">
-                              {mov.debitUsd > 0 ? formatUsd(mov.debitUsd) : '-'}
+                              {mov.debitUsd > 0 ? formatUsdForDate(mov.debitUsd, mov.date) : '-'}
                             </td>
                             <td className="py-2 px-3 text-right font-mono text-slate-600">
-                              {mov.creditUsd > 0 ? formatUsd(mov.creditUsd) : '-'}
+                              {mov.creditUsd > 0 ? formatUsdForDate(mov.creditUsd, mov.date) : '-'}
                             </td>
                             <td className="py-2 px-3 text-right font-mono font-semibold text-slate-700 bg-slate-50/40">
-                              {formatUsd(mov.runningBalanceUsd)}
+                              {formatUsdForDate(mov.runningBalanceUsd, mov.date)}
                             </td>
                           </>
                         )}

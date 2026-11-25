@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { CreditSettlementKind, SettlementMethod } from '../../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../../types/fxFiscalAdjustment';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 type Props = {
   documentId: string;
@@ -37,9 +37,12 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
   const parsedUsd = parseAmountInput(usd || '0');
   const isBsOnly = balance.outstandingUsd <= 0.005 && balance.outstandingBsAtInvoiceRate > 0.005;
   const isUsdMethod = method === 'CASH_USD' || method === 'BANK_TRANSFER_USD';
-  const rateRequired = !isBsOnly && (isBcvRateRequiredForDate(date) || isUsdMethod);
+  // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni USD.
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const rateRequired = usdEnabled && !isBsOnly && (monetaryRule.requiresBcvRate || isUsdMethod);
   const parsedManualBs = parseAmountInput(manualBs || '0');
-  const bs = isBsOnly || parsedRate <= 0
+  const bs = isBsOnly || !usdEnabled || parsedRate <= 0
     ? parsedManualBs
     : Math.round((parsedUsd * parsedRate + Number.EPSILON) * 100) / 100;
   const isSale = kind === 'SALE_COLLECTION';
@@ -68,8 +71,8 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
     setSaving(true);
     try {
       await addCreditSettlement({
-        documentId, kind, settlementDate: date, bcvRate: parsedRate,
-        amountUsd: isBsOnly ? 0 : parsedUsd, amountBs: bs, method,
+        documentId, kind, settlementDate: date, bcvRate: usdEnabled ? parsedRate : 0,
+        amountUsd: isBsOnly || !usdEnabled ? 0 : parsedUsd, amountBs: bs, method,
         bankAccountId: isBankTransfer ? bankAccountId : undefined,
         reference: reference.trim() || undefined, notes: notes.trim() || undefined
       });
@@ -93,16 +96,16 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
         <div><span className="block text-xs text-slate-500">Saldo pendiente en Bs.</span><strong>{balance.outstandingBsAtInvoiceRate.toFixed(2)}</strong></div>
       </div>
       <label className="block text-xs font-semibold text-slate-700">Fecha real de {isSale ? 'cobro' : 'pago'}<input required type="date" value={date} onChange={e=>setDate(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
-      <div className="grid grid-cols-2 gap-3">
-        {!isBsOnly && <label className="block text-xs font-semibold text-slate-700">Tasa BCV de liquidación {rateRequired ? '*' : '(opcional antes de 2018)'}<input required={rateRequired} type="text" inputMode="decimal" placeholder="Ej.: 889,67" value={rate} onChange={e=>setRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>}
+      {usdEnabled && <div className="grid grid-cols-2 gap-3">
+        {!isBsOnly && <label className="block text-xs font-semibold text-slate-700">Tasa BCV de liquidación {rateRequired ? '*' : ''}<input required={rateRequired} type="text" inputMode="decimal" placeholder="Ej.: 889,67" value={rate} onChange={e=>setRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>}
         {!isBsOnly && <label className="block text-xs font-semibold text-slate-700">Importe USD<input required type="text" inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>}
-      </div>
-      {(isBsOnly || parsedRate <= 0) ? <label className="block text-xs font-semibold text-slate-700">Importe real en Bs. {isBsOnly ? '(factura Bs.-only)' : rateRequired ? '(tasa BCV requerida)' : '(tasa opcional antes de 2018)'}<input required type="text" inputMode="decimal" value={manualBs} onChange={e=>setManualBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label> : <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="text-slate-500">Equivalente calculado en Bs. (USD × tasa)</span><strong className="block text-base">{bs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
+      </div>}
+      {(isBsOnly || !usdEnabled || parsedRate <= 0) ? <label className="block text-xs font-semibold text-slate-700">Importe real en Bs. {isBsOnly ? '(factura Bs.-only)' : !usdEnabled ? '(' + monetaryRule.currencyLabel + ', sin tasa BCV antes de 2018)' : rateRequired ? '(tasa BCV requerida)' : ''}<input required type="text" inputMode="decimal" value={manualBs} onChange={e=>setManualBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label> : <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="text-slate-500">Equivalente calculado en Bs. (USD × tasa)</span><strong className="block text-base">{bs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>}
       {fxProposal && <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm space-y-1"><strong>Estimación de ajuste cambiario (no es una nota fiscal)</strong><div className="grid grid-cols-2 gap-2"><span>Diferencia base imponible</span><strong>{fxProposal.deltaBaseBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong><span>Diferencia IVA estimada</span><strong>{fxProposal.deltaVatBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong><span>Diferencia total estimada</span><strong>{fxProposal.deltaTotalBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong></div><p>{fxProposal.direction === 'DEBIT_NOTE' ? 'Posible nota de débito por evaluar.' : fxProposal.direction === 'CREDIT_NOTE' ? 'Posible nota de crédito por evaluar.' : fxProposal.direction === 'REVIEW_REQUIRED' ? 'Revisión del contador requerida.' : 'No se estima diferencia material.'} {fxProposal.explanation}</p></div>}
       <label className="block text-xs font-semibold text-slate-700">Medio de {isSale ? 'cobro' : 'pago'}<select value={method} onChange={e=>{setMethod(e.target.value as SettlementMethod);setBankAccountId('');}} className="mt-1 w-full rounded-lg border p-2 text-sm">
-        <option value="CASH_BS">Efectivo Bs.</option><option value="CASH_USD" disabled={isBsOnly}>Efectivo USD</option>
+        <option value="CASH_BS">Efectivo Bs.</option><option value="CASH_USD" disabled={isBsOnly || !usdEnabled}>Efectivo USD</option>
         <option value="BANK_TRANSFER_BS" disabled={!bankAccounts.some(account=>account.companyId===currentCompany.id&&account.currency==='BS')}>Transferencia bancaria Bs.</option>
-        <option value="BANK_TRANSFER_USD" disabled={isBsOnly || !bankAccounts.some(account=>account.companyId===currentCompany.id&&account.currency==='USD')}>Transferencia bancaria USD</option>
+        <option value="BANK_TRANSFER_USD" disabled={isBsOnly || !usdEnabled || !bankAccounts.some(account=>account.companyId===currentCompany.id&&account.currency==='USD')}>Transferencia bancaria USD</option>
         <option value="OTHER" disabled>Otro (sin cuenta de tesorería identificada)</option>
       </select></label>
       {isBankTransfer && <label className="block text-xs font-semibold text-slate-700">Cuenta bancaria auxiliar ({bankCurrency}) *

@@ -14,6 +14,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { NewPurchaseModal } from './NewPurchaseModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
@@ -281,7 +282,7 @@ export const LibroComprasView: React.FC = () => {
                       {formatBs(signed(p, p.totalAmountBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(signed(p, p.totalAmountUsd))}
+                          {formatUsdForDate(signed(p, p.totalAmountUsd), p.invoiceDate)}
                         </div>
                       )}
                     </td>
@@ -296,7 +297,7 @@ export const LibroComprasView: React.FC = () => {
                       {formatBs(signed(p, p.taxableBaseBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(signed(p, p.taxableBaseUsd))}
+                          {formatUsdForDate(signed(p, p.taxableBaseUsd), p.invoiceDate)}
                         </div>
                       )}
                     </td>
@@ -307,7 +308,7 @@ export const LibroComprasView: React.FC = () => {
                       {formatBs(signed(p, p.vatAmountBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-emerald-600/70 font-normal">
-                          {formatUsd(signed(p, p.vatAmountUsd))}
+                          {formatUsdForDate(signed(p, p.vatAmountUsd), p.invoiceDate)}
                         </div>
                       )}
                     </td>

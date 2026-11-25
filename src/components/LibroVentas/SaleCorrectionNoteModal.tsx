@@ -3,7 +3,7 @@ import type { SaleRecord } from '../../types/accounting';
 import type { SaleCorrectionNoteRequest } from '../../types/saleCorrectionNote';
 import type { Account } from '../../types/accounting';
 import { useAccounting } from '../../context/AccountingContext';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type Draft = Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string };
@@ -24,8 +24,14 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const [noteDate, setNoteDate] = useState(today);
   const initialHistoricalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], today);
   const [noteBcvRate, setNoteBcvRate] = useState(String(initialHistoricalRate ?? bcvRate ?? ''));
-  const rateRequired = isBcvRateRequiredForDate(noteDate);
+  const monetaryRule = getReglaMonetariaPorFecha(noteDate);
+  const rateRequired = monetaryRule.requiresBcvRate;
   useEffect(() => {
+    // Antes de 2018 la nota es solo en bolívares: no se sugiere ni conserva tasa BCV.
+    if (!getReglaMonetariaPorFecha(noteDate).allowsUsd) {
+      setNoteBcvRate('');
+      return;
+    }
     const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], noteDate);
     const sameDateSourceRate = noteDate === sourceSale.invoiceDate && Number(sourceSale.bcvRate) > 0
       ? Number(sourceSale.bcvRate) : undefined;
@@ -82,7 +88,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
       await onSubmit({
         kind, sourceSaleId: sourceSale.id, noteDate, noteNumber, controlNumber,
         taxableBaseBs: parseAmount(taxableBaseBs), exemptAmountBs: parseAmount(exemptAmountBs),
-        bcvRate: parseAmount(noteBcvRate), reason, workpaperNote,
+        bcvRate: monetaryRule.allowsUsd ? parseAmount(noteBcvRate) : 0, reason, workpaperNote,
         fiscalEmissionMedium: fiscalEmissionMedium as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY', sameMediumAsOriginal,
         treasuryAccountCode: treasuryAccountCode || undefined,
         returnedInventoryQuantities: inventoryReturnOptions.length ? Object.fromEntries(Object.entries(returnedInventoryQuantities).map(([id, value]) => [id, parseAmount(value)])) : undefined
@@ -119,9 +125,15 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
           <label className="text-xs font-semibold text-slate-700">Número de control
             <input required value={controlNumber} onChange={e=>setControlNumber(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
-          <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión {rateRequired ? '*' : '(opcional antes de 2018)' }
-            <input required={rateRequired} type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
-          </label>
+          {monetaryRule.allowsUsd ? (
+            <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión *
+              <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+            </label>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600 sm:col-span-2">
+              Nota del {noteDate} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni montos en dólares.
+            </div>
+          )}
           <label className="text-xs font-semibold text-slate-700">Base imponible (Bs.)
             <input required type="text" inputMode="decimal" value={taxableBaseBs} readOnly={kind === "CREDIT" && inventoryReturnOptions.length > 0} onChange={e=>setTaxableBaseBs(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal read-only:bg-slate-50" />
           </label>

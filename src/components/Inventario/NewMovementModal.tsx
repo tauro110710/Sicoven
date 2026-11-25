@@ -5,7 +5,7 @@ import { formatBs, formatUsd } from '../../utils/formatters';
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { calculateFifoIssue, reconstructFifoLayers } from '../../types/inventoryAccounting';
 
 interface NewMovementModalProps {
@@ -76,6 +76,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   }, [productId, selectedProduct]);
 
   React.useEffect(() => {
+    // Antes de 2018 el Kardex se lleva solo en bolívares: se limpia cualquier tasa.
+    if (!getReglaMonetariaPorFecha(date).allowsUsd) {
+      setBcvRateInput('');
+      return;
+    }
     // Prioridad 1: historial BCV específico de inventario.
     const inventoryRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
     if (inventoryRate) {
@@ -104,8 +109,12 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const unitCostBs = parseDecimalInput(unitCostInput);
   const additionalLandedCostsBs = parseDecimalInput(additionalLandedCostsInput);
   const bcvRate = parseDecimalInput(bcvRateInput);
-  const rateRequired = isBcvRateRequiredForDate(date) && type !== 'SALIDA' && unitCostBs > 0;
-  const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
+  // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni USD.
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const effectiveBcvRate = usdEnabled ? bcvRate : 0;
+  const rateRequired = monetaryRule.requiresBcvRate && type !== 'SALIDA' && unitCostBs > 0;
+  const unitCostUsd = effectiveBcvRate > 0 ? unitCostBs / effectiveBcvRate : 0;
   const fifoPreview = React.useMemo(() => {
     if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
     try {
@@ -123,11 +132,13 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     : type === 'SALIDA'
       ? (fifoPreview?.totalCostBs ?? quantity * selectedProduct.avgCostBs)
       : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
-  const totalCostUsd = type === 'SALIDA' && selectedProduct.costingMethod === 'PEPS' && fifoPreview
-    ? fifoPreview.totalCostUsd
-    : type === 'SALIDA' && selectedProduct.costingMethod !== 'PEPS'
-      ? quantity * Number(selectedProduct.avgCostUsd || 0)
-      : bcvRate > 0 ? totalCostBs / bcvRate : 0;
+  const totalCostUsd = !usdEnabled
+    ? 0
+    : type === 'SALIDA' && selectedProduct.costingMethod === 'PEPS' && fifoPreview
+      ? fifoPreview.totalCostUsd
+      : type === 'SALIDA' && selectedProduct.costingMethod !== 'PEPS'
+        ? quantity * Number(selectedProduct.avgCostUsd || 0)
+        : bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
   let balanceQty = selectedProduct.currentStock;
@@ -136,7 +147,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   else balanceQty = quantity;
 
   const balanceTotalBs = balanceQty * unitCostBs;
-  const balanceTotalUsd = bcvRate > 0 ? balanceTotalBs / bcvRate : 0;
+  const balanceTotalUsd = effectiveBcvRate > 0 ? balanceTotalBs / effectiveBcvRate : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,7 +211,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       type,
       concept,
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
-      documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate,
+      documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate: effectiveBcvRate,
       additionalLandedCostsBs: type === 'ENTRADA' ? additionalLandedCostsBs : 0,
       correctionForMovementId: type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA' ? selectedReturnSource?.id : undefined,
       quantity,
@@ -328,8 +339,17 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {rateRequired ? '*' : '(opcional antes de 2018)'}</label>
-              <input type="text" inputMode="decimal" placeholder={rateRequired ? 'Ej.: 889,67 (obligatoria desde 2018)' : 'Dejar vacío si no aplica'} value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+              {usdEnabled ? (
+                <>
+                  <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {rateRequired ? '*' : ''}</label>
+                  <input type="text" inputMode="decimal" placeholder={rateRequired ? 'Ej.: 889,67 (obligatoria desde 2018)' : 'Opcional'} value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+                </>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Moneda del Kardex</span>
+                  <span className="block text-xs font-bold text-slate-800">{monetaryRule.currencyLabel} · sin tasa BCV antes de 2018</span>
+                </div>
+              )}
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>

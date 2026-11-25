@@ -5,7 +5,7 @@ import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -52,10 +52,20 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   const [bcvRateInput, setBcvRateInput] = useState('');
   const bcvRate = parseDecimalInput(bcvRateInput);
+  // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni USD.
+  const monetaryRule = getReglaMonetariaPorFecha(invoiceDate);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const effectiveBcvRate = usdEnabled ? bcvRate : 0;
   // Sugerir tasa BCV histórica del historial general de la empresa.
   // No se borra lo que el contador ya escribió; solo pre-llena si el campo está vacío.
   const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
   React.useEffect(() => {
+    // Antes de 2018 la operación es solo en bolívares: no se sugiere ni conserva tasa BCV.
+    if (!getReglaMonetariaPorFecha(invoiceDate).allowsUsd) {
+      setSuggestedBcvRate(undefined);
+      setBcvRateInput('');
+      return;
+    }
     const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
     setSuggestedBcvRate(resolved);
     // La tasa anterior no debe quedar asociada a una fecha distinta.
@@ -98,11 +108,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     ? Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100
     : 0;
 
-  const totalAmountUsd = bcvRate > 0 ? totalAmountBs / bcvRate : 0;
-  const taxableBaseUsd = bcvRate > 0 ? taxableBaseBs / bcvRate : 0;
-  const vatAmountUsd = bcvRate > 0 ? vatAmountBs / bcvRate : 0;
-  const additionalLuxuryTaxUsd = bcvRate > 0 ? additionalLuxuryTaxBs / bcvRate : 0;
-  const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
+  const totalAmountUsd = effectiveBcvRate > 0 ? totalAmountBs / effectiveBcvRate : 0;
+  const taxableBaseUsd = effectiveBcvRate > 0 ? taxableBaseBs / effectiveBcvRate : 0;
+  const vatAmountUsd = effectiveBcvRate > 0 ? vatAmountBs / effectiveBcvRate : 0;
+  const additionalLuxuryTaxUsd = effectiveBcvRate > 0 ? additionalLuxuryTaxBs / effectiveBcvRate : 0;
+  const vatWithheldUsd = effectiveBcvRate > 0 ? vatWithheldBs / effectiveBcvRate : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,10 +140,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     }
     // La tasa BCV solo es obligatoria cuando el cobro es en divisas o se requiere equivalencia.
     // Para ventas nominales en bolívares la equivalencia USD queda como pendiente (0).
-    const saleNeedsBcv = isBcvRateRequiredForDate(invoiceDate);
+    const saleNeedsBcv = monetaryRule.requiresBcvRate;
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && !hasValidBcvRate;
     if (saleNeedsBcv && !hasValidBcvRate) {
-      window.alert('La tasa BCV es obligatoria para ventas desde 2018. Antes de 2018 puede dejarla pendiente o ingresarla según criterio contable.');
+      window.alert('La tasa BCV es obligatoria para ventas desde el 01/01/2018.');
       return;
     }
     if (bcvExplicitlyInvalid) {
@@ -182,9 +192,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       igtfApplicable,
       igtfRate: igtfApplicable ? 3 : 0,
       igtfAmountBs,
-      igtfAmountUsd: bcvRate > 0 ? igtfAmountBs / bcvRate : 0,
+      igtfAmountUsd: effectiveBcvRate > 0 ? igtfAmountBs / effectiveBcvRate : 0,
       paymentCurrency,
-      bcvRate,
+      bcvRate: effectiveBcvRate,
       totalAmountUsd,
       taxableBaseUsd,
       vatAmountUsd,
@@ -344,7 +354,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {formatUsd(taxableBaseUsd)}
+                  {usdEnabled ? formatUsd(taxableBaseUsd) : '-'}
                 </span>
               </div>
               <div>
@@ -374,38 +384,44 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
-          {/* Tasa BCV propia de esta operación */}
-          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
-            <span className="font-bold text-slate-800 uppercase tracking-wider block">
-              3. Tasa BCV aplicada a esta operación
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} {isBcvRateRequiredForDate(invoiceDate) ? '*' : '(opcional antes de 2018)'}</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Ej.: 944,4485"
-                  value={bcvRateInput}
-                  onChange={e => setBcvRateInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
-                />
-                {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
-                  <button
-                    type="button"
-                    onClick={() => setBcvRateInput(String(suggestedBcvRate))}
-                    className="mt-1 text-xs text-emerald-600 hover:text-emerald-800 underline"
-                  >
-                    Usar tasa del historial: {suggestedBcvRate}
-                  </button>
-                )}
+          {/* Tasa BCV propia de esta operación: solo desde 2018 */}
+          {usdEnabled ? (
+            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+              <span className="font-bold text-slate-800 uppercase tracking-wider block">
+                3. Tasa BCV aplicada a esta operación
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicada (Bs. por USD) · {invoiceDate} *</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ej.: 944,4485"
+                    value={bcvRateInput}
+                    onChange={e => setBcvRateInput(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
+                  />
+                  {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
+                    <button
+                      type="button"
+                      onClick={() => setBcvRateInput(String(suggestedBcvRate))}
+                      className="mt-1 text-xs text-emerald-600 hover:text-emerald-800 underline"
+                    >
+                      Usar tasa del historial: {suggestedBcvRate}
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs text-slate-700">
+                  Ingrese manualmente la tasa oficial correspondiente a la fecha de esta factura. No existe una tasa BCV global ni se reutiliza la tasa de otra operación. El valor quedará guardado como parte de este documento y de su asiento contable.
+                </div>
               </div>
-              <div className="text-xs text-slate-700">
-                Ingrese manualmente la tasa oficial correspondiente a la fecha de esta factura. No existe una tasa BCV global ni se reutiliza la tasa de otra operación. El valor quedará guardado como parte de este documento y de su asiento contable.
-              </div>
+              {hasValidBcvRate && <p className="text-xs font-semibold text-blue-900">Esta factura conservará exclusivamente su propia tasa BCV aplicada: {bcvRate.toLocaleString('es-VE')} Bs./USD.</p>}
             </div>
-            {hasValidBcvRate && <p className="text-xs font-semibold text-blue-900">Esta factura conservará exclusivamente su propia tasa BCV aplicada: {bcvRate.toLocaleString('es-VE')} Bs./USD.</p>}
-          </div>
+          ) : (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
+              Operación del {invoiceDate} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares; todos los montos son en bolívares.
+            </div>
+          )}
 
           {/* Client Retention */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
@@ -500,7 +516,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </label>
             <div className="flex flex-wrap justify-between gap-2 text-xs">
               <span className="text-slate-600">IGTF estimado (3% cuando el cobro es de contado en medio sujeto, sujeto a validación fiscal):</span>
-              <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
+              <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)}{usdEnabled ? ' (' + formatUsd(igtfAmountBs / (effectiveBcvRate || 1)) + ')' : ''}</strong>
             </div>
             <p className="text-[11px] text-slate-600">Este formulario estima la percepción del 3% solo para cobros de contado en efectivo en moneda extranjera o criptoactivos, cuando la empresa esté designada agente de percepción. No calcula automáticamente transferencias bancarias en divisas: su tratamiento depende del supuesto legal concreto. En ventas a crédito, registre la percepción cuando ocurra el cobro sujeto, sin anticiparla ni duplicarla. Valide el caso con su contador antes de emitir el comprobante.</p>
           </div>
@@ -568,15 +584,17 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
           {/* Summary Box */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400">Tasa BCV aplicada ({invoiceDate}):</span>
-              <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar'}</span>
-            </div>
-            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV si esta operación requiere equivalencia en dólares. Para ventas en bolívares puede dejarla pendiente (0).</p>}
-            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)} ({formatUsd(additionalLuxuryTaxUsd)})</span></div>}
+            {usdEnabled && <>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">Tasa BCV aplicada ({invoiceDate}):</span>
+                <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'Pendiente de ingresar'}</span>
+              </div>
+              {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">Ingrese la tasa BCV: es obligatoria para ventas desde el 01/01/2018.</p>}
+            </>}
+            {additionalLuxuryTaxBs > 0 && <div className="flex justify-between items-center text-xs text-amber-300"><span>Impuesto adicional al consumo suntuario (15%):</span><span className="font-mono">{formatBs(additionalLuxuryTaxBs)}{usdEnabled ? ' (' + formatUsd(additionalLuxuryTaxUsd) + ')' : ''}</span></div>}
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Total Factura (IVA, adicional e IGTF si aplica):</span>
-              <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
+              <span className="font-mono font-bold">{formatBs(totalAmountBs)}{usdEnabled ? ' (' + formatUsd(totalAmountUsd) + ')' : ''}</span>
             </div>
             {clientIsSpecial && (
               <div className="flex justify-between items-center text-xs text-emerald-300">

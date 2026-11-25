@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
-import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
+import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
@@ -54,6 +54,11 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Antes de 2018 el cierre es solo en bolívares: no se registra tasa BCV.
+    if (!getReglaMonetariaPorFecha(date).allowsUsd) {
+      setRateInput('');
+      return;
+    }
     const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], date);
     setRateInput(historicalRate === undefined ? '' : String(historicalRate).replace('.', ','));
   }, [currentCompany.accountingBcvRateHistory, date]);
@@ -69,8 +74,10 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const igtfAccount = movementAccounts.find(account => account.code === '2.1.2.06' && account.type === 'PASIVO');
   const luxuryTaxAccount = movementAccounts.find(account => account.code === '2.1.2.08' && account.type === 'PASIVO');
 
-  const rate = parseAmount(rateInput);
-  const rateRequired = isBcvRateRequiredForDate(date);
+  const monetaryRule = getReglaMonetariaPorFecha(date);
+  const usdEnabled = monetaryRule.allowsUsd;
+  const rate = usdEnabled ? parseAmount(rateInput) : 0;
+  const rateRequired = monetaryRule.requiresBcvRate;
   const b16 = parseAmount(base16), b8 = parseAmount(base8), b31 = parseAmount(base31);
   const e = parseAmount(exempt), ig = parseAmount(igtf);
   const taxBreakdown = calculateFiscalZTaxBreakdown({ taxableBase16Bs: b16, taxableBase8Bs: b8, taxableBase31Bs: b31, exemptSalesBs: e, igtfBs: ig });
@@ -220,7 +227,13 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma / proveedor'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Terminal / caja (si aplica)<input value={sourceTerminalId} onChange={event => setSourceTerminalId(event.target.value)} placeholder="Ej. Caja 01" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </>}
-          <label className="font-semibold text-slate-700">Tasa BCV del cierre {rateRequired ? '*' : '(opcional antes de 2018)'}<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required={rateRequired} placeholder={rateRequired ? 'Ej. 889,67' : 'Opcional antes de 2018'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          {usdEnabled ? (
+            <label className="font-semibold text-slate-700">Tasa BCV del cierre *<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required placeholder="Ej. 889,67" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
+          ) : (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+              Cierre del {date} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.
+            </p>
+          )}
         </section>
         <section className="rounded-xl border border-slate-200 p-4">
           <h3 className="mb-3 font-bold text-slate-800">Rango de documentos emitidos</h3>
