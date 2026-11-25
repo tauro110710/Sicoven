@@ -303,6 +303,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Desde 2018, la tasa BCV es obligatoria para el asiento histórico.
+    // Antes de esa fecha el campo está oculto y no se exige equivalencia USD.
+    if (rateRequired && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0)) {
+      setSubmitError('La tasa BCV es obligatoria para asientos desde 2018.');
+      return;
+    }
     // La tasa es opcional para asientos en Bs. puros. Si se deja vacía,
     // normaliza USD a cero para descartar equivalencias antiguas u obsoletas.
     const bcvExplicitlyInvalid = bcvRate.trim().length > 0 && (!Number.isFinite(parsedBcvRate) || parsedBcvRate <= 0);
