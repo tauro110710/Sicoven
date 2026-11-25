@@ -2766,7 +2766,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         purchaseEntry.type !== 'COMPRA' ||
         !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
         !Number.isFinite(Number(inventoryDebitUsd)) ||
-        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
+        Math.abs(money(inventoryDebitUsd) - (Number(purchase.bcvRate) > 0 ? lineTotal / Number(purchase.bcvRate) : 0)) > 0.0001 ||
         !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts, asArray(nextState.accounts))) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }
