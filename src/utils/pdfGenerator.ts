@@ -500,17 +500,24 @@ export async function exportBalanceGeneralPdf(
 
   const tableBody: any[] = [];
 
+  // El ejercicio fija la fecha contable de presentación: antes de 2018 no se
+  // muestra equivalente USD, la columna queda en "-" con la regla central.
+  const exerciseUsdDate = `${Number(company.fiscalYear)}-01-01`;
+  const exerciseUsd = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
+  const exerciseUsdNegative = (amount: number) =>
+    allowsUsdForOperationDate(exerciseUsdDate) ? `-${formatUsd(amount)}` : '-';
+
   // Cada importe se presenta desde su saldo nativo; no se convierte una moneda a otra.
   const addSection = (label: string, bs: number, usd: number, color: number[]) => tableBody.push([
     { content: label, colSpan: 2, styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold' } },
     { content: formatBs(bs), styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } },
-    { content: formatUsd(usd), styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
+    { content: exerciseUsd(usd), styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
   ]);
-  const addAccount = (acc: any, bs: number, usd: number) => tableBody.push([acc.code, acc.name, formatNumberVe(bs), formatUsd(usd)]);
+  const addAccount = (acc: any, bs: number, usd: number) => tableBody.push([acc.code, acc.name, formatNumberVe(bs), exerciseUsd(usd)]);
   const addTotal = (label: string, bs: number, usd: number) => tableBody.push([
     { content: label, colSpan: 2, styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } },
     { content: formatBs(bs), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } },
-    { content: formatUsd(usd), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } }
+    { content: exerciseUsd(usd), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } }
   ]);
 
   addSection('1. ACTIVO', totals.totalActivoBs, totals.totalActivoUsd, [16, 185, 129]);
@@ -523,11 +530,11 @@ export async function exportBalanceGeneralPdf(
   addTotal('TOTAL PASIVO + PATRIMONIO NETO:', totals.totalPasivoPatrimonioBs, totals.totalPasivoPatrimonioUsd);
 
   tableBody.push([{ content: 'ESTADO DE RESULTADOS DEL EJERCICIO (GANANCIAS Y PÉRDIDAS)', colSpan: 4, styles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' } }]);
-  tableBody.push(['4.1', '(+) Ingresos Operacionales y Ventas Netas', formatNumberVe(totals.totalIngresosBs), formatUsd(totals.totalIngresosUsd)]);
-  tableBody.push(['5.1', '(-) Costo de Ventas', '-' + formatNumberVe(totals.totalCostosBs), '-' + formatUsd(totals.totalCostosUsd)]);
-  tableBody.push([{ content: '(=) UTILIDAD BRUTA EN VENTAS:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatBs(totals.totalIngresosBs - totals.totalCostosBs), styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatUsd(totals.totalIngresosUsd - totals.totalCostosUsd), styles: { fontStyle: 'bold', halign: 'right' } }]);
-  tableBody.push(['6.1', '(-) Gastos Operacionales y de Administración', '-' + formatNumberVe(totals.totalGastosBs), '-' + formatUsd(totals.totalGastosUsd)]);
-  tableBody.push([{ content: '(=) RESULTADO NETO INTEGRAL DEL EJERCICIO:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } }, { content: formatBs(totals.utilidadNetaBs), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }, { content: formatUsd(totals.utilidadNetaUsd), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }]);
+  tableBody.push(['4.1', '(+) Ingresos Operacionales y Ventas Netas', formatNumberVe(totals.totalIngresosBs), exerciseUsd(totals.totalIngresosUsd)]);
+  tableBody.push(['5.1', '(-) Costo de Ventas', '-' + formatNumberVe(totals.totalCostosBs), exerciseUsdNegative(totals.totalCostosUsd)]);
+  tableBody.push([{ content: '(=) UTILIDAD BRUTA EN VENTAS:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatBs(totals.totalIngresosBs - totals.totalCostosBs), styles: { fontStyle: 'bold', halign: 'right' } }, { content: exerciseUsd(totals.totalIngresosUsd - totals.totalCostosUsd), styles: { fontStyle: 'bold', halign: 'right' } }]);
+  tableBody.push(['6.1', '(-) Gastos Operacionales y de Administración', '-' + formatNumberVe(totals.totalGastosBs), exerciseUsdNegative(totals.totalGastosUsd)]);
+  tableBody.push([{ content: '(=) RESULTADO NETO INTEGRAL DEL EJERCICIO:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } }, { content: formatBs(totals.utilidadNetaBs), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }, { content: exerciseUsd(totals.utilidadNetaUsd), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }]);
   autoTable(doc, {
     startY,
     head: [['Código', 'Denominación de la Cuenta', 'Monto en Bolívares (Bs.)', 'Monto en Dólares (USD)']],
@@ -754,11 +761,13 @@ export async function exportConciliacionPdf(
   tableBody.push([
     { content: 'RESUMEN DE CONCILIACIÓN EN DOBLE MONEDA (VALORES HISTÓRICOS)', colSpan: 3, styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' } }
   ]);
-  tableBody.push(['USD', 'Saldo según extracto', formatUsd(data.bankStatementBalanceUsd)]);
-  tableBody.push(['USD', 'Saldo según libros', formatUsd(data.bookBalanceUsd)]);
-  tableBody.push(['USD', 'Saldo bancario ajustado', formatUsd(data.adjustedBankBalanceUsd)]);
-  tableBody.push(['USD', 'Saldo en libros ajustado', formatUsd(data.adjustedBookBalanceUsd)]);
-  tableBody.push(['USD', 'Diferencia de conciliación', formatUsd(data.differenceUsd)]);
+  // La fecha de corte es la fecha contable del corte: antes de 2018 los saldos
+  // históricos USD no se presentan y la fila queda en "-".
+  tableBody.push(['USD', 'Saldo según extracto', formatUsdForDate(data.bankStatementBalanceUsd, cutoffDate)]);
+  tableBody.push(['USD', 'Saldo según libros', formatUsdForDate(data.bookBalanceUsd, cutoffDate)]);
+  tableBody.push(['USD', 'Saldo bancario ajustado', formatUsdForDate(data.adjustedBankBalanceUsd, cutoffDate)]);
+  tableBody.push(['USD', 'Saldo en libros ajustado', formatUsdForDate(data.adjustedBookBalanceUsd, cutoffDate)]);
+  tableBody.push(['USD', 'Diferencia de conciliación', formatUsdForDate(data.differenceUsd, cutoffDate)]);
 
   autoTable(doc, {
     startY,

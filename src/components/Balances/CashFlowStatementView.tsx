@@ -3,7 +3,8 @@ import { useAccounting } from '../../context/AccountingContext';
 import { buildCashFlowReport, CashFlowSection } from '../../types/cashFlowStatement';
 import { CashFlowActivity, CashFlowIndirectTreatment } from '../../types/accounting';
 import { buildCashFlowIndirectReport } from '../../types/cashFlowIndirectStatement';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { ArrowLeft, Printer, Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const ACTIVITY_LABELS: Record<CashFlowActivity, string> = {
@@ -63,8 +64,12 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
       setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el tratamiento indirecto en SQLite.');
     }
   };
+  // El ejercicio seleccionado es la fecha contable: antes de 2018 no existe
+  // equivalente USD y la regla central devuelve "-".
+  const exerciseUsdDate = `${year}-01-01`;
+  const usdForExercise = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
   const money = (bs: number, usd: number) => <span className="text-right font-mono">
-    <span>{formatBs(bs)}</span><span className="block text-[10px] text-slate-500">{formatUsd(usd)}</span>
+    <span>{formatBs(bs)}</span><span className="block text-[10px] text-slate-500">{usdForExercise(usd)}</span>
   </span>;
 
   const handleClassify = async (code: string, value: CashFlowActivity) => {
@@ -125,9 +130,9 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
                 <td className="p-3 text-right font-mono">{formatBs(totals.receiptsBs)}</td>
                 <td className="p-3 text-right font-mono">{formatBs(totals.paymentsBs)}</td>
                 <td className="p-3 text-right font-mono font-semibold">{formatBs(totals.netBs)}</td>
-                <td className="p-3 text-right font-mono">{formatUsd(totals.receiptsUsd)}</td>
-                <td className="p-3 text-right font-mono">{formatUsd(totals.paymentsUsd)}</td>
-                <td className="p-3 text-right font-mono font-semibold">{formatUsd(totals.netUsd)}</td>
+                <td className="p-3 text-right font-mono">{usdForExercise(totals.receiptsUsd)}</td>
+                <td className="p-3 text-right font-mono">{usdForExercise(totals.paymentsUsd)}</td>
+                <td className="p-3 text-right font-mono font-semibold">{usdForExercise(totals.netUsd)}</td>
               </tr>;
             })}
           </tbody>
@@ -165,7 +170,7 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
         <thead className="bg-slate-100 text-slate-700"><tr><th className="p-3 text-left">Fecha</th><th className="p-3 text-left">Asiento</th><th className="p-3 text-left">Actividad</th><th className="p-3 text-left">Cuenta</th><th className="p-3 text-left">Concepto</th><th className="p-3 text-right">Cobros Bs.</th><th className="p-3 text-right">Pagos Bs.</th><th className="p-3 text-right">Cobros USD</th><th className="p-3 text-right">Pagos USD</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{report.lines.map((line, index) => <tr key={line.entryId + line.accountCode + index}>
           <td className="p-3">{line.date}</td><td className="p-3">#{line.entryNumber}</td><td className="p-3">{SECTION_LABELS[line.activity]}</td><td className="p-3 font-mono">{line.accountCode}</td><td className="p-3">{line.description}</td>
-          <td className="p-3 text-right font-mono">{formatBs(line.receiptsBs)}</td><td className="p-3 text-right font-mono">{formatBs(line.paymentsBs)}</td><td className="p-3 text-right font-mono">{formatUsd(line.receiptsUsd)}</td><td className="p-3 text-right font-mono">{formatUsd(line.paymentsUsd)}</td>
+          <td className="p-3 text-right font-mono">{formatBs(line.receiptsBs)}</td><td className="p-3 text-right font-mono">{formatBs(line.paymentsBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(line.receiptsUsd)}</td><td className="p-3 text-right font-mono">{usdForExercise(line.paymentsUsd)}</td>
         </tr>)}</tbody>
       </table></div> : <p className="p-6 text-center text-xs text-slate-500">No hay flujos clasificados para mostrar.</p>}
     </section>
@@ -185,16 +190,16 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
         <table className="min-w-[680px] w-full text-xs">
           <thead className="bg-slate-100"><tr><th className="p-2 text-left">Concepto</th><th className="p-2 text-right">Bs.</th><th className="p-2 text-right">USD</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
-            <tr><td className="p-2 font-semibold">Resultado neto del ejercicio</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.netIncomeBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.netIncomeUsd)}</td></tr>
-            <tr><td className="p-2">Ajustes no monetarios netos</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.nonCashAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.nonCashAdjustmentsUsd)}</td></tr>
-            <tr><td className="p-2">Variaciones del capital de trabajo</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.workingCapitalAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.workingCapitalAdjustmentsUsd)}</td></tr>
-            <tr className="bg-slate-50"><td className="p-2 font-bold">Flujo neto de actividades operativas</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.operatingCashFlowBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.operatingCashFlowUsd)}</td></tr>
-            <tr><td className="p-2">Actividades de inversión</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.investingCashFlowBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.investingCashFlowUsd)}</td></tr>
-            <tr><td className="p-2">Actividades de financiación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.financingCashFlowBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.financingCashFlowUsd)}</td></tr>
-            <tr className="bg-slate-50"><td className="p-2 font-bold">Variación neta calculada</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.netChangeBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.netChangeUsd)}</td></tr>
-            <tr><td className="p-2">Efectivo inicial</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.openingCashBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.openingCashUsd)}</td></tr>
-            <tr className="bg-slate-50"><td className="p-2 font-bold">Efectivo final calculado / según mayor</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.closingCashBs)} / {formatBs(indirectReport.ledgerClosingCashBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.closingCashUsd)} / {formatUsd(indirectReport.ledgerClosingCashUsd)}</td></tr>
-            <tr><td className="p-2">Diferencia de conciliación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.reconciliationDifferenceBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.reconciliationDifferenceUsd)}</td></tr>
+            <tr><td className="p-2 font-semibold">Resultado neto del ejercicio</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.netIncomeBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.netIncomeUsd)}</td></tr>
+            <tr><td className="p-2">Ajustes no monetarios netos</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.nonCashAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.nonCashAdjustmentsUsd)}</td></tr>
+            <tr><td className="p-2">Variaciones del capital de trabajo</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.workingCapitalAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.workingCapitalAdjustmentsUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Flujo neto de actividades operativas</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.operatingCashFlowBs)}</td><td className="p-2 text-right font-mono font-bold">{usdForExercise(indirectReport.operatingCashFlowUsd)}</td></tr>
+            <tr><td className="p-2">Actividades de inversión</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.investingCashFlowBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.investingCashFlowUsd)}</td></tr>
+            <tr><td className="p-2">Actividades de financiación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.financingCashFlowBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.financingCashFlowUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Variación neta calculada</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.netChangeBs)}</td><td className="p-2 text-right font-mono font-bold">{usdForExercise(indirectReport.netChangeUsd)}</td></tr>
+            <tr><td className="p-2">Efectivo inicial</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.openingCashBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.openingCashUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Efectivo final calculado / según mayor</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.closingCashBs)} / {formatBs(indirectReport.ledgerClosingCashBs)}</td><td className="p-2 text-right font-mono font-bold">{usdForExercise(indirectReport.closingCashUsd)} / {usdForExercise(indirectReport.ledgerClosingCashUsd)}</td></tr>
+            <tr><td className="p-2">Diferencia de conciliación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.reconciliationDifferenceBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.reconciliationDifferenceUsd)}</td></tr>
           </tbody>
         </table>
       </div>
@@ -213,7 +218,7 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
       </div>
       {indirectReport.adjustments.length > 0 && <div className="mt-4 overflow-x-auto"><table className="min-w-[700px] w-full text-xs">
         <thead className="bg-slate-100"><tr><th className="p-2 text-left">Cuenta</th><th className="p-2 text-right">Saldo inicial Bs.</th><th className="p-2 text-right">Saldo final Bs.</th><th className="p-2 text-right">Ajuste Bs.</th><th className="p-2 text-right">Ajuste USD</th></tr></thead>
-        <tbody className="divide-y divide-slate-100">{indirectReport.adjustments.map(row => <tr key={row.accountCode}><td className="p-2">{row.accountCode} · {row.accountName}</td><td className="p-2 text-right font-mono">{formatBs(row.openingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.closingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.adjustmentBs)}</td><td className="p-2 text-right font-mono">{formatUsd(row.adjustmentUsd)}</td></tr>)}</tbody>
+        <tbody className="divide-y divide-slate-100">{indirectReport.adjustments.map(row => <tr key={row.accountCode}><td className="p-2">{row.accountCode} · {row.accountName}</td><td className="p-2 text-right font-mono">{formatBs(row.openingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.closingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.adjustmentBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(row.adjustmentUsd)}</td></tr>)}</tbody>
       </table></div>}
     </section>
 

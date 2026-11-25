@@ -12,7 +12,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
-import { formatUsdForDate } from '../../utils/monetaryPolicy';
+import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { NewSaleModal } from './NewSaleModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
@@ -57,11 +57,12 @@ export const LibroVentasView: React.FC = () => {
       const base31 = s.taxRate === 31 ? s.taxableBaseBs : 0;
       const iva16 = s.taxRate === 16 ? s.vatAmountBs : s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0;
       const iva8 = s.taxRate === 8 ? s.vatAmountBs : 0;
-      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),sign * s.totalAmountUsd,sign * s.totalAmountBs,sign * (s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)),sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),s.bcvRate,'VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
+      // El CSV mantiene la misma regla monetaria que el PDF: sin USD antes de 2018.
+      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),allowsUsdForOperationDate(s.invoiceDate) ? sign * s.totalAmountUsd : '-',sign * s.totalAmountBs,sign * (s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)),sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),allowsUsdForOperationDate(s.invoiceDate) ? s.bcvRate : '-','VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
     });
     filteredZReports.forEach(entry => {
       const z = entry.fiscalZReport!;
-      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '',entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,entry.bcvRate,'CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
+      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '',allowsUsdForOperationDate(z.date) ? (entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '') : '-',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,allowsUsdForOperationDate(z.date) ? entry.bcvRate : '-','CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
     });
     const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
