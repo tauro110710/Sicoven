@@ -76,6 +76,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   }, [productId, selectedProduct]);
 
   React.useEffect(() => {
+    if (!isBcvRateRequiredForDate(date)) { setBcvRateInput(''); return; }
     // Prioridad 1: historial BCV específico de inventario.
     const inventoryRate = resolveInventoryBcvRate(currentCompany.inventoryBcvRateHistory || [], date);
     if (inventoryRate) {
@@ -327,10 +328,12 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 <option>Factura de compra</option><option>Factura de venta</option><option>Nota de débito</option><option>Nota de crédito</option><option>Nota de crédito proveedor</option><option>Guía de despacho</option><option>Acta de ajuste</option><option>Inventario inicial</option>
               </select>
             </div>
+            {rateRequired && (
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) {rateRequired ? '*' : '(opcional antes de 2018)'}</label>
               <input type="text" inputMode="decimal" placeholder={rateRequired ? 'Ej.: 889,67 (obligatoria desde 2018)' : 'Dejar vacío si no aplica'} value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
+            )}
             <div>
               <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
               <input value={counterpartyRif} onChange={e => setCounterpartyRif(e.target.value)} maxLength={20} placeholder="J-12345678-9" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
@@ -348,7 +351,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 type="date"
                 required
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                onChange={e => { const nextDate = e.target.value; setDate(nextDate); if (!isBcvRateRequiredForDate(nextDate)) setBcvRateInput(''); }}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
