@@ -77,11 +77,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
   React.useEffect(() => {
     // La tasa BCV corresponde a la fecha de factura, no a la fecha de abono en cuenta.
-    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
+    const resolved = bcvRequiredForInvoice ? resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate) : undefined;
     setSuggestedBcvRate(resolved);
-    // Al cambiar la fecha, evitar conservar una tasa de otro período.
+    // Antes de 2018 no se muestra ni se utiliza equivalencia USD/BCV en compras.
     setBcvRateInput(resolved ? String(resolved) : '');
-  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
+  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory, bcvRequiredForInvoice]);
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
@@ -507,10 +507,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <span className="font-bold text-slate-800 uppercase tracking-wider block">
                 2. Montos e Impuesto al Valor Agregado (IVA)
               </span>
-              <div className="text-slate-500 font-mono-nums flex flex-col items-end gap-0.5">
+              {bcvRequiredForInvoice && <div className="text-slate-500 font-mono-nums flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1">
-                  Tasa BCV aplicable a la factura {bcvRequiredForInvoice ? '*' : '(opcional antes de 2018)'}
-                  <input type="text" inputMode="decimal" required={bcvRequiredForInvoice} value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder={bcvRequiredForInvoice ? "Obligatoria desde 2018" : "Opcional"} className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+                  Tasa BCV aplicable a la factura *
+                  <input type="text" inputMode="decimal" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Obligatoria desde 2018" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
                 </div>
                 {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
                   <button
@@ -521,7 +521,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                     Usar tasa del historial: {suggestedBcvRate}
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
