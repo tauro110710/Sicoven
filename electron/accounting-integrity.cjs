@@ -2733,8 +2733,16 @@ function validateAccountingSnapshot(previousState, nextState) {
         throw new Error('SQLite rechazó la compra: falta una entrada de Kardex única para el artículo ' + line.productId + '.');
       }
       const movement = matches[0];
-      const expectedCost = money(Number(line.quantity) * Number(line.unitCostBs));
       const lineUnitCostBs = Number(line.unitCostBs);
+      const lineLandedCostsBs = Number(line.additionalLandedCostsBs || 0);
+      const validLandedCosts = Number.isFinite(lineLandedCostsBs) && lineLandedCostsBs >= 0;
+      // Los fletes/gastos de importación de la línea se capitalizan en la entrada
+      // de Kardex: el costo unitario esperado del movimiento es el costo de la
+      // línea más la parte proporcional de esos gastos. La base de la factura
+      // (cantidad × costo unitario) no los incluye.
+      const effectiveUnitCostBs = lineUnitCostBs + (validLandedCosts && lineLandedCostsBs > 0
+        ? lineLandedCostsBs / Number(line.quantity) : 0);
+      const expectedCost = money(Number(line.quantity) * effectiveUnitCostBs);
       const movementQuantity = Number(movement.quantity);
       const movementUnitCostBs = Number(movement.unitCostBs);
       const movementUnitCostUsd = Number(movement.unitCostUsd);
@@ -2751,8 +2759,9 @@ function validateAccountingSnapshot(previousState, nextState) {
           movement.date !== purchase.invoiceDate ||
           !Number.isFinite(movementQuantity) ||
           Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
+          !validLandedCosts ||
           !Number.isFinite(lineUnitCostBs) || !Number.isFinite(movementUnitCostBs) ||
-          Math.abs(movementUnitCostBs - lineUnitCostBs) > 0.02 ||
+          Math.abs(movementUnitCostBs - effectiveUnitCostBs) > 0.02 ||
           !Number.isFinite(movementCostBs) ||
           Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
           !supplierRif || !movementRif || movementRif !== supplierRif;
@@ -2760,7 +2769,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
           !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
           !Number.isFinite(movementUnitCostUsd) ||
-          Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) > 0.0001 ||
+          Math.abs(movementUnitCostUsd - effectiveUnitCostBs / invoiceRate) > 0.0001 ||
           !Number.isFinite(movementCostUsd) ||
           Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001);
       const historicalUsdMismatch = !usdEquivalent && (

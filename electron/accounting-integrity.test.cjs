@@ -476,6 +476,47 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
+test('SQLite acepta compras cuya línea capitaliza fletes o gastos de importación en el Kardex', () => {
+  const purchase = {
+    id: 'purchase-landed', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '200', documentType: '01',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2, taxableBaseUsd: 2, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-landed-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100, additionalLandedCostsBs: 20 }]
+  };
+  // El asiento reconoce la base de la factura (200), sin el flete: el flete se
+  // capitaliza únicamente en el costo de la entrada de Kardex (110 por unidad).
+  const entry = {
+    id: 'purchase-landed-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra con flete', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-200',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-landed', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-200', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 110, unitCostUsd: 1.1, totalCostBs: 220, totalCostUsd: 2.2, bcvRate: 100
+  };
+  const state = { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state));
+  // Si el Kardex no capitaliza el flete, la entrada no concilia con la línea.
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...state, movements: [{ ...movement, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2 }] }
+  ), /una entrada de Kardex no coincide/);
+  // Un flete negativo tampoco puede introducirse en la línea de factura.
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...state, purchases: [{ ...purchase, inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100, additionalLandedCostsBs: -20 }] }] }
+  ), /una entrada de Kardex no coincide/);
+});
+
 test('SQLite acepta compras anteriores a 2018 sin tasa BCV ni equivalencia USD', () => {
   const purchase = {
     id: 'purchase-historica', companyId: 'company-1', invoiceDate: '2017-05-10',
