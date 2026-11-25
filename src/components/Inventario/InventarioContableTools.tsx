@@ -7,6 +7,7 @@ import { validateOpeningInventoryRow, validateMovementImportRow } from '../../ty
 import { filterEntriesByCompany } from '../../types/accountingReportIntegrity';
 import { resolveInventoryBcvRate } from '../../types/inventoryBcvRate';
 import { HistoricalAccountingReplayPanel } from './HistoricalAccountingReplayPanel';
+import { allowsUsdForOperationDate } from '../../utils/monetaryPolicy';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -51,6 +52,10 @@ export const InventarioContableTools: React.FC = () => {
     }
     return balances;
   }, [companyProducts, companyJournalEntries]);
+
+  // Fecha contable de valoración: la apertura del artículo o, si no está
+  // registrada, el inicio del ejercicio activo.
+  const inventoryUsdDate = (product: InventoryProduct) => product.openingDate || `${Number(currentCompany.fiscalYear)}-01-01`;
 
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<'INVENTARIO_INICIAL' | 'MOVIMIENTOS'>('INVENTARIO_INICIAL');
@@ -247,12 +252,18 @@ export const InventarioContableTools: React.FC = () => {
     'costo_promedio_usd','provision_vnr_usd_libro','valor_neto_usd','estado_conciliacion_vnr','cuenta_inventario','cuenta_costo_ventas','iva','tasa_apertura_bcv'
   ], companyProducts.map(p => {
     const vnr = vnrLedgerBalances.get(p.id) || null;
+    // La fecha de apertura es la fecha contable del artículo: antes de 2018 no
+    // se presentan columnas USD ni tasa BCV.
+    const usdAllowed = allowsUsdForOperationDate(inventoryUsdDate(p));
     return [
       p.code,p.name,p.itemType || 'MERCANCIA',p.unit,p.currentStock,p.costingMethod || 'PROMEDIO_PONDERADO',
       p.avgCostBs,vnr ? vnr.provisionBs : 'PENDIENTE',vnr ? Math.max(0,p.currentStock*p.avgCostBs-vnr.provisionBs) : 'PENDIENTE',
-      p.avgCostUsd,vnr ? vnr.provisionUsd : 'PENDIENTE',vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd) : 'PENDIENTE',
+      usdAllowed ? p.avgCostUsd : '-',
+      usdAllowed ? (vnr ? vnr.provisionUsd : 'PENDIENTE') : '-',
+      usdAllowed ? (vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd) : 'PENDIENTE') : '-',
       vnr ? 'CONCILIADO' : 'PENDIENTE_CONCILIAR',
-      p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.inventoryBcvRate || 0
+      p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',
+      usdAllowed ? (p.openingBcvRate || currentCompany.inventoryBcvRate || 0) : '-'
     ];
   }));
 
@@ -268,20 +279,22 @@ export const InventarioContableTools: React.FC = () => {
     doc.text('Valores en libros antes de provisión y valor neto luego de la provisión VNR registrada. Verificar conciliación con el Libro Mayor.', 14, 30);
     const rows = companyProducts.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => {
       const vnr = vnrLedgerBalances.get(p.id) || null;
+      const usdAllowed = allowsUsdForOperationDate(inventoryUsdDate(p));
       return [
         p.inventoryAccountCode || '1.1.4.01', p.code, p.name, p.itemType || 'MERCANCIA', p.unit,
         Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
         Number(p.currentStock * p.avgCostBs).toFixed(2), vnr ? vnr.provisionBs.toFixed(2) : 'PENDIENTE',
         vnr ? Math.max(0,p.currentStock*p.avgCostBs-vnr.provisionBs).toFixed(2) : 'PENDIENTE',
-        vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd).toFixed(6) : 'PENDIENTE'
+        usdAllowed ? (vnr ? Math.max(0,p.currentStock*p.avgCostUsd-vnr.provisionUsd).toFixed(6) : 'PENDIENTE') : '-'
       ];
     });
     const allVnrReconciled = companyProducts.every(p => vnrLedgerBalances.get(p.id) !== null);
+    const allUsdEligible = companyProducts.every(p => allowsUsdForOperationDate(inventoryUsdDate(p)));
     autoTable(doc, {
       startY: 34,
       head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
       body: rows,
-      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),allVnrReconciled?companyProducts.reduce((sum,p)=>sum+(vnrLedgerBalances.get(p.id)?.provisionBs||0),0).toFixed(2):'PENDIENTE',allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-(vnrLedgerBalances.get(p.id)?.provisionBs||0)),0).toFixed(2):'PENDIENTE',allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-(vnrLedgerBalances.get(p.id)?.provisionUsd||0)),0).toFixed(6):'PENDIENTE']],
+      foot: [['TOTAL','','','','','','',companyProducts.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),allVnrReconciled?companyProducts.reduce((sum,p)=>sum+(vnrLedgerBalances.get(p.id)?.provisionBs||0),0).toFixed(2):'PENDIENTE',allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-(vnrLedgerBalances.get(p.id)?.provisionBs||0)),0).toFixed(2):'PENDIENTE',allUsdEligible ? (allVnrReconciled?companyProducts.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-(vnrLedgerBalances.get(p.id)?.provisionUsd||0)),0).toFixed(6):'PENDIENTE') : '-']],
       styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
       headStyles: { fontSize: 7 },
       footStyles: { fontStyle: 'bold' },
@@ -299,13 +312,20 @@ export const InventarioContableTools: React.FC = () => {
     'fecha','tipo_documento','documento','rif_contraparte','contraparte','codigo','descripcion','concepto','tipo_movimiento',
     'entrada_cantidad','entrada_costo_unitario_bs','salida_cantidad','salida_costo_unitario_bs','existencia_final','valor_final_bs',
     'tasa_bcv_historica','entrada_usd','salida_usd','saldo_usd','cuenta_inventario'
-  ], companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
-    m.date,m.documentType || '',m.documentRef,m.counterpartyRif || '',m.counterpartyName || '',m.productCode,m.productName,m.concept,m.type,
-    m.type === 'ENTRADA' ? m.quantity : 0,m.type === 'ENTRADA' ? m.unitCostBs : 0,
-    m.type === 'SALIDA' ? m.quantity : 0,m.type === 'SALIDA' ? m.unitCostBs : 0,m.balanceQty,m.balanceTotalBs,
-    m.bcvRate || currentCompany.inventoryBcvRate,m.type === 'ENTRADA' ? m.totalCostUsd : 0,m.type === 'SALIDA' ? m.totalCostUsd : 0,m.balanceTotalUsd,
-    companyProducts.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
-  ]));
+  ], companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => {
+    // La fecha del movimiento manda: antes de 2018 no hay tasa ni saldos USD.
+    const usdAllowed = allowsUsdForOperationDate(m.date);
+    return [
+      m.date,m.documentType || '',m.documentRef,m.counterpartyRif || '',m.counterpartyName || '',m.productCode,m.productName,m.concept,m.type,
+      m.type === 'ENTRADA' ? m.quantity : 0,m.type === 'ENTRADA' ? m.unitCostBs : 0,
+      m.type === 'SALIDA' ? m.quantity : 0,m.type === 'SALIDA' ? m.unitCostBs : 0,m.balanceQty,m.balanceTotalBs,
+      usdAllowed ? (m.bcvRate || currentCompany.inventoryBcvRate) : '-',
+      usdAllowed ? (m.type === 'ENTRADA' ? m.totalCostUsd : 0) : '-',
+      usdAllowed ? (m.type === 'SALIDA' ? m.totalCostUsd : 0) : '-',
+      usdAllowed ? m.balanceTotalUsd : '-',
+      companyProducts.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
+    ];
+  }));
 
   const exportBookPdf = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -317,16 +337,20 @@ export const InventarioContableTools: React.FC = () => {
     doc.text('LIBRO DE ENTRADAS Y SALIDAS DE INVENTARIO', 14, 25);
     doc.setFontSize(7);
     doc.text('Libro contable valorizado en bolívares y referencia USD a la tasa BCV histórica de cada operación. Revisar requisitos de foliado/autorización aplicables antes de su presentación oficial.', 14, 30);
-    const rows = companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
-      m.date, m.documentType || '', m.documentRef, m.counterpartyRif || '', m.counterpartyName || '',
-      m.productCode, m.productName, m.concept, m.type,
-      m.type === 'ENTRADA' ? String(m.quantity) : '—',
-      m.type === 'ENTRADA' ? Number(m.unitCostBs).toFixed(2) : '—',
-      m.type === 'SALIDA' ? String(m.quantity) : '—',
-      m.type === 'SALIDA' ? Number(m.unitCostBs).toFixed(2) : '—',
-      Number(m.balanceQty).toFixed(3), Number(m.balanceTotalBs).toFixed(2),
-      Number(m.bcvRate || currentCompany.inventoryBcvRate).toFixed(6), Number(m.balanceTotalUsd).toFixed(6)
-    ]);
+    const rows = companyMovements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => {
+      const usdAllowed = allowsUsdForOperationDate(m.date);
+      return [
+        m.date, m.documentType || '', m.documentRef, m.counterpartyRif || '', m.counterpartyName || '',
+        m.productCode, m.productName, m.concept, m.type,
+        m.type === 'ENTRADA' ? String(m.quantity) : '—',
+        m.type === 'ENTRADA' ? Number(m.unitCostBs).toFixed(2) : '—',
+        m.type === 'SALIDA' ? String(m.quantity) : '—',
+        m.type === 'SALIDA' ? Number(m.unitCostBs).toFixed(2) : '—',
+        Number(m.balanceQty).toFixed(3), Number(m.balanceTotalBs).toFixed(2),
+        usdAllowed ? Number(m.bcvRate || currentCompany.inventoryBcvRate).toFixed(6) : '-',
+        usdAllowed ? Number(m.balanceTotalUsd).toFixed(6) : '-'
+      ];
+    });
     autoTable(doc, {
       startY: 34,
       head: [['Fecha','Tipo doc.','N° documento','RIF','Proveedor/cliente','Código','Descripción','Concepto','Mov.','Entrada qty.','Costo entrada Bs.','Salida qty.','Costo salida Bs.','Existencia','Saldo Bs.','Tasa BCV','Saldo USD']],
