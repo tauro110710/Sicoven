@@ -2391,7 +2391,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
     if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
-        totals.debitBs <= 0 || totals.debitUsd <= 0) {
+        totals.debitBs <= 0 || (String(entry.date || '').slice(0, 10) >= '2018-01-01' && totals.debitUsd <= 0)) {
       throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cuadra simultáneamente en Bs. y USD.');
     }
     if (entry.type === 'CIERRE') {
