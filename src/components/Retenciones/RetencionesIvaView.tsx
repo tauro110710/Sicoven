@@ -11,7 +11,8 @@ import {
   Search,
   Code
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatters';
+import { formatBs, formatDate, cleanRif } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { VatRetentionVoucher } from '../../types/accounting';
 import { VatVoucherModal } from './VatVoucherModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
@@ -38,6 +39,8 @@ export const RetencionesIvaView: React.FC = () => {
     setSearchTerm('');
   }, [currentCompany.id]);
   const effectivePeriod = availablePeriods.includes(selectedPeriod) ? selectedPeriod : (availablePeriods[0] || selectedPeriod);
+  // El período (AAAAJM) es la fecha contable de los totales: antes de 2018 no hay USD.
+  const periodUsdDate = effectivePeriod.length >= 6 ? `${effectivePeriod.slice(0, 4)}-${effectivePeriod.slice(4, 6)}-01` : '';
   // La búsqueda solo filtra la tabla; nunca debe alterar la población fiscal exportada.
   const periodVouchers = companyVouchers
     .filter(v => v.period === effectivePeriod)
@@ -287,7 +290,7 @@ export const RetencionesIvaView: React.FC = () => {
               {formatBs(totalRetenidoBs)}
             </div>
             <div className="text-xs font-mono text-purple-700">
-              {formatUsd(totalRetenidoUsd)}
+              {formatUsdForDate(totalRetenidoUsd, periodUsdDate)}
             </div>
           </div>
 
@@ -457,7 +460,7 @@ export const RetencionesIvaView: React.FC = () => {
                       {formatBs(v.vatWithheldBs)}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-purple-600/70 font-normal">
-                          {formatUsd(v.vatWithheldUsd)}
+                          {formatUsdForDate(v.vatWithheldUsd, v.date)}
                         </div>
                       )}
                     </td>

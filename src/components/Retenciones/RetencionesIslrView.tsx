@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   Receipt
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatters';
+import { formatBs, formatDate, cleanRif } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { getPurchaseAccountCreditDate, IslrRetentionVoucher } from '../../types/accounting';
 import { IslrVoucherModal } from './IslrVoucherModal';
 import {
@@ -36,6 +37,8 @@ export const RetencionesIslrView: React.FC = () => {
   const activePeriod = availablePeriods.includes(selectedPeriod)
     ? selectedPeriod
     : (availablePeriods[0] || '');
+  // El período (AAAAMM) es la fecha contable de los totales: antes de 2018 no hay USD.
+  const islrPeriodUsdDate = activePeriod.length >= 6 ? `${activePeriod.slice(0, 4)}-${activePeriod.slice(4, 6)}-01` : '';
   const periodVouchers = islrVouchers
     .filter(v => v.companyId === currentCompany.id && v.period === activePeriod)
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
@@ -233,7 +236,7 @@ export const RetencionesIslrView: React.FC = () => {
               {formatBs(totalRetenidoBs)}
             </div>
             <div className="text-xs font-mono text-indigo-700">
-              {formatUsd(totalRetenidoUsd)}
+              {formatUsdForDate(totalRetenidoUsd, islrPeriodUsdDate)}
             </div>
           </div>
 
@@ -458,7 +461,7 @@ export const RetencionesIslrView: React.FC = () => {
                       {formatBs(v.withheldAmountBs)}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-indigo-600/70 font-normal">
-                          {formatUsd(v.withheldAmountUsd)}
+                          {formatUsdForDate(v.withheldAmountUsd, v.date)}
                         </div>
                       )}
                     </td>

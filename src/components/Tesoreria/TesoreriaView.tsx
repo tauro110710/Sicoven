@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { NewBankAccountModal } from '../Conciliacion/NewBankAccountModal';
 import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, ReceiptText } from 'lucide-react';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
@@ -128,12 +128,19 @@ export const TesoreriaView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {companyBanks.map(bank => {
           const balance = balanceFor(bank.id);
+          // La fecha contable del saldo es la de su último movimiento registrado;
+          // antes de 2018 la regla central no presenta equivalente USD.
+          const balanceUsdDate = companyEntries
+            .filter(entry => entry.items.some(item => item.accountCode === bank.accountCode))
+            .map(entry => entry.date)
+            .sort()
+            .at(-1) || currentCompany.accountingStartDate || '';
           return <button key={bank.id} onClick={() => setSelectedBankId(bank.id)} className={'rounded-xl border p-4 text-left transition ' + ((activeBank?.id === bank.id) ? 'border-emerald-400 bg-emerald-50/60 ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300')}>
             <div className="flex items-start justify-between gap-2"><span className="text-sm font-bold text-slate-900">{bank.bankName}</span><Landmark className="h-4 w-4 text-emerald-600"/></div>
             <p className="mt-1 font-mono text-[11px] text-slate-500">•••• {bank.accountNumber.slice(-4)} · {bank.accountType || 'CORRIENTE'} · {bank.currency}</p>
             {(bank.accountHolderName || bank.accountHolderRif) && <p className="mt-1 text-[10px] text-slate-600">{bank.accountHolderName || 'Titular no indicado'}{bank.accountHolderRif ? ' · RIF ' + bank.accountHolderRif : ''}</p>}
             <p className="mt-3 text-[11px] text-slate-500">Auxiliar contable</p><p className="font-mono text-xs font-semibold text-slate-800">{bank.accountCode}</p>
-            <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-[11px] text-slate-500">Saldo en libros</p><p className="text-base font-bold text-slate-900">{formatBs(balance.bs)}</p><p className="text-xs text-slate-600">{formatUsd(balance.usd)}</p></div>
+            <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-[11px] text-slate-500">Saldo en libros</p><p className="text-base font-bold text-slate-900">{formatBs(balance.bs)}</p><p className="text-xs text-slate-600">{formatUsdForDate(balance.usd, balanceUsdDate)}</p></div>
           </button>;
         })}
       </section>

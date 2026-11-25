@@ -11,7 +11,7 @@ import {
   Download,
   AlertTriangle
 } from 'lucide-react';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
 import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { NewSaleModal } from './NewSaleModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
@@ -44,6 +44,10 @@ export const LibroVentasView: React.FC = () => {
   const [correctionTarget, setCorrectionTarget] = useState<{ sale: import('../../types/accounting').SaleRecord; kind: 'CREDIT' | 'DEBIT' } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  // El período seleccionado es la fecha contable de los totales: antes de 2018
+  // no se muestra equivalente USD.
+  const salesUsdDate = monthFilter ? `${monthFilter}-01` : `${Number(currentCompany.fiscalYear)}-01-01`;
+  const usdEnPeriodo = (amount: number) => formatUsdForDate(amount, salesUsdDate);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [dailySourceChoices, setDailySourceChoices] = useState<Record<string, 'Z' | 'INDIVIDUAL'>>({});
 
@@ -430,7 +434,7 @@ export const LibroVentasView: React.FC = () => {
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalVentasConIvaBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalVentasConIvaUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalVentasConIvaUsd)}</div>
                   )}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-slate-300">
@@ -439,21 +443,21 @@ export const LibroVentasView: React.FC = () => {
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
                   {formatBs(totalBaseBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalBaseUsd)}</div>
                   )}
                 </td>
                 <td></td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-850">
                   {formatBs(totalIvaDebitoBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaDebitoUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaDebitoUsd)}</div>
                   )}
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}<div className="text-[10px] text-slate-400">{formatUsd(totalLuxuryTaxUsd)}</div></td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300 bg-slate-850">{formatBs(totalLuxuryTaxBs)}<div className="text-[10px] text-slate-400">{usdEnPeriodo(totalLuxuryTaxUsd)}</div></td>
                 <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {(
-                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
+                    <div className="text-[10px] text-slate-400">{usdEnPeriodo(totalIvaRetenidoUsd)}</div>
                   )}
                 </td>
                 <td></td>
@@ -527,7 +531,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Bases imponibles gravadas:</span>
             <span className="text-base font-bold text-white mt-1 block">{sourceSelectionPending ? 'Pendiente de selección' : formatBs(totalFiscalBaseBs)}</span>
-            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalBaseUsd)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : usdEnPeriodo(totalFiscalBaseUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Ventas exentas / exoneradas:</span>
@@ -536,11 +540,11 @@ export const LibroVentasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Débito fiscal IVA:</span>
             <span className="text-base font-bold text-emerald-400 mt-1 block">{sourceSelectionPending ? 'Pendiente de selección' : formatBs(totalFiscalIvaBs)}</span>
-            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalIvaUsd)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : usdEnPeriodo(totalFiscalIvaUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Impuesto adicional al consumo suntuario (15%):</span>
-            <span className="text-base font-bold text-amber-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(totalFiscalLuxuryTaxUsd)}</span>
+            <span className="text-base font-bold text-amber-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(totalFiscalLuxuryTaxBs)}</span><span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : usdEnPeriodo(totalFiscalLuxuryTaxUsd)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IGTF percibido:</span>
@@ -549,7 +553,7 @@ export const LibroVentasView: React.FC = () => {
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">IVA retenido por clientes:</span>
             <span className="text-base font-bold text-purple-300 mt-1 block">{sourceSelectionPending ? 'Pendiente' : formatBs(selectedWithholdingBs)}</span>
-            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : formatUsd(selectedWithholdingUsd)}</span>
+            <span className="text-[10px] text-slate-400">{sourceSelectionPending ? '—' : usdEnPeriodo(selectedWithholdingUsd)}</span>
           </div>
         </div>
       </div>

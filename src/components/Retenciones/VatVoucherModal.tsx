@@ -3,7 +3,8 @@ import { VatRetentionVoucher } from '../../types/accounting';
 import { getVatVoucherDeliveryWindow } from '../../utils/vatVoucherDelivery';
 import { requiresSnat2026DocumentReference } from '../../types/retentionVoucherCompliance';
 import { X, Printer, ShieldCheck } from 'lucide-react';
-import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
+import { formatBs, formatDate, formatNumberVe } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 
 interface VatVoucherModalProps {
   voucher: VatRetentionVoucher | null;
@@ -315,7 +316,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
             </div>
             <div>
               <span className="font-bold">EQUIVALENTE REFERENCIAL: </span>
-              <span className="font-mono font-bold">{formatUsd(voucher.vatWithheldUsd)}</span>
+              <span className="font-mono font-bold">{formatUsdForDate(voucher.vatWithheldUsd, voucher.date)}</span>
             </div>
           </div>
 

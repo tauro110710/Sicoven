@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Company, IslrRetentionVoucher, getCompanyTaxStatusForDate } from '../../types/accounting';
 import { X, Printer, ShieldCheck } from 'lucide-react';
-import { formatBs, formatUsd, formatDate, formatNumberVe } from '../../utils/formatters';
+import { formatBs, formatDate, formatNumberVe } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { requiresSnat2026DocumentReference } from '../../types/retentionVoucherCompliance';
 
 interface IslrVoucherModalProps {
@@ -268,7 +269,7 @@ export const IslrVoucherModal: React.FC<IslrVoucherModalProps> = ({ voucher, com
             </div>
             <div>
               <span className="font-bold">EQUIVALENTE A TASA BCV: </span>
-              <span className="font-mono font-bold">{formatUsd(voucher.withheldAmountUsd)}</span>
+              <span className="font-mono font-bold">{formatUsdForDate(voucher.withheldAmountUsd, voucher.date)}</span>
             </div>
           </div>
 
