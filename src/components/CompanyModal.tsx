@@ -410,7 +410,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               type="date"
               required
               value={accountingStartDate}
-              onChange={e => setAccountingStartDate(e.target.value)}
+              onChange={e => {
+                const selectedDate = e.target.value;
+                setAccountingStartDate(selectedDate);
+                // El ejercicio inicial debe coincidir con el año del inicio contable elegido,
+                // no quedarse por defecto en el año actual al registrar una empresa histórica.
+                if (isValidIsoCalendarDate(selectedDate)) setFiscalYear(selectedDate.slice(0, 4));
+              }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
             <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
