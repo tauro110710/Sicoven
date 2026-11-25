@@ -13,7 +13,8 @@ import {
   Download,
   Wallet
 } from 'lucide-react';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { getUnclosedResultContribution, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
@@ -29,6 +30,11 @@ import {
 
 export const BalancesView: React.FC = () => {
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
+
+  // El ejercicio activo fija la fecha contable de presentación: antes de 2018
+  // no existe equivalente USD que mostrar en ninguna columna.
+  const exerciseUsdDate = `${Number(currentCompany.fiscalYear)}-01-01`;
+  const formatUsdEnEjercicio = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
 
   const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO' | 'ANUAL' | 'FLUJO'>('COMPROBACION');
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
@@ -545,13 +551,13 @@ export const BalancesView: React.FC = () => {
                     {/* Sumas */}
                     <td className="py-2 px-3 text-right font-mono border-l border-slate-100 text-slate-800">
                       {displayCurrency !== 'USD' && formatBs(acc.totalDebitBs)}
-                      {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(acc.totalDebitUsd)}</div>}
-                      {displayCurrency === 'USD' && formatUsd(acc.totalDebitUsd)}
+                      {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(acc.totalDebitUsd)}</div>}
+                      {displayCurrency === 'USD' && formatUsdEnEjercicio(acc.totalDebitUsd)}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-slate-800">
                       {displayCurrency !== 'USD' && formatBs(acc.totalCreditBs)}
-                      {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(acc.totalCreditUsd)}</div>}
-                      {displayCurrency === 'USD' && formatUsd(acc.totalCreditUsd)}
+                      {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(acc.totalCreditUsd)}</div>}
+                      {displayCurrency === 'USD' && formatUsdEnEjercicio(acc.totalCreditUsd)}
                     </td>
 
                     {/* Saldos */}
@@ -559,8 +565,8 @@ export const BalancesView: React.FC = () => {
                       {acc.adjustedDebitBs > 0 ? (
                         <>
                           {displayCurrency !== 'USD' && formatBs(acc.adjustedDebitBs)}
-                          {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(acc.adjustedDebitUsd)}</div>}
-                          {displayCurrency === 'USD' && formatUsd(acc.adjustedDebitUsd)}
+                          {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(acc.adjustedDebitUsd)}</div>}
+                          {displayCurrency === 'USD' && formatUsdEnEjercicio(acc.adjustedDebitUsd)}
                         </>
                       ) : '-'}
                     </td>
@@ -568,8 +574,8 @@ export const BalancesView: React.FC = () => {
                       {acc.adjustedCreditBs > 0 ? (
                         <>
                           {displayCurrency !== 'USD' && formatBs(acc.adjustedCreditBs)}
-                          {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(acc.adjustedCreditUsd)}</div>}
-                          {displayCurrency === 'USD' && formatUsd(acc.adjustedCreditUsd)}
+                          {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(acc.adjustedCreditUsd)}</div>}
+                          {displayCurrency === 'USD' && formatUsdEnEjercicio(acc.adjustedCreditUsd)}
                         </>
                       ) : '-'}
                     </td>
@@ -583,23 +589,23 @@ export const BalancesView: React.FC = () => {
                   </td>
                   <td className="py-3 px-3 text-right font-mono text-emerald-400 border-l border-slate-800">
                     {displayCurrency !== 'USD' && formatBs(sumTotalDebitBs)}
-                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(sumTotalDebitUsd)}</div>}
-                    {displayCurrency === 'USD' && formatUsd(sumTotalDebitUsd)}
+                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(sumTotalDebitUsd)}</div>}
+                    {displayCurrency === 'USD' && formatUsdEnEjercicio(sumTotalDebitUsd)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono text-emerald-400">
                     {displayCurrency !== 'USD' && formatBs(sumTotalCreditBs)}
-                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(sumTotalCreditUsd)}</div>}
-                    {displayCurrency === 'USD' && formatUsd(sumTotalCreditUsd)}
+                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(sumTotalCreditUsd)}</div>}
+                    {displayCurrency === 'USD' && formatUsdEnEjercicio(sumTotalCreditUsd)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono text-sky-400 border-l border-slate-800">
                     {displayCurrency !== 'USD' && formatBs(sumDebitBalancesBs)}
-                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(sumDebitBalancesUsd)}</div>}
-                    {displayCurrency === 'USD' && formatUsd(sumDebitBalancesUsd)}
+                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(sumDebitBalancesUsd)}</div>}
+                    {displayCurrency === 'USD' && formatUsdEnEjercicio(sumDebitBalancesUsd)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono text-sky-400">
                     {displayCurrency !== 'USD' && formatBs(sumCreditBalancesBs)}
-                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsd(sumCreditBalancesUsd)}</div>}
-                    {displayCurrency === 'USD' && formatUsd(sumCreditBalancesUsd)}
+                    {displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(sumCreditBalancesUsd)}</div>}
+                    {displayCurrency === 'USD' && formatUsdEnEjercicio(sumCreditBalancesUsd)}
                   </td>
                 </tr>
               </tfoot>
@@ -738,7 +744,7 @@ export const BalancesView: React.FC = () => {
                     {formatBs(totalActivoBs)}
                   </span>
                   <span className="text-xs font-mono text-slate-400 block">
-                    {formatUsd(totalActivoUsd)}
+                    {formatUsdEnEjercicio(totalActivoUsd)}
                   </span>
                 </div>
                 <div className="text-slate-500 font-bold text-lg">=</div>
@@ -748,7 +754,7 @@ export const BalancesView: React.FC = () => {
                     {formatBs(totalPasivoPatrimonioBs)}
                   </span>
                   <span className="text-xs font-mono text-slate-400 block">
-                    {formatUsd(totalPasivoPatrimonioUsd)}
+                    {formatUsdEnEjercicio(totalPasivoPatrimonioUsd)}
                   </span>
                 </div>
 
@@ -777,7 +783,7 @@ export const BalancesView: React.FC = () => {
                     {formatBs(totalActivoBs)}
                   </div>
                   <div className="text-xs font-mono text-slate-300">
-                    {formatUsd(totalActivoUsd)}
+                    {formatUsdEnEjercicio(totalActivoUsd)}
                   </div>
                 </div>
               </div>
@@ -794,7 +800,7 @@ export const BalancesView: React.FC = () => {
                       </div>
                       <div className="text-right font-mono">
                         <div className="font-bold text-slate-900">{formatBs(balanceBs)}</div>
-                        <div className="text-[10px] text-slate-400">{formatUsd(balanceUsd)}</div>
+                        <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(balanceUsd)}</div>
                       </div>
                     </div>
                   );
@@ -815,7 +821,7 @@ export const BalancesView: React.FC = () => {
                       {formatBs(totalPasivoBs)}
                     </div>
                     <div className="text-xs font-mono text-slate-300">
-                      {formatUsd(totalPasivoUsd)}
+                      {formatUsdEnEjercicio(totalPasivoUsd)}
                     </div>
                   </div>
                 </div>
@@ -835,7 +841,7 @@ export const BalancesView: React.FC = () => {
                           </div>
                           <div className="text-right font-mono">
                             <div className="font-bold text-slate-900">{formatBs(balanceBs)}</div>
-                            <div className="text-[10px] text-slate-400">{formatUsd(balanceUsd)}</div>
+                            <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(balanceUsd)}</div>
                           </div>
                         </div>
                       );
@@ -855,7 +861,7 @@ export const BalancesView: React.FC = () => {
                       {formatBs(totalPatrimonioBs)}
                     </div>
                     <div className="text-xs font-mono text-slate-300">
-                      {formatUsd(totalPatrimonioUsd)}
+                      {formatUsdEnEjercicio(totalPatrimonioUsd)}
                     </div>
                   </div>
                 </div>
@@ -872,7 +878,7 @@ export const BalancesView: React.FC = () => {
                         </div>
                         <div className="text-right font-mono">
                           <div className="font-bold text-slate-900">{formatBs(balanceBs)}</div>
-                          <div className="text-[10px] text-slate-400">{formatUsd(balanceUsd)}</div>
+                          <div className="text-[10px] text-slate-400">{formatUsdEnEjercicio(balanceUsd)}</div>
                         </div>
                       </div>
                     );
@@ -889,7 +895,7 @@ export const BalancesView: React.FC = () => {
                         {formatBs(utilidadNetaBs)}
                       </div>
                       <div className="text-[10px] text-slate-500">
-                        {formatUsd(utilidadNetaUsd)}
+                        {formatUsdEnEjercicio(utilidadNetaUsd)}
                       </div>
                     </div>
                   </div>
@@ -922,7 +928,7 @@ export const BalancesView: React.FC = () => {
               <div className="py-3">
                 <div className="flex items-center justify-between font-bold text-slate-800 mb-2">
                   <span>(+) Ingresos Operacionales y Ventas:</span>
-                  <span className="font-mono text-emerald-700 text-sm">{formatBs(totalIngresosBs)} ({formatUsd(totalIngresosUsd)})</span>
+                  <span className="font-mono text-emerald-700 text-sm">{formatBs(totalIngresosBs)} ({formatUsdEnEjercicio(totalIngresosUsd)})</span>
                 </div>
                 {ingresosAccounts.map(acc => (
                   <div key={acc.code} className="flex items-center justify-between text-slate-600 pl-4 py-1">
@@ -936,7 +942,7 @@ export const BalancesView: React.FC = () => {
               <div className="py-3">
                 <div className="flex items-center justify-between font-bold text-slate-800 mb-2">
                   <span>(-) Costo de Ventas:</span>
-                  <span className="font-mono text-rose-700 text-sm">-{formatBs(totalCostosBs)} (-{formatUsd(totalCostosUsd)})</span>
+                  <span className="font-mono text-rose-700 text-sm">-{formatBs(totalCostosBs)} (-{formatUsdEnEjercicio(totalCostosUsd)})</span>
                 </div>
                 {costosAccounts.map(acc => (
                   <div key={acc.code} className="flex items-center justify-between text-slate-600 pl-4 py-1">
@@ -956,7 +962,7 @@ export const BalancesView: React.FC = () => {
               <div className="py-3">
                 <div className="flex items-center justify-between font-bold text-slate-800 mb-2">
                   <span>(-) Gastos Operacionales y Administrativos:</span>
-                  <span className="font-mono text-rose-700 text-sm">-{formatBs(totalGastosBs)} (-{formatUsd(totalGastosUsd)})</span>
+                  <span className="font-mono text-rose-700 text-sm">-{formatBs(totalGastosBs)} (-{formatUsdEnEjercicio(totalGastosUsd)})</span>
                 </div>
                 {gastosAccounts.map(acc => (
                   <div key={acc.code} className="flex items-center justify-between text-slate-600 pl-4 py-1">
@@ -974,7 +980,7 @@ export const BalancesView: React.FC = () => {
                     {formatBs(utilidadNetaBs)}
                   </div>
                   <div className="text-xs text-slate-600">
-                    {formatUsd(utilidadNetaUsd)}
+                    {formatUsdEnEjercicio(utilidadNetaUsd)}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
+import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
 import { addExactDecimals, normalizeVenezuelanAmountToCurrentScale } from '../../types/historicalAccountingCalendar';
 import { History, ArrowLeftRight, Printer } from 'lucide-react';
@@ -64,12 +65,12 @@ export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBac
       resultadoUsd };
   }), [selectedYears, journalEntries, currentCompany.id, accounts, kind]);
 
-  const money = (bs:number, usd:number) => <>{displayCurrency !== 'USD' && formatBs(bs)}{displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-500">{formatUsd(usd)}</div>}{displayCurrency === 'USD' && formatUsd(usd)}</>;
+  const money = (year:number, bs:number, usd:number) => <>{displayCurrency !== 'USD' && formatBs(bs)}{displayCurrency === 'DUAL' && <div className="text-[10px] text-slate-500">{formatUsdForDate(usd, `${year}-01-01`)}</div>}{displayCurrency === 'USD' && formatUsdForDate(usd, `${year}-01-01`)}</>;
   return <div className="space-y-5">
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><div className="flex items-center gap-2 text-slate-900 font-bold text-lg"><History className="w-5 h-5 text-emerald-600"/>Balances históricos</div>
-        <p className="text-sm text-slate-500 mt-1">{currentCompany.name} · Comparación por ejercicio. Los Bs se expresan en escala vigente (2021+) para comparar períodos; los asientos originales no se modifican.</p></div>
+        <p className="text-sm text-slate-500 mt-1">{currentCompany.name} · Comparación por ejercicio. Los Bs se expresan en escala vigente (2021+) para comparar períodos; los asientos originales no se modifican. Los ejercicios anteriores a 2018 no muestran equivalente USD.</p></div>
         <div className="flex gap-2 no-print"><button onClick={onBack} className="px-3 py-2 rounded-lg border text-sm hover:bg-slate-50">Volver a balances</button><button onClick={()=>window.print()} className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm flex gap-2 items-center"><Printer className="w-4 h-4"/>Imprimir</button></div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
@@ -88,13 +89,13 @@ export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBac
     {summaries.length === 0 ? <div className="bg-white rounded-xl border p-8 text-center text-slate-500">No hay ejercicios dentro del filtro seleccionado.</div> : <>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {summaries.map(s=><div key={s.year} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm"><div className="text-xs text-slate-500 uppercase font-bold">Ejercicio {s.year}</div><div className="mt-2 text-xs text-slate-500">{s.count} asientos considerados</div>
-          {kind==='SITUACION' ? <><div className="mt-4 flex justify-between gap-3 text-sm"><span>Activo</span><strong>{money(s.totalActivoBs,s.totalActivoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Pasivo</span><strong>{money(s.totalPasivoBs,s.totalPasivoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Resultado acumulado / del ejercicio</span><strong>{money(s.resultadoBs,s.resultadoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Patrimonio + resultado</span><strong>{money(s.totalPatrimonioBs,s.totalPatrimonioUsd)}</strong></div></> : <div className="mt-4 flex justify-between gap-3 text-sm"><span>Resultado neto</span><strong className={s.resultadoBs>=0?'text-emerald-700':'text-rose-700'}>{money(s.resultadoBs,s.resultadoUsd)}</strong></div>}
+          {kind==='SITUACION' ? <><div className="mt-4 flex justify-between gap-3 text-sm"><span>Activo</span><strong>{money(s.year,s.totalActivoBs,s.totalActivoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Pasivo</span><strong>{money(s.year,s.totalPasivoBs,s.totalPasivoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Resultado acumulado / del ejercicio</span><strong>{money(s.year,s.resultadoBs,s.resultadoUsd)}</strong></div><div className="mt-2 flex justify-between gap-3 text-sm"><span>Patrimonio + resultado</span><strong>{money(s.year,s.totalPatrimonioBs,s.totalPatrimonioUsd)}</strong></div></> : <div className="mt-4 flex justify-between gap-3 text-sm"><span>Resultado neto</span><strong className={s.resultadoBs>=0?'text-emerald-700':'text-rose-700'}>{money(s.year,s.resultadoBs,s.resultadoUsd)}</strong></div>}
         </div>)}
       </div>
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 bg-slate-50 border-b font-bold text-sm">Detalle comparativo por cuenta</div>
         <div className="overflow-x-auto"><table className="w-full text-xs min-w-[640px]"><thead className="bg-slate-100 text-slate-700"><tr><th className="p-3 text-left">Código</th><th className="p-3 text-left">Cuenta</th>{summaries.map(s=><th key={s.year} className="p-3 text-right">{s.year}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100">{accounts.filter(a=>summaries.some(s=>s.rows.some(r=>r.code===a.code))).map(a=><tr key={a.code}><td className="p-3 font-mono">{a.code}</td><td className="p-3">{a.name}</td>{summaries.map(s=>{const row=s.rows.find(r=>r.code===a.code);return <td key={s.year} className="p-3 text-right font-mono">{row?money(row.balanceBs,row.balanceUsd):'—'}</td>})}</tr>)}{kind==='SITUACION' && <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold"><td className="p-3 font-mono">—</td><td className="p-3">Resultado acumulado / del ejercicio</td>{summaries.map(s=><td key={s.year} className="p-3 text-right font-mono">{money(s.resultadoBs,s.resultadoUsd)}</td>)}</tr>}</tbody>
+          <tbody className="divide-y divide-slate-100">{accounts.filter(a=>summaries.some(s=>s.rows.some(r=>r.code===a.code))).map(a=><tr key={a.code}><td className="p-3 font-mono">{a.code}</td><td className="p-3">{a.name}</td>{summaries.map(s=>{const row=s.rows.find(r=>r.code===a.code);return <td key={s.year} className="p-3 text-right font-mono">{row?money(s.year,row.balanceBs,row.balanceUsd):'—'}</td>})}</tr>)}{kind==='SITUACION' && <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold"><td className="p-3 font-mono">—</td><td className="p-3">Resultado acumulado / del ejercicio</td>{summaries.map(s=><td key={s.year} className="p-3 text-right font-mono">{money(s.year,s.resultadoBs,s.resultadoUsd)}</td>)}</tr>}</tbody>
         </table></div>
       </div>
     </>}

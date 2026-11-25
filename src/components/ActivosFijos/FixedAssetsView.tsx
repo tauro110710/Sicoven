@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
-import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { formatBs, formatDate } from '../../utils/formatters';
+import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft, type FixedAssetDepreciationMethod } from '../../types/fixedAssets';
 
@@ -55,6 +56,8 @@ export const FixedAssetsView: React.FC = () => {
   }), [journalEntries, accounts, fixedAssets, reversedSourceIds]);
 
   const selectedSource = sourceOptions.find(option => option.key === sourceKey) || sourceOptions[0];
+  // Solo un activo adquirido desde 2018 tiene costos y depreciación en USD.
+  const selectedSourceUsdEnabled = selectedSource ? allowsUsdForOperationDate(selectedSource.entry.date) : false;
   const accumulatedAccounts = accounts.filter(account =>
     account.type === 'ACTIVO' && account.isMovement && account.code.startsWith('1.2.') &&
     /DEPRECIACI[ÓO]N ACUMULADA/i.test(account.name)
@@ -76,6 +79,13 @@ export const FixedAssetsView: React.FC = () => {
       netUsd: summary.netUsd + Math.max(Number(asset.residualValueUsd), Number(asset.acquisitionCostUsd) - accumulatedUsd)
     };
   }, { count:0,costBs:0,costUsd:0,depreciationBs:0,depreciationUsd:0,netBs:0,netUsd:0 }), [fixedAssets]);
+  // Fecha contable que decide si el resumen agregado puede expresarse en USD.
+  const usdSummaryDate = useMemo(() => fixedAssets.reduce(
+    (latest, asset) => allowsUsdForOperationDate(asset.acquisitionDate) && asset.acquisitionDate > latest
+      ? asset.acquisitionDate
+      : latest,
+    ''
+  ), [fixedAssets]);
 
   const suggestedAssetCode = useMemo(() => {
     const max = fixedAssets.reduce((value, asset) => {
@@ -127,7 +137,7 @@ export const FixedAssetsView: React.FC = () => {
     const parsedResidualUsd = parseAmount(residualUsd);
     const life = Number(usefulLifeMonths);
     if (depreciationMethod === 'STRAIGHT_LINE' &&
-        (!Number.isFinite(parsedResidualBs) || !Number.isFinite(parsedResidualUsd) ||
+        (!Number.isFinite(parsedResidualBs) || (selectedSourceUsdEnabled && !Number.isFinite(parsedResidualUsd)) ||
          !Number.isInteger(life) || life <= 0)) {
       setError('Revise el valor residual y la vida útil en meses.');
       return;
@@ -135,7 +145,9 @@ export const FixedAssetsView: React.FC = () => {
     const draft: FixedAssetRegistrationDraft = {
       assetCode, description, category, acquisitionDate, serviceDate,
       residualValueBs: depreciationMethod === 'NON_DEPRECIABLE' ? Number(selectedSource.line.debitBs) : parsedResidualBs,
-      residualValueUsd: depreciationMethod === 'NON_DEPRECIABLE' ? Number(selectedSource.line.debitUsd) : parsedResidualUsd,
+      residualValueUsd: depreciationMethod === 'NON_DEPRECIABLE'
+        ? Number(selectedSource.line.debitUsd)
+        : selectedSourceUsdEnabled ? parsedResidualUsd : 0,
       usefulLifeMonths: depreciationMethod === 'NON_DEPRECIABLE' ? 0 : life,
       depreciationMethod,
       assetAccountCode: selectedSource.line.accountCode,
@@ -185,9 +197,9 @@ export const FixedAssetsView: React.FC = () => {
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Activos registrados</p><p className="mt-1 text-2xl font-bold text-slate-900">{assetSummary.count}</p></div>
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.costBs)}</p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · USD</p><p className="mt-1 text-lg font-bold text-slate-900">{formatUsd(assetSummary.costUsd)}</p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Depreciación acumulada</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.depreciationBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsd(assetSummary.depreciationUsd)}</span></p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsd(assetSummary.netUsd)}</span></p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · USD</p><p className="mt-1 text-lg font-bold text-slate-900">{formatUsdForDate(assetSummary.costUsd, usdSummaryDate)}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Depreciación acumulada</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.depreciationBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.depreciationUsd, usdSummaryDate)}</span></p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.netUsd, usdSummaryDate)}</span></p></div>
       </section>
       <section className="rounded-xl border bg-white p-4 shadow-sm">
         <h2 className="font-semibold text-slate-900">Registrar activo existente</h2>
@@ -203,7 +215,7 @@ export const FixedAssetsView: React.FC = () => {
               <select value={selectedSource?.key || ''} onChange={event => setSourceKey(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
                 {sourceOptions.map(option => (
                   <option key={option.key} value={option.key}>
-                    {formatDate(option.entry.date)} · {option.entry.referenceDoc || option.entry.entryNumber} · {option.account.name} · {formatBs(option.line.debitBs)} / {formatUsd(option.line.debitUsd)}
+                    {formatDate(option.entry.date)} · {option.entry.referenceDoc || option.entry.entryNumber} · {option.account.name} · {formatBs(option.line.debitBs)} / {formatUsdForDate(option.line.debitUsd, option.entry.date)}
                   </option>
                 ))}
               </select>
@@ -236,9 +248,9 @@ export const FixedAssetsView: React.FC = () => {
               <label className="text-xs font-medium text-slate-700">Valor residual Bs.
                 <input value={residualBs} onChange={event => setResidualBs(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
               </label>
-              <label className="text-xs font-medium text-slate-700">Valor residual USD
+              {selectedSourceUsdEnabled && <label className="text-xs font-medium text-slate-700">Valor residual USD
                 <input value={residualUsd} onChange={event => setResidualUsd(event.target.value)} inputMode="decimal" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
-              </label>
+              </label>}
               <label className="text-xs font-medium text-slate-700">Cuenta de depreciación acumulada
               <select value={accumulatedAccountCode} onChange={event => setAccumulatedAccountCode(event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
                 {accumulatedAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}
@@ -252,7 +264,7 @@ export const FixedAssetsView: React.FC = () => {
               </label>
             </> : <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 md:col-span-2">Este bien no se depreciará. Su valor residual será igual al costo histórico de adquisición.</div>}
             <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 md:col-span-2">
-              Costo de origen: <strong>{selectedSource ? formatBs(selectedSource.line.debitBs) + ' / ' + formatUsd(selectedSource.line.debitUsd) : '—'}</strong>
+              Costo de origen: <strong>{selectedSource ? formatBs(selectedSource.line.debitBs) + ' / ' + formatUsdForDate(selectedSource.line.debitUsd, selectedSource.entry.date) : '—'}</strong>
               <span className="ml-2">Tasa histórica: <strong>{selectedSource?.entry.bcvRate || '—'}</strong></span>
             </div>
             <div className="md:col-span-2">
@@ -307,7 +319,7 @@ export const FixedAssetsView: React.FC = () => {
                                   <span className={event.reversedByJournalEntryId ? 'text-rose-700' : 'text-emerald-700'}>{event.reversedByJournalEntryId ? 'Reversada' : 'Vigente'}</span>
                                 </div>
                                 <span className="block text-slate-500">{formatDate(event.date)} · {event.days} días</span>
-                                <span className="block">{formatBs(event.amountBs)} / {formatUsd(event.amountUsd)}</span>
+                                <span className="block">{formatBs(event.amountBs)} / {formatUsdForDate(event.amountUsd, event.date)}</span>
                                 <span className="block break-all text-slate-500">Asiento: {event.journalEntryId}{event.reversedByJournalEntryId ? ' · Reversión: ' + event.reversedByJournalEntryId : ''}</span>
                               </div>
                             ))}
@@ -316,11 +328,11 @@ export const FixedAssetsView: React.FC = () => {
                       </td>
                       <td className="p-3">{asset.sourceJournalEntryId}<span className="block text-slate-500">{formatDate(asset.acquisitionDate)} · {asset.assetAccountCode}</span></td>
                       <td className="p-3 text-right">{formatBs(asset.acquisitionCostBs)}</td>
-                      <td className="p-3 text-right">{formatUsd(asset.acquisitionCostUsd)}</td>
+                      <td className="p-3 text-right">{formatUsdForDate(asset.acquisitionCostUsd, asset.acquisitionDate)}</td>
                       <td className="p-3 text-right">{formatBs(accumulatedBs)}</td>
-                      <td className="p-3 text-right">{formatUsd(accumulatedUsd)}</td>
+                      <td className="p-3 text-right">{formatUsdForDate(accumulatedUsd, asset.acquisitionDate)}</td>
                       <td className="p-3 text-right font-semibold">{formatBs(netBs)}</td>
-                      <td className="p-3 text-right font-semibold">{formatUsd(netUsd)}</td>
+                      <td className="p-3 text-right font-semibold">{formatUsdForDate(netUsd, asset.acquisitionDate)}</td>
                       <td className="p-3">{historyError ? 'Revisar historial' : asset.depreciationMethod === 'NON_DEPRECIABLE' ? 'No depreciable' : nextPeriod || 'Depreciación completada'}</td>
                       <td className="p-3">
                         {historyError

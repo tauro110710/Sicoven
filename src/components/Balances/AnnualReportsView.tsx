@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
-import { formatBs, formatUsd } from '../../utils/formatters';
+import { formatBs } from '../../utils/formatters';
+import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { buildEquityChangesReport } from '../../types/equityChanges';
 import { buildDisclosureAccountMovements, type FinancialDisclosureKind } from '../../types/financialDisclosures';
 import { ArrowLeft, Download, FileSpreadsheet, Printer, ShieldAlert, TrendingUp } from 'lucide-react';
@@ -26,6 +27,10 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear) || new Date().getFullYear()])).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
   const [year, setYear] = useState(String(availableYears[0] ?? new Date().getFullYear()));
+  // Los ejercicios anteriores a 2018 no admiten equivalentes USD.
+  const exerciseUsdDate = `${year}-01-01`;
+  const usdForExercise = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
+  const usdForCsv = (amount: number) => allowsUsdForOperationDate(exerciseUsdDate) ? amount.toFixed(6) : '-';
   useEffect(() => {
     if (!availableYears.includes(Number(year))) setYear(String(availableYears[0] ?? Number(currentCompany.fiscalYear) ?? new Date().getFullYear()));
   }, [availableYears, currentCompany.fiscalYear, year]);
@@ -127,8 +132,8 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
   const money = (bs: number, usd: number) => (
     <span className="text-right font-mono">
       {displayCurrency !== 'USD' && <span>{formatBs(bs)}</span>}
-      {displayCurrency === 'DUAL' && <span className="block text-[10px] text-slate-500">{formatUsd(usd)}</span>}
-      {displayCurrency === 'USD' && <span>{formatUsd(usd)}</span>}
+      {displayCurrency === 'DUAL' && <span className="block text-[10px] text-slate-500">{usdForExercise(usd)}</span>}
+      {displayCurrency === 'USD' && <span>{usdForExercise(usd)}</span>}
     </span>
   );
 
@@ -136,18 +141,18 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     const rows = [
       ['SICOVEN - REPORTE ANUAL', currentCompany.name, 'RIF', currentCompany.rif, 'Ejercicio', year],
       ['Concepto', 'Bolívares (Bs.)', 'Equivalente USD contabilizado'],
-      ['Ingresos netos contables', report.grossIncomeBs.toFixed(2), report.grossIncomeUsd.toFixed(6)],
-      ['Costos', report.costsBs.toFixed(2), report.costsUsd.toFixed(6)],
-      ['Gastos', report.expensesBs.toFixed(2), report.expensesUsd.toFixed(6)],
-      ['Utilidad / (Pérdida) antes de impuestos', report.netProfitBs.toFixed(2), report.netProfitUsd.toFixed(6)],
+      ['Ingresos netos contables', report.grossIncomeBs.toFixed(2), usdForCsv(report.grossIncomeUsd)],
+      ['Costos', report.costsBs.toFixed(2), usdForCsv(report.costsUsd)],
+      ['Gastos', report.expensesBs.toFixed(2), usdForCsv(report.expensesUsd)],
+      ['Utilidad / (Pérdida) antes de impuestos', report.netProfitBs.toFixed(2), usdForCsv(report.netProfitUsd)],
       [],
       ['ESTADO DE CAMBIOS EN EL PATRIMONIO', 'Bolívares (Bs.)', 'USD'],
-      ['Saldo inicial', equityReport.openingTotalBs.toFixed(2), equityReport.openingTotalUsd.toFixed(6)],
-      ['Movimientos patrimoniales', equityReport.movementTotalBs.toFixed(2), equityReport.movementTotalUsd.toFixed(6)],
-      ['Saldo final', equityReport.closingTotalBs.toFixed(2), equityReport.closingTotalUsd.toFixed(6)],
+      ['Saldo inicial', equityReport.openingTotalBs.toFixed(2), usdForCsv(equityReport.openingTotalUsd)],
+      ['Movimientos patrimoniales', equityReport.movementTotalBs.toFixed(2), usdForCsv(equityReport.movementTotalUsd)],
+      ['Saldo final', equityReport.closingTotalBs.toFixed(2), usdForCsv(equityReport.closingTotalUsd)],
       [],
       ['Cuenta patrimonial', 'Saldo inicial Bs.', 'Saldo inicial USD', 'Movimientos Bs.', 'Movimientos USD', 'Saldo final Bs.', 'Saldo final USD'],
-      ...equityReport.rows.map(r => [r.accountCode, r.openingBs.toFixed(2), r.openingUsd.toFixed(6), r.movementBs.toFixed(2), r.movementUsd.toFixed(6), r.closingBs.toFixed(2), r.closingUsd.toFixed(6)]),
+      ...equityReport.rows.map(r => [r.accountCode, r.openingBs.toFixed(2), usdForCsv(r.openingUsd), r.movementBs.toFixed(2), usdForCsv(r.movementUsd), r.closingBs.toFixed(2), usdForCsv(r.closingUsd)]),
       [],
       [],
       ['NOTAS Y REVELACIONES', 'Número', 'Categoría', 'Estado', 'Título', 'Contenido', 'Cuentas fuente', 'Asientos fuente'],
@@ -157,14 +162,14 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       ...disclosureMovements.map(row => {
         const account = accounts.find(item => item.code === row.accountCode);
         const creditNormal = account?.type === 'INGRESOS' || account?.type === 'PASIVO' || account?.type === 'PATRIMONIO';
-        return ['', row.accountCode + ' - ' + row.accountName, row.debitBs.toFixed(2), row.creditBs.toFixed(2), (creditNormal ? row.creditBs-row.debitBs : row.debitBs-row.creditBs).toFixed(2), row.debitUsd.toFixed(6), row.creditUsd.toFixed(6), (creditNormal ? row.creditUsd-row.debitUsd : row.debitUsd-row.creditUsd).toFixed(6), row.entryIds.length];
+        return ['', row.accountCode + ' - ' + row.accountName, row.debitBs.toFixed(2), row.creditBs.toFixed(2), (creditNormal ? row.creditBs-row.debitBs : row.debitBs-row.creditBs).toFixed(2), usdForCsv(row.debitUsd), usdForCsv(row.creditUsd), usdForCsv(creditNormal ? row.creditUsd-row.debitUsd : row.debitUsd-row.creditUsd), row.entryIds.length];
       }),
       [],
       ['Fecha', 'Asiento', 'Tipo', 'Cuenta', 'Concepto', 'Neto Bs.', 'Neto USD'],
-      ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), m.netUsd.toFixed(6)]),
+      ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), usdForCsv(m.netUsd)]),
       [],
       ['Código', 'Cuenta', 'Tipo', 'Debe Bs.', 'Haber Bs.', 'Debe USD', 'Haber USD', 'Saldo anual Bs.', 'Saldo anual USD'],
-      ...report.rows.map(r => [r.code, r.name, r.type, r.debitBs.toFixed(2), r.creditBs.toFixed(2), r.debitUsd.toFixed(6), r.creditUsd.toFixed(6), r.netBs.toFixed(2), r.netUsd.toFixed(6)])
+      ...report.rows.map(r => [r.code, r.name, r.type, r.debitBs.toFixed(2), r.creditBs.toFixed(2), usdForCsv(r.debitUsd), usdForCsv(r.creditUsd), r.netBs.toFixed(2), usdForCsv(r.netUsd)])
     ];
     const csv = '\ufeff' + rows.map(row => row.map(cell => {
       const value = String(cell ?? '');
@@ -202,7 +207,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       </div>
       <div className="mt-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>El equivalente USD refleja los importes USD guardados en cada asiento; no se recalcula con la tasa BCV actual. La utilidad mostrada es antes de ISLR y no constituye por sí sola una determinación fiscal.</p>
+                  <p>El equivalente USD refleja los importes USD guardados en cada asiento; no se recalcula con la tasa BCV actual. La utilidad mostrada es antes de ISLR y no constituye por sí sola una determinación fiscal.{!allowsUsdForOperationDate(exerciseUsdDate) && ' Este ejercicio es anterior a 2018: no existen importes USD y se muestran como “-”.'}</p>
       </div>
     </section>
 
@@ -258,7 +263,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
             const creditNormal = account?.type === 'INGRESOS' || account?.type === 'PASIVO' || account?.type === 'PATRIMONIO';
             const netBs = creditNormal ? row.creditBs - row.debitBs : row.debitBs - row.creditBs;
             const netUsd = creditNormal ? row.creditUsd - row.debitUsd : row.debitUsd - row.creditUsd;
-            return <tr key={row.accountCode}><td className="p-2">{row.accountCode} · {row.accountName}</td><td className="p-2 text-right font-mono">{formatBs(row.debitBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.creditBs)}</td><td className="p-2 text-right font-mono">{formatBs(netBs)}</td><td className="p-2 text-right font-mono">{formatUsd(row.debitUsd)}</td><td className="p-2 text-right font-mono">{formatUsd(row.creditUsd)}</td><td className="p-2 text-right font-mono">{formatUsd(netUsd)}</td><td className="p-2 text-right">{row.entryIds.length}</td></tr>;
+            return <tr key={row.accountCode}><td className="p-2">{row.accountCode} · {row.accountName}</td><td className="p-2 text-right font-mono">{formatBs(row.debitBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.creditBs)}</td><td className="p-2 text-right font-mono">{formatBs(netBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(row.debitUsd)}</td><td className="p-2 text-right font-mono">{usdForExercise(row.creditUsd)}</td><td className="p-2 text-right font-mono">{usdForExercise(netUsd)}</td><td className="p-2 text-right">{row.entryIds.length}</td></tr>;
           })}</tbody>
           {!disclosureMovements.length && <tbody><tr><td colSpan={8} className="p-4 text-center text-slate-500">Sin movimientos contabilizados para este ejercicio.</td></tr></tbody>}
         </table></div>
@@ -305,17 +310,17 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
           <tbody className="divide-y divide-slate-100">
             {equityReport.rows.map(row => <tr key={row.accountCode}>
               <td className="p-3"><span className="font-mono text-slate-500">{row.accountCode}</span> · {row.accountName}</td>
-              <td className="p-3 text-right font-mono">{formatBs(row.openingBs)}</td><td className="p-3 text-right font-mono">{formatUsd(row.openingUsd)}</td>
-              <td className="p-3 text-right font-mono">{formatBs(row.movementBs)}</td><td className="p-3 text-right font-mono">{formatUsd(row.movementUsd)}</td>
-              <td className="p-3 text-right font-mono font-semibold">{formatBs(row.closingBs)}</td><td className="p-3 text-right font-mono font-semibold">{formatUsd(row.closingUsd)}</td>
+              <td className="p-3 text-right font-mono">{formatBs(row.openingBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(row.openingUsd)}</td>
+              <td className="p-3 text-right font-mono">{formatBs(row.movementBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(row.movementUsd)}</td>
+              <td className="p-3 text-right font-mono font-semibold">{formatBs(row.closingBs)}</td><td className="p-3 text-right font-mono font-semibold">{usdForExercise(row.closingUsd)}</td>
             </tr>)}
             {!equityReport.rows.length && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No existen movimientos patrimoniales contabilizados para este ejercicio.</td></tr>}
           </tbody>
           <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold"><tr>
             <td className="p-3">TOTAL PATRIMONIO</td>
-            <td className="p-3 text-right font-mono">{formatBs(equityReport.openingTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.openingTotalUsd)}</td>
-            <td className="p-3 text-right font-mono">{formatBs(equityReport.movementTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.movementTotalUsd)}</td>
-            <td className="p-3 text-right font-mono">{formatBs(equityReport.closingTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.closingTotalUsd)}</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.openingTotalBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(equityReport.openingTotalUsd)}</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.movementTotalBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(equityReport.movementTotalUsd)}</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.closingTotalBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(equityReport.closingTotalUsd)}</td>
           </tr></tfoot>
         </table>
       </div>
@@ -326,7 +331,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
           <tbody className="divide-y divide-slate-100">{equityReport.movements.map((movement, index) => <tr key={movement.entryId + movement.accountCode + index}>
             <td className="p-2">{movement.date}</td><td className="p-2">#{movement.entryNumber} · {movement.type}</td>
             <td className="p-2 font-mono">{movement.accountCode}</td><td className="p-2">{movement.description}</td>
-            <td className="p-2 text-right font-mono">{formatBs(movement.netBs)}</td><td className="p-2 text-right font-mono">{formatUsd(movement.netUsd)}</td>
+            <td className="p-2 text-right font-mono">{formatBs(movement.netBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(movement.netUsd)}</td>
           </tr>)}</tbody>
         </table></div> : <p className="mt-2 text-xs text-slate-500">No hay movimientos directos en cuentas patrimoniales durante el ejercicio.</p>}
       </div>
@@ -350,7 +355,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       <div className="border-b bg-slate-50 p-4"><h3 className="font-bold text-slate-900">Detalle anual por cuenta de resultado y obligaciones relacionadas</h3></div>
       <div className="overflow-x-auto"><table className="min-w-[850px] w-full text-xs">
         <thead className="bg-slate-100 text-slate-700"><tr><th className="p-3 text-left">Código</th><th className="p-3 text-left">Cuenta</th><th className="p-3 text-left">Tipo</th><th className="p-3 text-right">Debe Bs.</th><th className="p-3 text-right">Haber Bs.</th><th className="p-3 text-right">Saldo Bs.</th><th className="p-3 text-right">Saldo USD</th></tr></thead>
-        <tbody className="divide-y divide-slate-100">{report.rows.map(r => <tr key={r.code}><td className="p-3 font-mono">{r.code}</td><td className="p-3">{r.name}</td><td className="p-3">{r.type}</td><td className="p-3 text-right font-mono">{formatBs(r.debitBs)}</td><td className="p-3 text-right font-mono">{formatBs(r.creditBs)}</td><td className="p-3 text-right font-mono">{formatBs(r.netBs)}</td><td className="p-3 text-right font-mono">{formatUsd(r.netUsd)}</td></tr>)}</tbody>
+        <tbody className="divide-y divide-slate-100">{report.rows.map(r => <tr key={r.code}><td className="p-3 font-mono">{r.code}</td><td className="p-3">{r.name}</td><td className="p-3">{r.type}</td><td className="p-3 text-right font-mono">{formatBs(r.debitBs)}</td><td className="p-3 text-right font-mono">{formatBs(r.creditBs)}</td><td className="p-3 text-right font-mono">{formatBs(r.netBs)}</td><td className="p-3 text-right font-mono">{usdForExercise(r.netUsd)}</td></tr>)}</tbody>
       </table></div>
     </section>
 
