@@ -56,7 +56,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // No se borra lo que el contador ya escribió; solo pre-llena si el campo está vacío.
   const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
   React.useEffect(() => {
-    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
+    const resolved = isBcvRateRequiredForDate(invoiceDate) ? resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate) : undefined;
     setSuggestedBcvRate(resolved);
     // La tasa anterior no debe quedar asociada a una fecha distinta.
     setBcvRateInput(resolved ? String(resolved) : '');
@@ -344,7 +344,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {formatUsd(taxableBaseUsd)}
+                  {isBcvRateRequiredForDate(invoiceDate) ? formatUsd(taxableBaseUsd) : '-'}
                 </span>
               </div>
               <div>
@@ -374,6 +374,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
+          {isBcvRateRequiredForDate(invoiceDate) && (
           {/* Tasa BCV propia de esta operación */}
           <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
@@ -407,6 +408,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             {hasValidBcvRate && <p className="text-xs font-semibold text-blue-900">Esta factura conservará exclusivamente su propia tasa BCV aplicada: {bcvRate.toLocaleString('es-VE')} Bs./USD.</p>}
           </div>
 
+          )}
           {/* Client Retention */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <label className="flex items-center gap-2 font-bold text-slate-800 uppercase tracking-wider cursor-pointer">
