@@ -59,14 +59,14 @@ export const LibroVentasView: React.FC = () => {
       const base16 = s.taxRate === 16 ? s.taxableBaseBs : 0;
       const base8 = s.taxRate === 8 ? s.taxableBaseBs : 0;
       const base31 = s.taxRate === 31 ? s.taxableBaseBs : 0;
-      const iva16 = s.taxRate === 16 ? s.vatAmountBs : s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0;
+      const iva16 = s.taxRate === 16 || s.taxRate === 31 ? s.vatAmountBs : 0;
       const iva8 = s.taxRate === 8 ? s.vatAmountBs : 0;
       // El CSV mantiene la misma regla monetaria que el PDF: sin USD antes de 2018.
-      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),allowsUsdForOperationDate(s.invoiceDate) ? sign * s.totalAmountUsd : '-',sign * s.totalAmountBs,sign * (s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)),sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.taxableBaseBs * 0.16 : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),allowsUsdForOperationDate(s.invoiceDate) ? s.bcvRate : '-','VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
+      return [s.invoiceDate,s.customerRif,s.customerName,s.documentType === '03' ? 'NOTA DE CRÉDITO' : s.documentType === '02' ? 'NOTA DE DÉBITO' : 'FACTURA',s.invoiceNumber,s.controlNumber,s.creditNoteNumber || (s.documentType === '03' ? s.invoiceNumber : ''),allowsUsdForOperationDate(s.invoiceDate) ? sign * s.totalAmountUsd : '-',sign * s.totalAmountBs,sign * (s.exemptAmountBs + (s.taxRate === 0 ? s.taxableBaseBs : 0)),sign * base16,sign * iva16,sign * base8,sign * iva8,sign * base31,sign * (s.taxRate === 31 ? s.vatAmountBs : 0),sign * (s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : 0),sign * (s.igtfAmountBs || 0),allowsUsdForOperationDate(s.invoiceDate) ? s.bcvRate : '-','VENTA INDIVIDUAL',selectedIndividualIds.has(s.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(s.invoiceDate) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA'];
     });
     filteredZReports.forEach(entry => {
       const z = entry.fiscalZReport!;
-      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '',allowsUsdForOperationDate(z.date) ? (entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '') : '-',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.taxableBase31Bs * 0.16,z.additionalLuxuryTaxBs,z.igtfBs,allowsUsdForOperationDate(z.date) ? entry.bcvRate : '-','CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
+      rows.push([z.date,'','VENTAS CONSOLIDADAS · ' + (z.sourceSystemName || z.machineBrand || 'Reporte Z'),'REPORTE Z',z.zNumber,z.controlStart || '', '',allowsUsdForOperationDate(z.date) ? (entry.bcvRate > 0 ? z.totalSalesBs / entry.bcvRate : '') : '-',z.totalSalesBs,z.exemptSalesBs,z.taxableBase16Bs,z.vat16Bs,z.taxableBase8Bs,z.vat8Bs,z.taxableBase31Bs,z.vat31Bs,z.additionalLuxuryTaxBs,z.igtfBs,allowsUsdForOperationDate(z.date) ? entry.bcvRate : '-','CIERRE Z',selectedZIds.has(entry.id) ? 'INCLUIDO' : dailySalesResolution.unresolvedDates.includes(z.date) ? 'PENDIENTE DE SELECCIÓN' : 'FUENTE ALTERNATIVA']);
     });
     const csv = '\uFEFF' + [headers,...rows].map(row => row.map(esc).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -120,7 +120,7 @@ export const LibroVentasView: React.FC = () => {
   const totalVentasConIvaBs = activeSales.reduce((s, x) => s + signed(x, x.totalAmountBs), 0);
   const totalExentoBs = activeSales.reduce((s, x) => s + signed(x, (x.exemptAmountBs || 0) + (x.taxRate === 0 ? x.taxableBaseBs : 0)), 0);
   const totalBaseBs = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseBs), 0);
-  const totalIvaDebitoBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? x.taxableBaseBs * 0.16 : x.vatAmountBs), 0);
+  const totalIvaDebitoBs = activeSales.reduce((s, x) => s + signed(x, x.vatAmountBs), 0);
   const totalLuxuryTaxBs = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxBs ?? x.taxableBaseBs * 0.15) : 0), 0);
   const totalLuxuryTaxUsd = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 ? (x.additionalLuxuryTaxUsd ?? (x.bcvRate > 0 ? x.taxableBaseBs * 0.15 / x.bcvRate : 0)) : 0), 0);
   const totalIvaRetenidoBs = activeSales.reduce((s, x) => s + signed(x, x.vatWithheldBs || 0), 0);
@@ -128,7 +128,7 @@ export const LibroVentasView: React.FC = () => {
 
   const totalVentasConIvaUsd = activeSales.reduce((s, x) => s + signed(x, x.totalAmountUsd), 0);
   const totalBaseUsd = activeSales.reduce((s, x) => s + signed(x, x.taxableBaseUsd), 0);
-  const totalIvaDebitoUsd = activeSales.reduce((s, x) => s + signed(x, x.taxRate === 31 && x.bcvRate > 0 ? x.taxableBaseBs * 0.16 / x.bcvRate : x.vatAmountUsd), 0);
+  const totalIvaDebitoUsd = activeSales.reduce((s, x) => s + signed(x, x.vatAmountUsd), 0);
   const totalIvaRetenidoUsd = activeSales.reduce((s, x) => s + signed(x, x.vatWithheldUsd || 0), 0);
 
   const dailySalesResolution = useMemo(() => resolveVatOwnDailySalesSources({
@@ -160,7 +160,7 @@ export const LibroVentasView: React.FC = () => {
       (entry.bcvRate > 0 ? entry.bcvRate : 1), 0);
   const totalFiscalIvaBs = dailySalesResolution.days.reduce((sum, day) => sum + day.outputVatBs, 0);
   const totalFiscalIvaUsd = selectedIndividualSales.reduce((sum, sale) =>
-    sum + signed(sale, sale.taxRate === 31 && sale.bcvRate > 0 ? sale.taxableBaseBs * 0.16 / sale.bcvRate : sale.vatAmountUsd), 0) +
+    sum + signed(sale, sale.vatAmountUsd), 0) +
     selectedZReports.reduce((sum, entry) => sum + ((entry.fiscalZReport?.vat16Bs || 0) +
       (entry.fiscalZReport?.vat8Bs || 0) + (entry.fiscalZReport?.vat31Bs || 0)) /
       (entry.bcvRate > 0 ? entry.bcvRate : 1), 0);
@@ -370,13 +370,13 @@ export const LibroVentasView: React.FC = () => {
                       {s.taxRate}%
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
-                      {formatBs(s.taxRate === 31 ? s.taxableBaseBs * 0.16 : s.vatAmountBs)}
+                      {formatBs(s.vatAmountBs)}
                       <div className="mt-1 space-y-0.5 text-[9px] font-normal text-emerald-700/80">
                         {s.taxRate === 16 && <div>IVA 16%: {formatBs(s.vatAmountBs)}</div>}
                         {s.taxRate === 8 && <div>IVA 8%: {formatBs(s.vatAmountBs)}</div>}
-                        {s.taxRate === 31 && <div>IVA comp. 16%: {formatBs(s.taxableBaseBs * 0.16)}</div>}
+                        {s.taxRate === 31 && <div>IVA comp. 16%: {formatBs(s.vatAmountBs)}</div>}
                       </div>
-                      <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsdForDate(s.taxRate === 31 && s.bcvRate > 0 ? s.taxableBaseBs * 0.16 / s.bcvRate : s.vatAmountUsd, s.invoiceDate)}</div>
+                      <div className="text-[10px] text-emerald-600/70 font-normal">{formatUsdForDate(s.vatAmountUsd, s.invoiceDate)}</div>
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap bg-amber-50/30">
                       {s.taxRate === 31 ? formatBs(s.additionalLuxuryTaxBs ?? s.taxableBaseBs * 0.15) : '-'}

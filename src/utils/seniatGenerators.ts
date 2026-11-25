@@ -68,7 +68,14 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         ? String(linkedPurchase.creditNoteNumber || '')
         : String(linkedPurchase.invoiceNumber || '');
     const affectedDocument = documentType === '01' ? '0' : String(linkedPurchase?.affectedInvoiceNumber || '').trim();
-    const expectedVat = Math.round(Number(v.taxableBaseBs) * Number(v.taxRate)) / 100;
+    const declaredTaxRate = Number(v.taxRate);
+    // El 31% combina 16% de IVA con 15% suntuario: la retención y la alícuota
+    // exportada cubren solo el IVA, mientras el total del comprobante suma ambos.
+    const effectiveVatRate = declaredTaxRate === 31 ? 16 : declaredTaxRate;
+    const expectedVat = Math.round(Number(v.taxableBaseBs) * effectiveVatRate) / 100;
+    const expectedLuxuryTax = declaredTaxRate === 31
+      ? Number(linkedPurchase.additionalLuxuryTaxBs ?? Math.round(Number(v.taxableBaseBs) * 15) / 100)
+      : 0;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
     if (v.companyId !== company.id || !validSupplierRif || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
         !supplierRif || !invoiceNum || !controlNum ||
@@ -91,7 +98,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
         Number(v.taxRate) > 100 || !validRetentionRate ||
         Math.abs(Number(v.vatAmountBs) - expectedVat) > 0.01 ||
         Math.abs(Number(v.vatWithheldBs) - expectedWithheld) > 0.01 ||
-        Math.abs(Number(v.totalAmountBs) - (Number(v.exemptAmountBs || 0) + Number(v.taxableBaseBs) + Number(v.vatAmountBs))) > 0.01) {
+        Math.abs(Number(v.totalAmountBs) - (Number(v.exemptAmountBs || 0) + Number(v.taxableBaseBs) + Number(v.vatAmountBs) + expectedLuxuryTax)) > 0.01) {
       throw new Error('Comprobante de retención IVA incompleto o inválido. Revise período, fecha, RIF, numeración, alícuota e importes; no se generan valores sustitutos.');
     }
     const docType = documentType;
@@ -105,7 +112,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const withheldAmount = formatSeniatDecimal(v.vatWithheldBs);
     const affectedDoc = documentType === '01' ? '0' : affectedDocument;
     const exemptAmount = formatSeniatDecimal(v.exemptAmountBs || 0);
-    const rate = formatSeniatDecimal(v.taxRate);
+    const rate = formatSeniatDecimal(effectiveVatRate);
     const expeditionNum = '0';
 
     // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.

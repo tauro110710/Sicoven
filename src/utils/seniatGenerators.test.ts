@@ -164,6 +164,16 @@ test('IVA TXT exports only real voucher identifiers and the supplied amounts', (
   assert.equal(txt.split('\t').length, 16);
 });
 
+test('IVA TXT exports a 31% purchase voucher at the 16% IVA rate and sums the 15% luxury tax in the total', () => {
+  const txt = generateSeniatIvaTxt(
+    company,
+    [ivaVoucher({ taxRate: 31, vatAmountBs: 160, vatWithheldBs: 120, totalAmountBs: 1310 })],
+    [purchase({ taxRate: 31, vatAmountBs: 160, totalAmountBs: 1310, additionalLuxuryTaxBs: 150 })]
+  );
+  assert.match(txt, /^J123456789\t202610\t2026-10-05\tC\t01\tJ987654321\tF-001\t00-123\t1310\.00\t1000\.00\t120\.00/);
+  assert.equal(txt.split('\t')[14], '16.00');
+});
+
 test('IVA TXT serialization is UTF-8 without BOM, uses CRLF between rows and has no trailing newline', () => {
   const one = generateSeniatIvaTxt(company, [ivaVoucher()], [purchase()]);
   const two = generateSeniatIvaTxt(company, [

@@ -983,7 +983,7 @@ export async function exportVentasPdf(
       totalExento += sign * (s.exemptAmountBs || 0);
       totalBase += sign * (s.taxableBaseBs || 0);
       totalLuxuryTax += sign * saleLuxuryTax;
-      totalIva += sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : (s.vatAmountBs || 0));
+      totalIva += sign * (s.vatAmountBs || 0);
       totalRetenido += sign * (s.vatWithheldBs || 0);
       totalIgtf += sign * (s.igtfAmountBs || 0);
     }
@@ -1001,7 +1001,7 @@ export async function exportVentasPdf(
       s.exemptAmountBs > 0 ? formatNumberVe(sign * s.exemptAmountBs) : '-',
       formatNumberVe(sign * s.taxableBaseBs),
       `${s.taxRate}%`,
-      formatNumberVe(sign * (s.taxRate === 31 ? Math.max(0, (s.taxableBaseBs || 0) * 0.16) : s.vatAmountBs)),
+      formatNumberVe(sign * s.vatAmountBs),
       saleLuxuryTax > 0 ? formatNumberVe(sign * saleLuxuryTax) : '-',
       s.vatWithheldBs > 0 ? formatNumberVe(sign * s.vatWithheldBs) : '-',
       s.retentionVoucherNumber || '-',
