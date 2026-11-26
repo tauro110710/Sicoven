@@ -135,7 +135,7 @@ test('rejects non-liability or non-movement payable accounts', () => {
 
 test('rejects nonconciliating totals and invalid rates', () => {
   assert.throws(() => build(draft({ totalAmountBs: 30 })), /no concilia/);
-  assert.throws(() => build(draft({ taxRate: 15 })), /una única alícuota explícita/);
+  assert.throws(() => build(draft({ taxRate: 15 })), /no está admitida/);
   assert.throws(() => build(draft({ bcvRate: 0 })), /tasa o importes no válidos/);
 });
 

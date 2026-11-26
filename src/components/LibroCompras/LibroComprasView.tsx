@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { formatBs, formatDate } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
+import { getReportScaleDate } from '../../types/reportMonetaryReexpression';
 import { NewPurchaseModal } from './NewPurchaseModal';
 import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
@@ -51,8 +52,9 @@ export const LibroComprasView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   // El período seleccionado es la fecha contable de los totales: antes de 2018
-  // no se muestra equivalente USD.
-  const purchasesUsdDate = monthFilter ? `${monthFilter}-01` : `${Number(currentCompany.fiscalYear)}-01-01`;
+  // no se muestra equivalente USD. Sin filtro mensual el período es el
+  // ejercicio completo, así que se usa su fecha de cierre.
+  const purchasesUsdDate = monthFilter ? `${monthFilter}-01` : getReportScaleDate(Number(currentCompany.fiscalYear));
   const usdEnPeriodo = (amount: number) => formatUsdForDate(amount, purchasesUsdDate);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 

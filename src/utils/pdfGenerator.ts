@@ -7,6 +7,7 @@ import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 import { todayLocalIso } from './localDate';
 import { resolveVatOwnDailySalesSources } from '../types/vatOwnDeclaration';
 import { getDocumentLuxuryTax } from '../types/vatFiscalEngine';
+import { getReportScaleDate } from '../types/reportMonetaryReexpression';
 
 /**
  * Descarga explícita del PDF para Chromium y Electron.
@@ -502,9 +503,9 @@ export async function exportBalanceGeneralPdf(
 
   const tableBody: any[] = [];
 
-  // El ejercicio fija la fecha contable de presentación: antes de 2018 no se
+  // El cierre del ejercicio fija la fecha de presentación: antes de 2018 no se
   // muestra equivalente USD, la columna queda en "-" con la regla central.
-  const exerciseUsdDate = `${Number(company.fiscalYear)}-01-01`;
+  const exerciseUsdDate = getReportScaleDate(Number(company.fiscalYear));
   const exerciseUsd = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
   const exerciseUsdNegative = (amount: number) =>
     allowsUsdForOperationDate(exerciseUsdDate) ? `-${formatUsd(amount)}` : '-';

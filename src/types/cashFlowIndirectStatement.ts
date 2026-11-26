@@ -1,6 +1,6 @@
 import type { Account, BankAccount, JournalEntry } from './accounting';
 import { buildCashFlowReport, type CashFlowReport } from './cashFlowStatement';
-import { reexpressReportAmount } from './reportMonetaryReexpression';
+import { reexpressReportAmount, roundReportCents, roundReportMicroUsd } from './reportMonetaryReexpression';
 
 export type CashFlowIndirectTreatment =
   | 'NON_CASH_EXPENSE_ADD_BACK'
@@ -47,6 +47,12 @@ export interface CashFlowIndirectReport {
   ledgerClosingCashUsd: number;
   reconciliationDifferenceBs: number;
   reconciliationDifferenceUsd: number;
+  /** Redondeo de presentación descontado en la conciliación (por cuenta y agregación). */
+  roundingDifferenceBs: number;
+  roundingDifferenceUsd: number;
+  /** Diferencia de conciliación neta del redondeo por cuenta: es la que evalúa `isReconciled`. */
+  reconciliationResidualBs: number;
+  reconciliationResidualUsd: number;
   isReconciled: boolean;
   isFullyClassified: boolean;
   adjustments: CashFlowIndirectAdjustment[];
@@ -136,14 +142,23 @@ export function buildCashFlowIndirectReport(
   const accountRows: CashFlowIndirectAdjustment[] = [];
   let netIncomeBs = 0;
   let netIncomeUsd = 0;
+  // Totales sin redondeo por cuenta: la conciliación se mide contra esta
+  // reconstrucción "cruda" para que el redondeo (resultado neto, ajustes y
+  // agregación) no genere un descuadre ficticio. El resultado reportado sigue
+  // redondeado por cuenta para coincidir con el asiento de cierre.
+  let rawNetIncomeBs = 0;
+  let rawNetIncomeUsd = 0;
   for (const account of accounts.filter(item => item.isMovement)) {
     if (account.type === 'INGRESOS' || account.type === 'COSTOS' || account.type === 'GASTOS') {
       const movement = periodEntries.reduce((sum, entry) => {
         const value = balanceMovement(entry, account.code, account.type === 'INGRESOS' ? 'CREDIT' : 'DEBIT', end);
         return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
       }, { bs: 0, usd: 0 });
-      netIncomeBs += movement.bs * (account.type === 'INGRESOS' ? 1 : -1);
-      netIncomeUsd += movement.usd * (account.type === 'INGRESOS' ? 1 : -1);
+      const sign = account.type === 'INGRESOS' ? 1 : -1;
+      rawNetIncomeBs += movement.bs * sign;
+      rawNetIncomeUsd += movement.usd * sign;
+      netIncomeBs += roundReportCents(movement.bs) * sign;
+      netIncomeUsd += roundReportMicroUsd(movement.usd) * sign;
     }
   }
 
@@ -163,6 +178,10 @@ export function buildCashFlowIndirectReport(
     account.isMovement && account.cashFlowIndirectTreatment &&
     account.cashFlowIndirectTreatment !== 'EXCLUDE' && isTreatmentCompatible(account)
   );
+  let rawNonCashAdjustmentsBs = 0;
+  let rawNonCashAdjustmentsUsd = 0;
+  let rawWorkingCapitalAdjustmentsBs = 0;
+  let rawWorkingCapitalAdjustmentsUsd = 0;
   for (const account of classifiedAccounts) {
     const treatment = account.cashFlowIndirectTreatment!;
     const normal = account.type === 'PASIVO' || account.type === 'PATRIMONIO' ? 'CREDIT' : 'DEBIT';
@@ -175,20 +194,15 @@ export function buildCashFlowIndirectReport(
       return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
     }, { bs: 0, usd: 0 });
     const closing = { bs: opening.bs + periodChange.bs, usd: opening.usd + periodChange.usd };
-    let adjustmentBs = 0;
-    let adjustmentUsd = 0;
-    if (treatment === 'NON_CASH_EXPENSE_ADD_BACK') {
-      adjustmentBs = periodChange.bs;
-      adjustmentUsd = periodChange.usd;
-    } else if (treatment === 'NON_CASH_INCOME_DEDUCT') {
-      adjustmentBs = -periodChange.bs;
-      adjustmentUsd = -periodChange.usd;
-    } else if (treatment === 'OPERATING_ASSET_INCREASE_DEDUCT') {
-      adjustmentBs = -periodChange.bs;
-      adjustmentUsd = -periodChange.usd;
-    } else if (treatment === 'OPERATING_LIABILITY_INCREASE_ADD') {
-      adjustmentBs = periodChange.bs;
-      adjustmentUsd = periodChange.usd;
+    const sign = treatment === 'NON_CASH_INCOME_DEDUCT' || treatment === 'OPERATING_ASSET_INCREASE_DEDUCT' ? -1 : 1;
+    const adjustmentBs = periodChange.bs * sign;
+    const adjustmentUsd = periodChange.usd * sign;
+    if (treatment === 'NON_CASH_EXPENSE_ADD_BACK' || treatment === 'NON_CASH_INCOME_DEDUCT') {
+      rawNonCashAdjustmentsBs += adjustmentBs;
+      rawNonCashAdjustmentsUsd += adjustmentUsd;
+    } else {
+      rawWorkingCapitalAdjustmentsBs += adjustmentBs;
+      rawWorkingCapitalAdjustmentsUsd += adjustmentUsd;
     }
     accountRows.push({
       accountCode: account.code, accountName: account.name, treatment,
@@ -219,6 +233,17 @@ export function buildCashFlowIndirectReport(
   const netChangeUsd = round(operatingCashFlowUsd + investingCashFlowUsd + financingCashFlowUsd, 6);
   const reconciliationDifferenceBs = round(direct.ledgerClosingCashBs - (direct.openingCashBs + netChangeBs), 2);
   const reconciliationDifferenceUsd = round(direct.ledgerClosingCashUsd - (direct.openingCashUsd + netChangeUsd), 6);
+  // Residuo real: compara el libro contra la reconstrucción indirecta sin
+  // redondeos por cuenta ni de agregación. La diferencia visible entre ambos
+  // es redondeo de presentación, no descuadre.
+  const rawOperatingBs = rawNetIncomeBs + rawNonCashAdjustmentsBs + rawWorkingCapitalAdjustmentsBs;
+  const rawOperatingUsd = rawNetIncomeUsd + rawNonCashAdjustmentsUsd + rawWorkingCapitalAdjustmentsUsd;
+  const rawNetChangeBs = rawOperatingBs + investingCashFlowBs + financingCashFlowBs;
+  const rawNetChangeUsd = rawOperatingUsd + investingCashFlowUsd + financingCashFlowUsd;
+  const reconciliationResidualBs = round(direct.ledgerClosingCashBs - (direct.openingCashBs + rawNetChangeBs), 2);
+  const reconciliationResidualUsd = round(direct.ledgerClosingCashUsd - (direct.openingCashUsd + rawNetChangeUsd), 6);
+  const roundingDifferenceBs = round(reconciliationDifferenceBs - reconciliationResidualBs, 2);
+  const roundingDifferenceUsd = round(reconciliationDifferenceUsd - reconciliationResidualUsd, 6);
   const unclassifiedPnl = accounts.some(account =>
     account.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
@@ -246,7 +271,12 @@ export function buildCashFlowIndirectReport(
     closingCashUsd: round(direct.openingCashUsd + netChangeUsd, 6),
     ledgerClosingCashBs: direct.ledgerClosingCashBs, ledgerClosingCashUsd: direct.ledgerClosingCashUsd,
     reconciliationDifferenceBs, reconciliationDifferenceUsd,
-    isReconciled: Math.abs(reconciliationDifferenceBs) <= 0.05 && Math.abs(reconciliationDifferenceUsd) <= 0.000005,
+    roundingDifferenceBs, roundingDifferenceUsd,
+    reconciliationResidualBs, reconciliationResidualUsd,
+    // La conciliación se mide contra la reconstrucción sin redondeos; un error
+    // real de clasificación o de integración sigue superando la tolerancia.
+    isReconciled: Math.abs(reconciliationResidualBs) <= 0.05 &&
+      Math.abs(reconciliationResidualUsd) <= 0.000005,
     isFullyClassified, adjustments: accountRows, directBasis: direct
   };
 }

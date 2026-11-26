@@ -25,6 +25,7 @@ import { LicenseGate } from './components/LicenseGate';
 import { ModuleHelp } from './components/ModuleHelp';
 import { InventoryBcvGlobalSync } from './components/Inventario/InventoryBcvGlobalSync';
 import { IvaDeclaracionesView } from './components/Tributario/IvaDeclaracionesView';
+import { HistoricalVat31DiagnosticView } from './components/Tributario/HistoricalVat31DiagnosticView';
 
 const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => Promise<void> }> = ({ auth, logout }) => {
   const [showAdmins, setShowAdmins] = useState(false);
@@ -164,6 +165,8 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         return <FixedAssetsView />;
       case 'iva-declaraciones':
         return <IvaDeclaracionesView />;
+      case 'diagnostico-iva-31':
+        return <HistoricalVat31DiagnosticView />;
       case 'ret-iva':
         return <RetencionesIvaView />;
       case 'ret-islr':

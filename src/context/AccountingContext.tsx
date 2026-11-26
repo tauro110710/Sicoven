@@ -68,6 +68,7 @@ import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalT
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
+import { buildInventoryProductImport } from '../types/inventoryProductImport';
 import { reexpressInventoryAverageCost, reexpressInventoryCostBs, reexpressInventoryCostLayers, resolveInventoryCostScale } from '../types/inventoryMonetaryReexpression';
 import { buildCostOfSalesLines, calculateLiveEntryCosting, calculateLiveIssueCosting } from '../types/inventoryLiveCosting';
 import { isValidIsoDate } from '../types/migrationParsing';
@@ -97,8 +98,10 @@ import {
   assertFiscalBreakdown,
   calculateFiscalBreakdown,
   getInputVatAccountCode,
-  getOutputVatAccountCode
+  getOutputVatAccountCode,
+  isSupportedFiscalRate
 } from '../types/vatFiscalEngine';
+import { validatePurchaseAmounts } from '../types/purchaseAmountValidation';
 import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
 import { getVenezuelanMonetaryEra } from '../types/historicalAccountingCalendar';
 
@@ -3334,13 +3337,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
     const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
 
-    const amounts = [
-      purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
-      purchaseData.vatAmountBs, purchaseData.additionalLuxuryTaxBs || 0, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
-      purchaseData.igtfAmountBs || 0
-    ];
-    if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
-    }
+    // Primera barrera de dominio: tipos, finitud, signo, total positivo,
+    // límites de retención y equivalencias USD. Se ejecuta antes de crear
+    // cualquier ID, asiento, comprobante o movimiento de Kardex.
+    validatePurchaseAmounts(purchaseData);
     if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(purchaseData.vatCreditTreatment || 'COMMON')) throw new Error('El destino del crédito fiscal IVA no es válido.');
     // Desglose fiscal único: IVA y suntuario separados según el motor central.
     assertFiscalBreakdown({
@@ -4706,8 +4706,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (saleData.documentType !== '01') {
       throw new Error('Las notas de débito/crédito de clientes requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
     }
-    if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
-      throw new Error('La alícuota de IVA de la venta no es válida.');
+    if (!isSupportedFiscalRate(saleData.taxRate)) {
+      throw new Error('La alícuota de IVA de la venta no está admitida: SICOVEN solo acepta 0 %, 8 %, 16 % y 31 % (16 % IVA + 15 % suntuario).');
     }
     // Mismo motor fiscal que compras, notas y declaraciones.
     assertFiscalBreakdown({
@@ -5491,89 +5491,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     assertSQLitePersistenceReady('Importar inventario');
     if (!companies.some(company => company.id === targetCompanyId)) throw new Error('La empresa destino no existe en SICOVEN.');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
-    const existingCodes = new Set(products.filter(p => p.companyId === targetCompanyId).map(p => p.code.trim().toLocaleUpperCase()));
-    const batchCodes = new Set<string>();
-    const prepared: InventoryProduct[] = [];
-    const openingMovements: InventoryMovement[] = [];
-    const openingEntries: JournalEntry[] = [];
-    let nextEntryNumber = journalEntries.filter(e => e.companyId === targetCompanyId).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
-    const today = todayLocalIso();
-    for (const row of rows) {
-      const code = String(row.code || '').trim().toLocaleUpperCase();
-      const name = String(row.name || '').trim();
-      if (!code || !name) throw new Error('Cada artículo debe incluir código y descripción.');
-      if (existingCodes.has(code) || batchCodes.has(code)) throw new Error('Código duplicado en la empresa o archivo: ' + code + '.');
-      batchCodes.add(code);
-      const rate = Number(row.openingBcvRate ?? 0);
-      const quantity = Number(row.currentStock || 0);
-      const unitCostBs = Number(row.avgCostBs || 0);
-      const date = row.openingDate || today;
-      const parsedOpeningDate = new Date(date + 'T00:00:00Z');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedOpeningDate.getTime()) || parsedOpeningDate.toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
-      if (!Number.isFinite(rate) || rate < 0 || ((quantity > 0 || unitCostBs > 0) && rate <= 0) || !Number.isFinite(quantity) || quantity < 0 ||
-          !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
-      const lastCostBs = Number(row.lastCostBs ?? unitCostBs);
-      const lastCostUsd = Number(row.lastCostUsd ?? (rate > 0 ? lastCostBs / rate : 0));
-      if (!Number.isFinite(lastCostBs) || lastCostBs < 0 || !Number.isFinite(lastCostUsd) || lastCostUsd < 0 ||
-          (quantity > 0 && (lastCostBs <= 0 || lastCostUsd <= 0))) {
-        throw new Error('Último costo Bs/USD inválido para ' + code + '. Declare ambos valores cuando importe inventario universal.');
-      }
-      const product: InventoryProduct = {
-        ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
-        companyId: targetCompanyId, code, name,
-        priceCurrency: row.priceCurrency || 'BS',
-        price1: Number(row.price1 ?? (row.priceCurrency === 'USD' ? row.salesPriceUsd : row.salesPriceBs) ?? 0),
-        price2: row.price2 ?? null, price3: row.price3 ?? null, price4: row.price4 ?? null,
-        currentStock: quantity, avgCostBs: unitCostBs,
-        avgCostUsd: rate > 0 ? unitCostBs / rate : 0, lastCostBs, lastCostUsd,
-        inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
-        costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
-        adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
-        openingBalanceAccountCode: row.openingBalanceAccountCode || '3.3.1.01',
-        costingMethod: row.costingMethod || 'PROMEDIO_PONDERADO',
-        vatTreatment: row.vatTreatment || 'GENERAL_16', itemType: row.itemType || 'MERCANCIA',
-        openingDate: date, openingBcvRate: rate, vnrProvisionBs: Number(row.vnrProvisionBs || 0)
-      };
-      const inventoryAccount = accounts.find(a => a.code === product.inventoryAccountCode && a.isMovement && a.type === 'ACTIVO');
-      const costAccount = accounts.find(a => a.code === product.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
-      const adjustmentAccount = accounts.find(a => a.code === product.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
-      if (!inventoryAccount || !costAccount || !adjustmentAccount) throw new Error('Cuentas contables inválidas para el artículo ' + code + '.');
-      if (product.itemType === 'PRODUCTO_EN_PROCESO' && product.inventoryAccountCode !== '1.1.4.04') throw new Error('El artículo ' + code + ' es producto en proceso y debe usar la cuenta 1.1.4.04.');
-      if (quantity > 0) {
-        const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
-        if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
-        const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
-        const totalUsd = rate > 0 ? Math.round(totalBs / rate * 1000000) / 1000000 : 0;
-        const entry: JournalEntry = {
-          id: 'entry-inventory-opening-' + product.id, companyId: targetCompanyId, entryNumber: nextEntryNumber++,
-          date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
-          bcvRate: rate, referenceDoc: 'APERTURA-' + code,
-          items: [
-            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalUsd, creditUsd: 0, description: 'Existencia inicial de ' + quantity + ' ' + product.unit },
-            { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Contrapartida de apertura de inventario ' + code }
-          ], createdAt: new Date().toISOString()
-        };
-        openingEntries.push(entry);
-        openingMovements.push({
-          id: 'mov-opening-' + product.id, companyId: targetCompanyId, productId: product.id,
-          productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
-          documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
-          unitCostUsd: rate > 0 ? unitCostBs / rate : 0, totalCostBs: totalBs, totalCostUsd: totalUsd,
-          balanceQty: quantity, balanceTotalBs: totalBs, balanceTotalUsd: totalUsd,
-          bcvRate: rate, costingMethod: product.costingMethod, journalEntryId: entry.id
-        });
-      }
-      prepared.push(product);
-    }
-    openingEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
+    const existingCodes = products.filter(p => p.companyId === targetCompanyId).map(p => p.code.trim().toLocaleUpperCase());
+    const nextEntryNumber = journalEntries.filter(e => e.companyId === targetCompanyId).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    const result = buildInventoryProductImport({
+      companyId: targetCompanyId,
+      rows,
+      accounts,
+      existingCodes,
+      nextEntryNumber,
+      today: todayLocalIso()
+    });
+    result.journalEntries.forEach(entry => reserveBankOutgoingAccounts(entry.companyId, entry.items));
     // Confirmar la escritura del snapshot completo (productos, Kardex y asientos)
     // en SQLite antes de informar éxito al asistente de importación.
     const persistenceConfirmation = waitForPersistence();
-    setProducts(prev => [...prev, ...prepared]);
-    if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
-    if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
+    setProducts(prev => [...prev, ...result.products]);
+    if (result.movements.length) setMovements(prev => [...prev, ...result.movements]);
+    if (result.journalEntries.length) setJournalEntries(prev => [...prev, ...result.journalEntries]);
     await persistenceConfirmation;
-    return prepared.length;
+    return result.products.length;
   };
 
 

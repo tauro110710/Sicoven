@@ -520,9 +520,13 @@ export interface SaleInventoryLine {
   /** Tasa de referencia conservada al fijar el precio del renglón. */
   priceBcvRate?: number;
   netAmountBs: number;
+  /** Alícuota declarada de la factura; 31 conserva IVA 16 % + suntuario 15 %. */
   taxRate: number;
   vatAmountBs: number;
+  /** Componente del 15 % suntuario en la tasa combinada; 0 en el resto de alícuotas. */
+  additionalLuxuryTaxBs?: number;
   exemptAmountBs: number;
+  /** Neto + IVA + suntuario de la línea. */
   totalBs: number;
 }
 

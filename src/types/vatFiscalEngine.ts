@@ -46,24 +46,34 @@ export interface FiscalRateBreakdown {
   combined: boolean;
 }
 
-const isValidRate = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+const numericRate = (value: unknown): number => {
+  if (typeof value === 'string') return value.trim() === '' ? Number.NaN : Number(value);
+  if (typeof value !== 'number') return Number.NaN;
+  return value;
+};
+
+/** Única compuerta de alícuotas fiscales admitidas en SICOVEN. */
+export function isSupportedFiscalRate(taxRate: number | string): boolean {
+  const rate = numericRate(taxRate);
+  return Number.isFinite(rate) && (SUPPORTED_FISCAL_RATES as readonly number[]).includes(rate);
+}
 
 /** Separa una alícuota declarada en su componente IVA y su componente suntuario. */
 export function resolveFiscalRates(taxRate: number | string): FiscalRateBreakdown {
-  const declaredRate = Number(taxRate);
-  if (!isValidRate(declaredRate)) {
+  const declaredRate = numericRate(taxRate);
+  if (!Number.isFinite(declaredRate) || declaredRate < 0 || declaredRate > 100) {
     throw new Error('La alícuota fiscal debe ser un porcentaje numérico entre 0 y 100.');
+  }
+  // No basta con que el desglose matemático sea posible: la alícuota debe ser
+  // una de las admitidas por SICOVEN. Esta es la compuerta central que usan
+  // compras, ventas, notas, declaraciones, reportes e importaciones.
+  if (!isSupportedFiscalRate(declaredRate)) {
+    throw new Error('La alícuota fiscal ' + declaredRate + ' % no está admitida. SICOVEN solo acepta 0 %, 8 %, 16 % y 31 % (16 % IVA + 15 % impuesto suntuario).');
   }
   if (declaredRate === LUXURY_COMBINED_RATE) {
     return { declaredRate, vatRate: VAT_STANDARD_RATE, luxuryRate: LUXURY_CONSUMPTION_RATE, combined: true };
   }
   return { declaredRate, vatRate: declaredRate, luxuryRate: 0, combined: false };
-}
-
-export function isSupportedFiscalRate(taxRate: number | string): boolean {
-  const rate = Number(taxRate);
-  return (SUPPORTED_FISCAL_RATES as readonly number[]).includes(rate);
 }
 
 /** Único criterio de redondeo monetario en bolívares de todo el motor fiscal. */

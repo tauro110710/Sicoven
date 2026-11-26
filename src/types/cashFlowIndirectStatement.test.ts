@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Account, BankAccount, JournalEntry } from './accounting';
 import { buildCashFlowIndirectReport } from './cashFlowIndirectStatement';
+import { buildClosingEntryItems } from './accountingYearClosing';
+import { roundReportCents, roundReportMicroUsd } from './reportMonetaryReexpression';
 
 const accounts: Account[] = [
   { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'EFECTIVO_EQUIVALENTE' },
@@ -107,6 +109,120 @@ describe('cash flow indirect method', () => {
     assert.equal(report.netChangeBs, -20);
     assert.equal(report.closingCashBs, 180);
     assert.equal(report.isReconciled, true);
+  });
+
+  it('redondea el resultado neto por cuenta igual que el asiento de cierre', () => {
+    // Ejercicio 2018 que cruza la reconversión del 20-08: cada gasto queda en
+    // 10,005 Bs. El cierre redondea cada cuenta (10,01) y traslada 0,99; sumar
+    // las líneas sin redondear por cuenta daría 1,00.
+    const halfCentAccounts: Account[] = [
+      { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'EFECTIVO_EQUIVALENTE' },
+      { code: '4.1.1', name: 'Ingresos operacionales', type: 'INGRESOS', level: 4, isMovement: true, cashFlowActivity: 'OPERACION' },
+      { code: '5.1.2', name: 'Gasto A', type: 'GASTOS', level: 4, isMovement: true, cashFlowActivity: 'OPERACION' },
+      { code: '5.1.3', name: 'Gasto B', type: 'GASTOS', level: 4, isMovement: true, cashFlowActivity: 'OPERACION' },
+      { code: '3.3.1', name: 'Resultados acumulados', type: 'PATRIMONIO', level: 4, isMovement: true, cashFlowActivity: 'FINANCIACION' }
+    ];
+    const halfCentEntries = [
+      entry('ingreso-medio-centavo', '2018-08-19', [
+        line('1.1.1.01', 2_101_000, 0, 100, 0),
+        line('4.1.1', 0, 2_101_000, 0, 100)
+      ]),
+      entry('gasto-medio-centavo-a', '2018-08-19', [
+        line('5.1.2', 1_000_500, 0, 50, 0),
+        line('1.1.1.01', 0, 1_000_500, 0, 50)
+      ]),
+      entry('gasto-medio-centavo-b', '2018-08-19', [
+        line('5.1.3', 1_000_500, 0, 50, 0),
+        line('1.1.1.01', 0, 1_000_500, 0, 50)
+      ])
+    ];
+    const closingItems = buildClosingEntryItems({
+      companyId: 'co-1',
+      periodStartDate: '2018-01-01',
+      periodEndDate: '2018-12-31',
+      accounts: halfCentAccounts,
+      journalEntries: halfCentEntries,
+      retainedEarningsAccountCode: '3.3.1'
+    });
+    const closingNominalItems = closingItems.filter(item => ['4.1.1', '5.1.2', '5.1.3'].includes(item.accountCode));
+    const closingResultBs = roundReportCents(closingNominalItems
+      .reduce((sum, item) => sum + item.debitBs - item.creditBs, 0));
+    const closingResultUsd = roundReportMicroUsd(closingNominalItems
+      .reduce((sum, item) => sum + item.debitUsd - item.creditUsd, 0));
+    assert.equal(closingResultBs, 0.99);
+
+    const report = buildCashFlowIndirectReport(halfCentEntries, halfCentAccounts, banks, 'co-1', 2018);
+    assert.equal(report.netIncomeBs, closingResultBs);
+    assert.equal(report.netIncomeUsd, closingResultUsd);
+    assert.equal(report.netIncomeBs, 0.99);
+    // Sin el redondeo por cuenta, el resultado neto habría sido 1,00.
+    assert.notEqual(report.netIncomeBs, 1);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('mantiene conciliado el flujo indirecto con muchas cuentas de fracción de centavo', () => {
+    // Doce cuentas nominales liquidadas en efectivo al 2018-08-19 (antes de la
+    // reconversión del 20-08): cada ingreso queda en 12,34499 Bs. y cada gasto
+    // en 12,34501 Bs. El libro mueve 24,68988 de efectivo, mientras que el
+    // resultado redondeado por cuenta es 24,63: la diferencia bruta (0,06)
+    // supera la tolerancia de 0,05 y es solo redondeo, no un descuadre.
+    const manyAccounts: Account[] = [
+      { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'EFECTIVO_EQUIVALENTE' },
+      ...Array.from({ length: 7 }, (_, index): Account => ({
+        code: `4.1.${index + 1}`, name: `Ingreso ${index + 1}`, type: 'INGRESOS', level: 4,
+        isMovement: true, cashFlowActivity: 'OPERACION'
+      })),
+      ...Array.from({ length: 5 }, (_, index): Account => ({
+        code: `5.1.${index + 1}`, name: `Gasto ${index + 1}`, type: 'GASTOS', level: 4,
+        isMovement: true, cashFlowActivity: 'OPERACION'
+      }))
+    ];
+    const manyEntries = [
+      ...Array.from({ length: 7 }, (_, index) => entry(`ingreso-${index + 1}`, '2018-08-19', [
+        line('1.1.1.01', 1_234_499, 0, 12, 0),
+        line(`4.1.${index + 1}`, 0, 1_234_499, 0, 12)
+      ])),
+      ...Array.from({ length: 5 }, (_, index) => entry(`gasto-${index + 1}`, '2018-08-19', [
+        line(`5.1.${index + 1}`, 1_234_501, 0, 12, 0),
+        line('1.1.1.01', 0, 1_234_501, 0, 12)
+      ]))
+    ];
+    const report = buildCashFlowIndirectReport(manyEntries, manyAccounts, banks, 'co-1', 2018);
+    assert.equal(report.netIncomeBs, 24.63);
+    assert.equal(report.reconciliationDifferenceBs, 0.06);
+    assert.ok(Math.abs(report.reconciliationDifferenceBs) > 0.05);
+    assert.equal(report.roundingDifferenceBs, 0.06);
+    assert.ok(Math.abs(report.reconciliationResidualBs) < 0.005);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('descuenta también el redondeo por cuenta de los ajustes en la conciliación', () => {
+    // Doce cuentas por cobrar que aumentan 12,34501 Bs. cada una al 2018-08-19.
+    // Cada ajuste de capital de trabajo se redondea a 12,35 (0,00499 de residuo
+    // por cuenta, 0,05988 en total) y el resultado neto (148,14012) se redondea
+    // a 148,14. El libro no mueve efectivo, así que la diferencia bruta es 0,06
+    // y solo cierra descontando también el redondeo de los ajustes.
+    const receivableAccounts: Account[] = [
+      { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'EFECTIVO_EQUIVALENTE' },
+      { code: '4.1.1', name: 'Ingresos operacionales', type: 'INGRESOS', level: 4, isMovement: true, cashFlowActivity: 'OPERACION' },
+      ...Array.from({ length: 12 }, (_, index): Account => ({
+        code: `1.1.2.${index + 1}`, name: `Cuentas por cobrar ${index + 1}`, type: 'ACTIVO', level: 4,
+        isMovement: true, cashFlowIndirectTreatment: 'OPERATING_ASSET_INCREASE_DEDUCT'
+      }))
+    ];
+    const creditSales = Array.from({ length: 12 }, (_, index) =>
+      entry(`venta-credito-${index + 1}`, '2018-08-19', [
+        line(`1.1.2.${index + 1}`, 1_234_501, 0, 12, 0),
+        line('4.1.1', 0, 1_234_501, 0, 12)
+      ]));
+    const report = buildCashFlowIndirectReport(creditSales, receivableAccounts, banks, 'co-1', 2018);
+    assert.equal(report.netIncomeBs, 148.14);
+    assert.equal(report.workingCapitalAdjustmentsBs, -148.2);
+    assert.equal(report.reconciliationDifferenceBs, 0.06);
+    assert.ok(Math.abs(report.reconciliationDifferenceBs) > 0.05);
+    assert.equal(report.isReconciled, true);
+    assert.equal(report.roundingDifferenceBs, 0.06);
+    assert.ok(Math.abs(report.reconciliationResidualBs) < 0.005);
   });
 
   it('isolates companies and refuses invalid periods', () => {

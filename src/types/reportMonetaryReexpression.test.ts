@@ -8,9 +8,12 @@ import {
   getReportScaleDate,
   getUnclosedResultAtReportDate,
   reexpressReportAmount,
-  reexpressReportAmountExact
+  reexpressReportAmountExact,
+  roundReportCents,
+  roundReportMicroUsd
 } from './reportMonetaryReexpression';
-import { isBalanceSheetBalanced, isTrialBalanceBalanced } from './accountingReportIntegrity';
+import { isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from './accountingReportIntegrity';
+import { buildClosingEntryItems } from './accountingYearClosing';
 import { buildEquityChangesReport } from './equityChanges';
 import { buildDisclosureAccountMovements } from './financialDisclosures';
 import { buildCashFlowReport } from './cashFlowStatement';
@@ -180,4 +183,145 @@ test('las sumas de movimientos por cuenta son homogéneas y conservan el USD de 
   assertClose(cash.creditBs, 5);
   assertClose(cash.debitUsd, 13);
   assertClose(cash.creditUsd, 5);
+});
+
+test('el Estado de Resultados y el estado de cambios en el patrimonio coinciden al centavo con el asiento de cierre', () => {
+  // Ejercicio 2018 con fracciones de centavo al cruzar la reconversión del
+  // 20-08-2018: dos gastos quedan en 10,005 Bs. a la fecha de cierre. El asiento
+  // de cierre redondea cada cuenta (10,01) y traslada 0,99; sumar las líneas
+  // sin redondear por cuenta daría 1,00.
+  const alignmentAccounts: Account[] = [
+    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true },
+    { code: '3.3.1.01', name: 'Resultados acumulados', type: 'PATRIMONIO', level: 4, isMovement: true },
+    { code: '4.1.1.01', name: 'Ingresos operacionales', type: 'INGRESOS', level: 4, isMovement: true },
+    { code: '5.1.1.01', name: 'Gasto A', type: 'GASTOS', level: 4, isMovement: true },
+    { code: '5.1.2.01', name: 'Gasto B', type: 'GASTOS', level: 4, isMovement: true }
+  ];
+  const alignmentEntries: JournalEntry[] = [
+    entry('cierre-ingreso', 1, '2018-08-19', [
+      ['1.1.1.01', 2_101_000, 0, 100, 0],
+      ['4.1.1.01', 0, 2_101_000, 0, 100]
+    ]),
+    entry('cierre-gasto-a', 2, '2018-08-19', [
+      ['5.1.1.01', 1_000_500, 0, 50, 0],
+      ['1.1.1.01', 0, 1_000_500, 0, 50]
+    ]),
+    entry('cierre-gasto-b', 3, '2018-08-19', [
+      ['5.1.2.01', 1_000_500, 0, 50, 0],
+      ['1.1.1.01', 0, 1_000_500, 0, 50]
+    ])
+  ];
+  const typeByCode = new Map(alignmentAccounts.map(account => [account.code, account.type] as const));
+  const isNominal = (code: string) => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(typeByCode.get(code) || '');
+
+  const closingItems = buildClosingEntryItems({
+    companyId: 'company-1',
+    periodStartDate: '2018-01-01',
+    periodEndDate: '2018-12-31',
+    accounts: alignmentAccounts,
+    journalEntries: alignmentEntries,
+    retainedEarningsAccountCode: '3.3.1.01'
+  });
+  const closedResultBs = roundReportCents(closingItems
+    .filter(item => isNominal(item.accountCode))
+    .reduce((sum, item) => sum + item.debitBs - item.creditBs, 0));
+  const closedResultUsd = roundReportMicroUsd(closingItems
+    .filter(item => isNominal(item.accountCode))
+    .reduce((sum, item) => sum + item.debitUsd - item.creditUsd, 0));
+  assert.equal(closedResultBs, 0.99);
+  assert.equal(closedResultUsd, 0);
+  const transfer = closingItems.find(item => item.accountCode === '3.3.1.01');
+  assert.ok(transfer);
+  assert.equal(transfer.creditBs, closedResultBs);
+
+  const resultEntries = selectHistoricalReportEntries(alignmentEntries, 'company-1', 2018, 'RESULTADOS');
+  const resultRows = buildIncomeStatementRows(alignmentAccounts, resultEntries, '2018-12-31');
+  const incomeBs = resultRows.filter(row => row.type === 'INGRESOS')
+    .reduce((sum, row) => sum + row.adjustedCreditBs - row.adjustedDebitBs, 0);
+  const expensesBs = resultRows.filter(row => row.type === 'COSTOS' || row.type === 'GASTOS')
+    .reduce((sum, row) => sum + row.adjustedDebitBs - row.adjustedCreditBs, 0);
+  const incomeUsd = resultRows.filter(row => row.type === 'INGRESOS')
+    .reduce((sum, row) => sum + row.adjustedCreditUsd - row.adjustedDebitUsd, 0);
+  const expensesUsd = resultRows.filter(row => row.type === 'COSTOS' || row.type === 'GASTOS')
+    .reduce((sum, row) => sum + row.adjustedDebitUsd - row.adjustedCreditUsd, 0);
+  assert.equal(roundReportCents(expensesBs), 20.02);
+  assert.equal(roundReportCents(incomeBs - expensesBs), closedResultBs);
+  assert.equal(roundReportMicroUsd(incomeUsd - expensesUsd), closedResultUsd);
+
+  const equity = buildEquityChangesReport(alignmentEntries, alignmentAccounts, 'company-1', 2018, '2018-12-31');
+  assert.equal(equity.resultTransferredToEquity, false);
+  assert.equal(equity.periodResultBs, closedResultBs);
+  assert.equal(equity.periodResultUsd, closedResultUsd);
+  const equityResultRow = equity.rows.find(row => row.accountCode === 'RESULTADO-EJERCICIO');
+  assert.ok(equityResultRow);
+  assert.equal(equityResultRow.movementBs, closedResultBs);
+
+  // La prueba discrimina: sumar las líneas reexpresadas sin redondear por
+  // cuenta produce 1,00 y no coincide con el asiento de cierre.
+  const unrounded = roundReportCents(alignmentEntries.reduce((sum, source) => sum + source.items.reduce((lineSum, item) => {
+    if (!isNominal(item.accountCode)) return lineSum;
+    return lineSum + reexpressReportAmount(item.creditBs, source.date, '2018-12-31') -
+      reexpressReportAmount(item.debitBs, source.date, '2018-12-31');
+  }, 0), 0));
+  assert.equal(unrounded, 1);
+  assert.notEqual(unrounded, closedResultBs);
+});
+
+test('el resultado no cerrado mantiene cuadrada la ecuación del Balance General con fracciones de centavo', () => {
+  // Cada cuenta nominal queda a 0,00499 del centavo al reexpresar 2018 desde
+  // antes del 20-08: los ingresos redondean hacia abajo y los gastos hacia
+  // arriba. Con 12 cuentas, redondear por cuenta acumularía 0,05988, más que la
+  // tolerancia de 0,05 del Balance General; por eso el contrapeso no redondea.
+  const halfCentAccounts: Account[] = [
+    { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true },
+    ...Array.from({ length: 7 }, (_, index) => ({
+      code: `4.1.0.0${index + 1}`, name: `Ingreso ${index + 1}`, type: 'INGRESOS' as const, level: 4, isMovement: true
+    })),
+    ...Array.from({ length: 5 }, (_, index) => ({
+      code: `5.1.0.0${index + 1}`, name: `Gasto ${index + 1}`, type: 'GASTOS' as const, level: 4, isMovement: true
+    }))
+  ];
+  const halfCentEntries: JournalEntry[] = [
+    ...Array.from({ length: 7 }, (_, index) => entry(`fraccion-ingreso-${index + 1}`, index + 1, '2018-08-19', [
+      ['1.1.1.01', 1_234_499, 0, 10, 0],
+      [`4.1.0.0${index + 1}`, 0, 1_234_499, 0, 10]
+    ])),
+    ...Array.from({ length: 5 }, (_, index) => entry(`fraccion-gasto-${index + 1}`, index + 8, '2018-08-19', [
+      [`5.1.0.0${index + 1}`, 1_234_501, 0, 10, 0],
+      ['1.1.1.01', 0, 1_234_501, 0, 10]
+    ]))
+  ];
+
+  const trial = buildTrialBalanceRows(halfCentAccounts, halfCentEntries, [], '2018-12-31');
+  const totalActivoBs = trial.filter(row => row.type === 'ACTIVO')
+    .reduce((sum, row) => sum + row.adjustedDebitBs - row.adjustedCreditBs, 0);
+  const totalActivoUsd = trial.filter(row => row.type === 'ACTIVO')
+    .reduce((sum, row) => sum + row.adjustedDebitUsd - row.adjustedCreditUsd, 0);
+
+  const unclosed = getUnclosedResultAtReportDate(halfCentEntries, halfCentAccounts, '2018-12-31');
+  assertClose(unclosed.bs, 24.68988);
+  assertClose(unclosed.bs, totalActivoBs);
+  assert.equal(isBalanceSheetBalanced({
+    totalAssetsBs: totalActivoBs,
+    totalLiabilitiesAndEquityBs: unclosed.bs,
+    totalAssetsUsd: totalActivoUsd,
+    totalLiabilitiesAndEquityUsd: unclosed.usd
+  }), true);
+
+  // Si el Balance General usara el resultado redondeado por cuenta, el desvío
+  // supera la tolerancia y la ecuación aparece descuadrada.
+  const resultRows = buildIncomeStatementRows(halfCentAccounts, halfCentEntries, '2018-12-31');
+  const roundedPerAccountBs =
+    resultRows.filter(row => row.type === 'INGRESOS')
+      .reduce((sum, row) => sum + row.adjustedCreditBs - row.adjustedDebitBs, 0) -
+    resultRows.filter(row => row.type === 'GASTOS')
+      .reduce((sum, row) => sum + row.adjustedDebitBs - row.adjustedCreditBs, 0);
+  assert.equal(roundReportCents(roundedPerAccountBs), 24.63);
+  assert.ok(Math.abs(roundedPerAccountBs - unclosed.bs) > 0.05);
+  assert.equal(isBalanceSheetBalanced({
+    totalAssetsBs: totalActivoBs,
+    totalLiabilitiesAndEquityBs: roundedPerAccountBs,
+    totalAssetsUsd: totalActivoUsd,
+    totalLiabilitiesAndEquityUsd: unclosed.usd
+  }), false);
 });

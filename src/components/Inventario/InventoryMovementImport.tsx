@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
 import { useAccounting } from '../../context/AccountingContext';
 import type { InventoryMovementImportDraft } from '../../types/accounting';
 import { isValidIsoDate, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
@@ -209,7 +210,7 @@ export const InventoryMovementImport: React.FC<{ isOpen: boolean; onClose: () =>
             <input className="hidden" type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={event => { void analyze(event.target.files?.[0]); event.currentTarget.value = ''; }} />
           </label>
           {fileName && <p className="text-xs text-slate-500">Archivo: {fileName} · {prepared.length} movimientos validados</p>}
-          {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}</div>}
+          {error && <GuidedErrorNotice title="No se pudieron registrar los movimientos de Kardex" message={error} onDismiss={() => setError('')} />}
           {notice && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline h-4 w-4" />{notice}</div>}
           {prepared.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full text-left text-xs"><thead className="bg-slate-100"><tr><th className="p-2">Fila</th><th className="p-2">Artículo</th><th className="p-2">Fecha</th><th className="p-2">Tipo / concepto</th><th className="p-2">Referencia</th><th className="p-2 text-right">Cantidad</th></tr></thead><tbody>{prepared.slice(0, 30).map(row => <tr key={row.sourceRow} className="border-t border-slate-100"><td className="p-2">{row.sourceRow}</td><td className="p-2">{row.productLabel}</td><td className="p-2">{row.date}</td><td className="p-2">{row.type} / {row.concept}</td><td className="p-2">{row.documentRef}</td><td className="p-2 text-right">{row.quantity}</td></tr>)}</tbody></table>{prepared.length > 30 && <p className="p-2 text-xs text-slate-500">Se muestran 30 de {prepared.length} filas.</p>}</div>}
         </div>

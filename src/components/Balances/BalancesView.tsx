@@ -20,7 +20,9 @@ import {
   buildIncomeStatementRows,
   buildTrialBalanceRows,
   getReportScaleDate,
-  getUnclosedResultAtReportDate
+  getUnclosedResultAtReportDate,
+  roundReportCents,
+  roundReportMicroUsd
 } from '../../types/reportMonetaryReexpression';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
@@ -36,11 +38,6 @@ import {
 
 export const BalancesView: React.FC = () => {
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
-
-  // El ejercicio activo fija la fecha contable de presentación: antes de 2018
-  // no existe equivalente USD que mostrar en ninguna columna.
-  const exerciseUsdDate = `${Number(currentCompany.fiscalYear)}-01-01`;
-  const formatUsdEnEjercicio = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
 
   const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO' | 'ANUAL' | 'FLUJO'>('COMPROBACION');
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
@@ -101,8 +98,10 @@ export const BalancesView: React.FC = () => {
     journalEntries, currentCompany.id, Number(currentCompany.fiscalYear), 'RESULTADOS'
   );
   // Fecha de escala de todos los reportes del ejercicio: cada importe Bs. se
-  // reexpresa desde la fecha de su asiento antes de sumarse.
+  // reexpresa desde la fecha de su asiento antes de sumarse. La misma fecha de
+  // cierre decide si hay equivalente USD: antes de 2018 no se muestra.
   const reportScaleDate = getReportScaleDate(Number(currentCompany.fiscalYear));
+  const formatUsdEnEjercicio = (amount: number) => formatUsdForDate(amount, reportScaleDate);
 
   // Separate non-adjusted entries and adjusted entries within the selected company's
   // balance-sheet period for the trial balance.
@@ -186,7 +185,8 @@ export const BalancesView: React.FC = () => {
     (s, a) => s + (a.adjustedDebitBs - a.adjustedCreditBs),
     0
   );
-  const utilidadNetaBs = totalIngresosBs - totalCostosBs - totalGastosBs;
+  // El resultado se cierra al centavo por cuenta, igual que el asiento de cierre.
+  const utilidadNetaBs = roundReportCents(totalIngresosBs - totalCostosBs - totalGastosBs);
 
   const totalIngresosUsd = ingresosAccounts.reduce(
     (s, a) => s + (a.adjustedCreditUsd - a.adjustedDebitUsd),
@@ -200,7 +200,7 @@ export const BalancesView: React.FC = () => {
     (s, a) => s + (a.adjustedDebitUsd - a.adjustedCreditUsd),
     0
   );
-  const utilidadNetaUsd = totalIngresosUsd - totalCostosUsd - totalGastosUsd;
+  const utilidadNetaUsd = roundReportMicroUsd(totalIngresosUsd - totalCostosUsd - totalGastosUsd);
 
   // The balance sheet must include only the unclosed result since the latest
   // result-transfer entry. Prior closed results are already inside equity.

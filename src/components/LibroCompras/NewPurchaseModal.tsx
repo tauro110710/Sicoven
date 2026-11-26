@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
+import { useGuidedEntryError } from '../shared/useGuidedEntryError';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
@@ -23,6 +26,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const { currentCompany, accounts, bankAccounts, products, movements, purchases, addPurchase, runAtomicInvoiceImport, waitForPersistence } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
+  const { submitError, errorField, noticeRef, showGuidedError, clearError, fieldTone, editText } = useGuidedEntryError();
 
   const formatLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const todayIso = formatLocalIsoDate(new Date());
@@ -38,6 +42,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     setInvoiceDate(startDate);
     setAccountCreditDate(startDate);
   }, [currentCompany.id, currentCompany.accountingStartDate]);
+  React.useEffect(() => {
+    if (isOpen) clearError();
+  }, [isOpen, clearError]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
@@ -267,24 +274,25 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearError();
     if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) {
-      window.alert('Completa el RIF, nombre del proveedor y número de factura.');
+      showGuidedError('Completa el RIF, nombre del proveedor y número de factura.');
       return;
     }
     if (applyIslr && !selectedConcept) {
-      window.alert('Selecciona un concepto ISLR válido. No se aplicará una retención por defecto ni se inferirá la condición fiscal a partir del RIF.');
+      showGuidedError('Selecciona un concepto ISLR válido. No se aplicará una retención por defecto ni se inferirá la condición fiscal a partir del RIF.');
       return;
     }
     if (applyIslr && islrUnitTaxValueBs == null) {
-      window.alert('No existe un valor de Unidad Tributaria verificado para el período seleccionado. No se puede calcular ni registrar esta retención ISLR.');
+      showGuidedError('No existe un valor de Unidad Tributaria verificado para el período seleccionado. No se puede calcular ni registrar esta retención ISLR.');
       return;
     }
     if (applyIslr && hasCancelledPriorIslrOperation) {
-      window.alert('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
+      showGuidedError('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
       return;
     }
     if (applyIslr && hasIncompletePriorIslrOperation) {
-      window.alert('El historial ISLR mensual contiene operaciones anteriores con parámetros o importes incompletos. Se requiere conciliación fiscal antes de acumular.');
+      showGuidedError('El historial ISLR mensual contiene operaciones anteriores con parámetros o importes incompletos. Se requiere conciliación fiscal antes de acumular.');
       return;
     }
     // La tasa BCV es obligatoria solo cuando la operación requiere equivalencia monetaria
@@ -295,49 +303,49 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     const purchaseRequiresBcv = monetaryRule.requiresBcvRate;
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && (!Number.isFinite(bcvRate) || bcvRate <= 0);
     if (purchaseRequiresBcv && (!Number.isFinite(bcvRate) || bcvRate <= 0)) {
-      window.alert('La tasa BCV es obligatoria para compras desde el 01/01/2018.');
+      showGuidedError('La tasa BCV es obligatoria para compras desde el 01/01/2018.');
       return;
     }
     if (bcvExplicitlyInvalid) {
-      window.alert('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
+      showGuidedError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
       return;
     }
     if (!Number.isFinite(totalAmountBs) || totalAmountBs <= 0) {
-      window.alert('El total de la factura debe ser un importe válido mayor que cero.');
+      showGuidedError('El total de la factura debe ser un importe válido mayor que cero.');
       return;
     }
     if (![effectiveTaxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
-      window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
+      showGuidedError('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
       return;
     }
     if (!inventoryLinesValid) {
-      window.alert('Las líneas deben usar artículos existentes, cantidades y costos válidos, sin repetir artículos, y conciliar con la base imponible más el monto exento.');
+      showGuidedError('Las líneas deben usar artículos existentes, cantidades y costos válidos, sin repetir artículos, y conciliar con la base imponible más el monto exento.');
       return;
     }
     if (!linkInventory && !nonInventoryDebitAccounts.some(account => account.code === purchaseDebitAccountCode)) {
-      window.alert('Clasifica la compra y selecciona expresamente una cuenta de gasto o de activo. No se utilizará Honorarios Profesionales ni otra cuenta por defecto.');
+      showGuidedError('Clasifica la compra y selecciona expresamente una cuenta de gasto o de activo. No se utilizará Honorarios Profesionales ni otra cuenta por defecto.');
       return;
     }
     if (linkInventory) {
       for (const line of inventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
-        if (!product) { window.alert('Un artículo seleccionado ya no existe en la empresa activa.'); return; }
+        if (!product) { showGuidedError('Un artículo seleccionado ya no existe en la empresa activa.'); return; }
         const latest = movements.filter(m => m.companyId === currentCompany.id && m.productId === product.id)
           .reduce((value,m) => m.date > value ? m.date : value, '');
         if (latest && invoiceDate < latest) {
-          window.alert('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + ' (' + latest + '). Registra los períodos en orden cronológico.');
+          showGuidedError('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + ' (' + latest + '). Registra los períodos en orden cronológico.');
           return;
         }
       }
     }
     if (paymentTerm === 'CONTADO') {
       if (!paymentAccounts.some(account => account.code === paymentAccountCode)) {
-        window.alert('Selecciona una cuenta de movimiento de Caja o Banco del Plan de Cuentas.'); return;
+        showGuidedError('Selecciona una cuenta de movimiento de Caja o Banco del Plan de Cuentas.'); return;
       }
-      if (!paymentReference.trim()) { window.alert('Indica el número de comprobante, referencia bancaria o soporte del desembolso.'); return; }
+      if (!paymentReference.trim()) { showGuidedError('Indica el número de comprobante, referencia bancaria o soporte del desembolso.'); return; }
     }
     if (vatWithheldBs + islrWithheldBs > totalAmountBs + 0.005) {
-      window.alert('Las retenciones no pueden superar el total de la factura.');
+      showGuidedError('Las retenciones no pueden superar el total de la factura.');
       return;
     }
 
@@ -409,7 +417,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       await waitForPersistence();
       onClose();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
+      showGuidedError(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -444,6 +452,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
         {/* Content */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+          {submitError && (
+            <GuidedErrorNotice
+              title={GUIDED_ENTRY_TITLES.purchase}
+              message={submitError}
+              noticeRef={noticeRef}
+              onDismiss={clearError}
+            />
+          )}
           {/* Supplier Info */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
@@ -458,8 +474,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="J-12345678-9"
                   value={supplierRif}
-                  onChange={e => { setSupplierRif(e.target.value); setSupplierTaxStatus("AUTO"); setArticle3Exclusion(""); setPortalArticle3ExclusionConfirmed(false); setSupplierImportPerceptionConfirmed(false); setArticle2Transaction(false); setInvoiceFormalDefect(false); setPortalRetentionRate(""); }}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={e => { setSupplierRif(e.target.value); setSupplierTaxStatus("AUTO"); setArticle3Exclusion(""); setPortalArticle3ExclusionConfirmed(false); setSupplierImportPerceptionConfirmed(false); setArticle2Transaction(false); setInvoiceFormalDefect(false); setPortalRetentionRate(""); clearError(); }}
+                  className={`w-full px-3 py-1.5 rounded-lg uppercase font-mono focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -469,8 +485,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="PROVEEDOR NACIONAL, C.A."
                   value={supplierName}
-                  onChange={e => setSupplierName(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setSupplierName)}
+                  className={`w-full px-3 py-1.5 rounded-lg uppercase focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
             </div>
@@ -544,8 +560,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="00012345"
                   value={invoiceNumber}
-                  onChange={e => setInvoiceNumber(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setInvoiceNumber)}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
               <div>
@@ -573,7 +589,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   <>
                     <div className="flex items-center gap-1">
                       Tasa BCV aplicable a la factura *
-                      <input type="text" inputMode="decimal" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Obligatoria desde 2018" className="ml-2 w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono" />
+                      <input type="text" inputMode="decimal" required value={bcvRateInput} onChange={editText(setBcvRateInput)} placeholder="Obligatoria desde 2018" className={`ml-2 w-36 rounded-lg bg-white px-2 py-1 font-mono focus:ring-1 focus:outline-none ${fieldTone('bcvRate')}`} />
                     </div>
                     {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
                       <button
@@ -602,8 +618,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   required
                   placeholder="0.00"
                   value={vatNotDiscriminated ? taxableGrossInput : taxableBaseInput}
-                  onChange={e => { const value = e.target.value; if (vatNotDiscriminated) { setTaxableGrossInput(value); setTaxableBaseInput(String(taxRate > 0 ? Math.round((parseDecimalInput(value) / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0)); } else setTaxableBaseInput(value); }}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={e => { const value = e.target.value; if (vatNotDiscriminated) { setTaxableGrossInput(value); setTaxableBaseInput(String(taxRate > 0 ? Math.round((parseDecimalInput(value) / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : 0)); } else setTaxableBaseInput(value); clearError(); }}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono font-bold focus:ring-1 focus:outline-none ${fieldTone('amounts')}`}
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
                   {usdEnabled ? formatUsd(taxableBaseUsd) : '-'}
@@ -616,22 +632,24 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   inputMode="decimal"
                   placeholder="0,00"
                   value={exemptAmountInput}
-                  onChange={e => setExemptAmountInput(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setExemptAmountInput)}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono focus:ring-1 focus:outline-none ${fieldTone('amounts')}`}
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Alícuota IVA</label>
+                <label className={`block font-semibold mb-1 ${errorField === 'taxRate' ? 'text-rose-700' : 'text-slate-700'}`}>Alícuota IVA</label>
                 <select
                   value={taxRate}
-                  onChange={e => { const rate = Number(e.target.value); setTaxRate(rate); if (rate === 0 && vatNotDiscriminated) { setTaxableBaseInput(String(taxableGrossBs)); setTaxableGrossInput(''); setVatNotDiscriminated(false); } }}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={e => { const rate = Number(e.target.value); setTaxRate(rate); clearError(); if (rate === 0 && vatNotDiscriminated) { setTaxableBaseInput(String(taxableGrossBs)); setTaxableGrossInput(''); setVatNotDiscriminated(false); } }}
+                  aria-invalid={errorField === 'taxRate'}
+                  className={`w-full px-3 py-1.5 rounded-lg font-semibold focus:ring-1 focus:outline-none ${fieldTone('taxRate')}`}
                 >
                   <option value={16}>16% (Alícuota General SENIAT)</option>
                   <option value={8}>8% (Alícuota Reducida)</option>
                   <option value={31}>31% (Alícuota General + Adicional Lujo)</option>
                   <option value={0}>0% (Exento)</option>
                 </select>
+
               <div className="mt-3">
                 <label className="block font-semibold text-slate-700 mb-1">Destino del crédito fiscal IVA</label>
                 <select value={vatCreditTreatment} onChange={event=>setVatCreditTreatment(event.target.value as 'TAXABLE'|'EXEMPT'|'COMMON')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm">

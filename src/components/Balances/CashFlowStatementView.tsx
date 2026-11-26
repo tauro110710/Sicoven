@@ -5,6 +5,7 @@ import { CashFlowActivity, CashFlowIndirectTreatment } from '../../types/account
 import { buildCashFlowIndirectReport } from '../../types/cashFlowIndirectStatement';
 import { formatBs } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
+import { getReportScaleDate } from '../../types/reportMonetaryReexpression';
 import { ArrowLeft, Printer, Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const ACTIVITY_LABELS: Record<CashFlowActivity, string> = {
@@ -64,9 +65,9 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
       setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el tratamiento indirecto en SQLite.');
     }
   };
-  // El ejercicio seleccionado es la fecha contable: antes de 2018 no existe
-  // equivalente USD y la regla central devuelve "-".
-  const exerciseUsdDate = `${year}-01-01`;
+  // La fecha de cierre del ejercicio fija la escala del reporte: antes de 2018
+  // no existe equivalente USD y la regla central devuelve "-".
+  const exerciseUsdDate = getReportScaleDate(Number(year));
   const usdForExercise = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
   const money = (bs: number, usd: number) => <span className="text-right font-mono">
     <span>{formatBs(bs)}</span><span className="block text-[10px] text-slate-500">{usdForExercise(usd)}</span>
@@ -200,6 +201,8 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
             <tr><td className="p-2">Efectivo inicial</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.openingCashBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.openingCashUsd)}</td></tr>
             <tr className="bg-slate-50"><td className="p-2 font-bold">Efectivo final calculado / según mayor</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.closingCashBs)} / {formatBs(indirectReport.ledgerClosingCashBs)}</td><td className="p-2 text-right font-mono font-bold">{usdForExercise(indirectReport.closingCashUsd)} / {usdForExercise(indirectReport.ledgerClosingCashUsd)}</td></tr>
             <tr><td className="p-2">Diferencia de conciliación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.reconciliationDifferenceBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.reconciliationDifferenceUsd)}</td></tr>
+            <tr><td className="p-2">Redondeo por cuenta descontado</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.roundingDifferenceBs)}</td><td className="p-2 text-right font-mono">{usdForExercise(indirectReport.roundingDifferenceUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Diferencia residual</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.reconciliationResidualBs)}</td><td className="p-2 text-right font-mono font-bold">{usdForExercise(indirectReport.reconciliationResidualUsd)}</td></tr>
           </tbody>
         </table>
       </div>

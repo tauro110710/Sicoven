@@ -23,8 +23,15 @@ import { getUnclosedResultContribution, hasAccountMovement } from './accountingR
  * - Todos los reportes de un mismo período comparten la misma fecha de escala.
  */
 
-/** Escala monetaria vigente (bolívar digital) para comparativos históricos. */
-export const CURRENT_MONETARY_SCALE_DATE = '2021-10-01';
+/**
+ * Centavos, con la misma regla de redondeo que el asiento de cierre
+ * (`accountingYearClosing`). Los reportes de resultado la aplican por cuenta
+ * antes de sumar para reproducir exactamente el resultado contabilizado.
+ */
+export const roundReportCents = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+/** Millonésimas de USD, con la misma regla que el asiento de cierre. */
+export const roundReportMicroUsd = (value: number) => Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
 
 /** Fecha de escala de un ejercicio fiscal: su último día. */
 export function getReportScaleDate(fiscalYear: number): string {
@@ -245,8 +252,10 @@ export function buildIncomeStatementRows(
   const movements = buildReportMovementsByAccount(resultEntries, reportDate);
   return accounts.map(account => {
     const totals = movements.get(account.code) || emptyTotals();
-    const netBs = totals.debitBs - totals.creditBs;
-    const netUsd = totals.debitUsd - totals.creditUsd;
+    // El asiento de cierre redondea el neto de cada cuenta antes de sumar;
+    // el Estado de Resultados sigue ese mismo criterio.
+    const netBs = roundReportCents(totals.debitBs - totals.creditBs);
+    const netUsd = roundReportMicroUsd(totals.debitUsd - totals.creditUsd);
     return {
       code: account.code,
       name: account.name,
@@ -264,7 +273,9 @@ export function buildIncomeStatementRows(
 
 /**
  * Resultado del ejercicio aún no transferido por cierre, reexpresado a la
- * escala del reporte. Es el mismo criterio que usa el Balance General.
+ * escala del reporte. Es el contrapeso del Balance General: se acumula sin
+ * redondear por cuenta para conservar la ecuación patrimonial (ver la nota
+ * dentro de la función).
  */
 export function getUnclosedResultAtReportDate(
   entries: ReadonlyArray<Pick<JournalEntry, 'date' | 'type' | 'items'>>,
@@ -283,6 +294,12 @@ export function getUnclosedResultAtReportDate(
     ''
   );
   const target = assertReportDate(reportDate, 'La fecha del reporte');
+  // A propósito NO se redondea por cuenta: este resultado es el contrapeso del
+  // Balance General y debe conservar Activo = Pasivo + Patrimonio sobre los
+  // saldos reexpresados. Redondear cada cuenta (como hace el asiento de
+  // cierre) acumula hasta medio centavo por cuenta y puede descuadrar el
+  // balance cuando hay fracciones de centavo. El Estado de Resultados, el
+  // estado de cambios y el cierre sí redondean porque reproducen el asiento.
   return entries
     .filter(entry => !latestClosingDate || entry.date > latestClosingDate)
     .reduce((result, entry) => {

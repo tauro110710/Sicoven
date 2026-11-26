@@ -9,6 +9,7 @@ import {
   getDocumentLuxuryTax,
   getInputVatAccountCode,
   getOutputVatAccountCode,
+  isSupportedFiscalRate,
   resolveFiscalRates,
   roundFiscalBs,
   roundFiscalUsd,
@@ -26,6 +27,29 @@ test('resuelve las alícuotas 0, 8, 16 y la combinada 31 con sus dos componentes
   assert.deepEqual(resolveFiscalRates(31), { declaredRate: 31, vatRate: 16, luxuryRate: 15, combined: true });
   assert.throws(() => resolveFiscalRates(-1), /alícuota fiscal/);
   assert.throws(() => resolveFiscalRates(101), /alícuota fiscal/);
+});
+
+test('solo admite las alícuotas fiscales 0, 8, 16 y 31 y rechaza cualquier otra antes de calcular', () => {
+  for (const rate of [0, 8, 16, 31]) {
+    assert.equal(isSupportedFiscalRate(rate), true, 'debe admitir ' + rate + ' %');
+    assert.equal(isSupportedFiscalRate(String(rate)), true, 'debe admitir el string numérico ' + rate);
+    assert.doesNotThrow(() => calculateFiscalBreakdown({ taxableBaseBs: 1000, taxRate: rate }));
+  }
+  for (const rate of [1, 7, 12, 19, 27, 30, 32, 100]) {
+    assert.equal(isSupportedFiscalRate(rate), false, 'no debe admitir ' + rate + ' %');
+    assert.throws(() => resolveFiscalRates(rate), /no está admitida/);
+    assert.throws(() => calculateFiscalBreakdown({ taxableBaseBs: 1000, taxRate: rate }), /no está admitida/);
+    assert.throws(() => calculateFiscalBreakdownFromGross({ grossAmountBs: 1000, taxRate: rate }), /no está admitida/);
+    assert.throws(() => calculateLineVat({ quantity: 1, unitPriceBs: 1000, taxRate: rate }), /no está admitida/);
+    assert.throws(() => aggregateFiscalDocuments([{ taxRate: rate, taxableBaseBs: 1000, vatAmountBs: 0 }]), /no está admitida/);
+    const issues = validateFiscalBreakdown({ taxRate: rate, taxableBaseBs: 1000, vatAmountBs: 0 });
+    assert.ok(issues.some(issue => /no está admitida/.test(issue)), 'validateFiscalBreakdown debe rechazar ' + rate + ' %');
+    assert.throws(() => assertFiscalBreakdown({ taxRate: rate, taxableBaseBs: 1000, vatAmountBs: 0 }), /no está admitida/);
+  }
+  assert.equal(isSupportedFiscalRate(''), false);
+  assert.equal(isSupportedFiscalRate('  '), false);
+  assert.equal(isSupportedFiscalRate(Number.NaN), false);
+  assert.equal(isSupportedFiscalRate('16.5'), false);
 });
 
 test('calcula IVA 16 % sin impuesto suntuario', () => {

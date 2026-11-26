@@ -362,6 +362,40 @@ test('bloquea ventas con tasas mezcladas, artículo ajeno o totales que no conci
   assert.equal(usdLine[0].unitPriceUsd, 2);
 });
 
+test('bloquea importaciones con alícuotas no admitidas y acepta 0, 8 y 16 %', () => {
+  const products = [
+    { id: 'p1', code: 'A-1', name: 'Artículo 16%', vatTreatment: 'GENERAL_16' as const },
+    { id: 'p2', code: 'B-1', name: 'Artículo 8%', vatTreatment: 'REDUCIDA_8' as const },
+    { id: 'p3', code: 'C-1', name: 'Artículo exento', vatTreatment: 'EXENTO' as const }
+  ];
+  for (const rate of [1, 7, 12, 19, 27, 30, 32, 100]) {
+    assert.throws(
+      () => prepareUniversalSaleInventoryLines(
+        [{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }],
+        products,
+        { taxRate: rate, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 0, bcvRate: 10 }
+      ),
+      /no (está )?admitida/,
+      'debe rechazar ' + rate + ' %'
+    );
+  }
+  assert.doesNotThrow(() => prepareUniversalSaleInventoryLines(
+    [{ sku: 'C-1', quantity: 1, unitPriceBs: 20 }],
+    products,
+    { taxRate: 0, taxableBaseBs: 0, exemptAmountBs: 20, vatAmountBs: 0, bcvRate: 10 }
+  ));
+  assert.doesNotThrow(() => prepareUniversalSaleInventoryLines(
+    [{ sku: 'B-1', quantity: 1, unitPriceBs: 10 }],
+    products,
+    { taxRate: 8, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 0.8, bcvRate: 10 }
+  ));
+  assert.doesNotThrow(() => prepareUniversalSaleInventoryLines(
+    [{ sku: 'A-1', quantity: 1, unitPriceBs: 10 }],
+    products,
+    { taxRate: 16, taxableBaseBs: 10, exemptAmountBs: 0, vatAmountBs: 1.6, bcvRate: 10 }
+  ));
+});
+
 
 test('prepara líneas de compra por SKU y concilia costo, cantidad y base imponible', () => {
   const products = [{ id: 'p1', code: 'A-1' }, { id: 'p2', code: 'B-1' }];

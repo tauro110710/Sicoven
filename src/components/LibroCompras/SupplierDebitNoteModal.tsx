@@ -3,6 +3,8 @@ import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { PurchaseRecord } from '../../types/accounting';
 import type { SupplierDebitNoteEconomicCause } from '../../types/supplierDebitNote';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 
 interface Props {
@@ -221,7 +223,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
             <strong>Inventario:</strong> las causas «mercancía adicional» y «ajuste de costo de inventario» no están disponibles aquí. Requieren recepción documentada, productos, cantidades, costos y conciliación Kardex antes de habilitarse.
           </div>
-          {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
+          {error && <GuidedErrorNotice title={GUIDED_ENTRY_TITLES.supplierDebitNote} message={error} onDismiss={() => setError('')} />}
           {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</div>}
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button>

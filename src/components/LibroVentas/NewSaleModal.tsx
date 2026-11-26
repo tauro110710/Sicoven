@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
+import { useGuidedEntryError } from '../shared/useGuidedEntryError';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
-import { calculateFiscalBreakdown, calculateLineVat, roundFiscalBs } from '../../types/vatFiscalEngine';
+import { calculateFiscalBreakdown, roundFiscalBs } from '../../types/vatFiscalEngine';
+import { buildSaleInventoryFiscalLines } from '../../types/saleInventoryFiscalLines';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -17,6 +21,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const { currentCompany, addSale, waitForPersistence, products } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
+  const { submitError, errorField, noticeRef, showGuidedError, clearError, fieldTone, editText } = useGuidedEntryError();
 
   const todayIso = getLocalISODate();
   const accountingStartDate = isValidIsoCalendarDate(currentCompany?.accountingStartDate)
@@ -28,6 +33,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   React.useEffect(() => {
     setInvoiceDate(startDate);
   }, [currentCompany.id, currentCompany.accountingStartDate]);
+  React.useEffect(() => {
+    if (isOpen) clearError();
+  }, [isOpen, clearError]);
   const [customerRif, setCustomerRif] = useState<string>('J-');
   const [customerName, setCustomerName] = useState<string>('');
   const [customerAddress, setCustomerAddress] = useState<string>('');
@@ -92,7 +100,6 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
   const fiscalBreakdown = calculateFiscalBreakdown({ taxableBaseBs, exemptAmountBs, taxRate });
-  const vatRate = fiscalBreakdown.vatRate;
   const vatAmountBs = fiscalBreakdown.vatAmountBs;
   const additionalLuxuryTaxBs = fiscalBreakdown.additionalLuxuryTaxBs;
   const invoiceSubtotalBs = fiscalBreakdown.subtotalBs;
@@ -118,6 +125,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearError();
 
     // Validar líneas de inventario si el contador las activó.
     if (linkInventory) {
@@ -132,11 +140,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
         ) &&
         new Set(saleInventoryLines.map(l => l.productId)).size === saleInventoryLines.length;
       if (!allLinesValid) {
-        window.alert('Cada línea de inventario necesita un artículo válido, cantidad y precio mayor a cero, sin artículos repetidos.');
+        showGuidedError('Cada línea de inventario necesita un artículo válido, cantidad y precio mayor a cero, sin artículos repetidos.');
         return;
       }
       if (Math.abs(saleLineTotal - (taxableBaseBs + exemptAmountBs)) > 0.02) {
-        window.alert(`El total de las líneas de inventario (${saleLineTotal.toFixed(2)} Bs.) debe coincidir con la base imponible + monto exento (${(taxableBaseBs + exemptAmountBs).toFixed(2)} Bs.). Ajuste las cantidades o precios.`);
+        showGuidedError(`El total de las líneas de inventario (${saleLineTotal.toFixed(2)} Bs.) debe coincidir con la base imponible + monto exento (${(taxableBaseBs + exemptAmountBs).toFixed(2)} Bs.). Ajuste las cantidades o precios.`);
         return;
       }
     }
@@ -145,25 +153,31 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     const saleNeedsBcv = monetaryRule.requiresBcvRate;
     const bcvExplicitlyInvalid = bcvRateInput.trim().length > 0 && !hasValidBcvRate;
     if (saleNeedsBcv && !hasValidBcvRate) {
-      window.alert('La tasa BCV es obligatoria para ventas desde el 01/01/2018.');
+      showGuidedError('La tasa BCV es obligatoria para ventas desde el 01/01/2018.');
       return;
     }
     if (bcvExplicitlyInvalid) {
-      window.alert('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
+      showGuidedError('La tasa BCV ingresada no es válida. Corríjala o bórrela para dejarla como pendiente.');
       return;
     }
-    if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
-    if (totalAmountBs <= 0) return;
+    if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) {
+      showGuidedError('Complete el RIF, el nombre o razón social del cliente y el número de factura.');
+      return;
+    }
+    if (totalAmountBs <= 0) {
+      showGuidedError('El total de la factura debe ser mayor que cero. Revise la base imponible y el monto exento.');
+      return;
+    }
     if (clientIsSpecial && !/^[0-9]{14}$/.test(retentionVoucherNumber.trim())) {
-      alert('El número del comprobante de retención debe contener exactamente 14 dígitos.');
+      showGuidedError('El número del comprobante de retención debe contener exactamente 14 dígitos.');
       return;
     }
     if (clientIsSpecial && !retentionVoucherDate) {
-      alert('Indique la fecha del comprobante de retención de IVA.');
+      showGuidedError('Indique la fecha del comprobante de retención de IVA.');
       return;
     }
     if (clientIsSpecial && retentionVoucherDate < invoiceDate) {
-      alert('La fecha del comprobante de retención no puede ser anterior a la fecha de la factura. Verifique el documento.');
+      showGuidedError('La fecha del comprobante de retención no puede ser anterior a la fecha de la factura. Verifique el documento.');
       return;
     }
 
@@ -208,24 +222,25 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       currencyPricingMode,
       fiscalAdjustmentMode,
       inventoryLines: linkInventory && saleInventoryLines.length > 0
-        ? saleInventoryLines.map(line => ({
-            productId: line.productId,
-            productCode: products.find(p => p.id === line.productId)?.code ?? '',
-            productName: products.find(p => p.id === line.productId)?.name ?? '',
-            quantity: parseDecimalInput(line.quantity),
-            unitPriceBs: parseDecimalInput(line.unitPriceBs),
-            netAmountBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * 100) / 100,
-            taxRate,
-            vatAmountBs: calculateLineVat({ quantity: parseDecimalInput(line.quantity), unitPriceBs: parseDecimalInput(line.unitPriceBs), taxRate: vatRate }).vatAmountBs,
-            exemptAmountBs: 0,
-            totalBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * (1 + vatRate / 100) * 100) / 100,
-          }))
+        ? buildSaleInventoryFiscalLines(
+            saleInventoryLines.map(line => {
+              const product = products.find(p => p.id === line.productId);
+              return {
+                productId: line.productId,
+                productCode: product?.code ?? '',
+                productName: product?.name ?? '',
+                quantity: parseDecimalInput(line.quantity),
+                unitPriceBs: parseDecimalInput(line.unitPriceBs)
+              };
+            }),
+            { taxRate, taxableBaseBs, exemptAmountBs, vatAmountBs, additionalLuxuryTaxBs }
+          ).lines
         : undefined
       });
       await waitForPersistence();
       onClose();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se pudo registrar la venta. Verifica los datos e inténtalo nuevamente.');
+      showGuidedError(error instanceof Error ? error.message : 'No se pudo registrar la venta. Verifica los datos e inténtalo nuevamente.');
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -259,6 +274,14 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+          {submitError && (
+            <GuidedErrorNotice
+              title={GUIDED_ENTRY_TITLES.sale}
+              message={submitError}
+              noticeRef={noticeRef}
+              onDismiss={clearError}
+            />
+          )}
           {/* Client Info */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">
@@ -272,8 +295,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   required
                   placeholder="J-12345678-9"
                   value={customerRif}
-                  onChange={e => setCustomerRif(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setCustomerRif)}
+                  className={`w-full px-3 py-1.5 rounded-lg uppercase font-mono focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -283,8 +306,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   required
                   placeholder="CLIENTE COMERCIAL, C.A."
                   value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg uppercase focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setCustomerName)}
+                  className={`w-full px-3 py-1.5 rounded-lg uppercase focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
             </div>
@@ -320,8 +343,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   required
                   placeholder="00008500"
                   value={invoiceNumber}
-                  onChange={e => setInvoiceNumber(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setInvoiceNumber)}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono focus:ring-1 focus:outline-none ${fieldTone('document')}`}
                 />
               </div>
               <div>
@@ -352,8 +375,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   required
                   placeholder="0.00"
                   value={taxableBaseInput}
-                  onChange={e => setTaxableBaseInput(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setTaxableBaseInput)}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono font-bold focus:ring-1 focus:outline-none ${fieldTone('amounts')}`}
                 />
                 <span className="text-[11px] text-slate-500 font-mono">
                   {usdEnabled ? formatUsd(taxableBaseUsd) : '-'}
@@ -366,22 +389,24 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   inputMode="decimal"
                   placeholder="0,00"
                   value={exemptAmountInput}
-                  onChange={e => setExemptAmountInput(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={editText(setExemptAmountInput)}
+                  className={`w-full px-3 py-1.5 rounded-lg font-mono focus:ring-1 focus:outline-none ${fieldTone('amounts')}`}
                 />
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Alícuota IVA</label>
                 <select
                   value={taxRate}
-                  onChange={e => setTaxRate(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  onChange={e => { setTaxRate(Number(e.target.value)); clearError(); }}
+                  aria-invalid={errorField === 'taxRate'}
+                  className={`w-full px-3 py-1.5 rounded-lg font-semibold focus:ring-1 focus:outline-none ${fieldTone('taxRate')}`}
                 >
                   <option value={16}>16% (Alícuota General)</option>
                   <option value={8}>8% (Alícuota Reducida)</option>
                   <option value={31}>31% (Alícuota General + Adicional Lujo)</option>
                   <option value={0}>0% (Exento)</option>
                 </select>
+
               </div>
             </div>
           </div>
@@ -400,8 +425,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                     inputMode="decimal"
                     placeholder="Ej.: 944,4485"
                     value={bcvRateInput}
-                    onChange={e => setBcvRateInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-blue-500 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600"
+                    onChange={editText(setBcvRateInput)}
+                    className={`w-full px-3 py-2 rounded-lg font-mono font-bold focus:ring-1 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600 ${fieldTone('bcvRate')}`}
                   />
                   {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
                     <button

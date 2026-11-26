@@ -32,8 +32,9 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear) || new Date().getFullYear()])).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
   const [year, setYear] = useState(String(availableYears[0] ?? new Date().getFullYear()));
-  // Los ejercicios anteriores a 2018 no admiten equivalentes USD.
-  const exerciseUsdDate = `${year}-01-01`;
+  // Fecha de cierre del ejercicio: fija la escala del reporte anual y la
+  // elegibilidad de los equivalentes USD (antes de 2018 no se muestran).
+  const exerciseUsdDate = getReportScaleDate(Number(year));
   const usdForExercise = (amount: number) => formatUsdForDate(amount, exerciseUsdDate);
   const usdForCsv = (amount: number) => allowsUsdForOperationDate(exerciseUsdDate) ? amount.toFixed(6) : '-';
   useEffect(() => {
@@ -88,8 +89,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       e.type !== 'CIERRE'
     );
     // Escala única del reporte anual: cada asiento se reexpresa antes de sumar.
-    const reportScaleDate = getReportScaleDate(Number(year));
-    const movements = buildReportMovementsByAccount(fiscalEntries, reportScaleDate);
+    const movements = buildReportMovementsByAccount(fiscalEntries, exerciseUsdDate);
     const rows: AnnualAccountRow[] = accounts
       .filter(a => a.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS', 'PASIVO', 'PATRIMONIO'].includes(a.type))
       .map(account => {
@@ -125,11 +125,11 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       retentionRows,
       bcvRates: fiscalEntries.map(e => Number(e.bcvRate)).filter(rate => Number.isFinite(rate) && rate > 0)
     };
-  }, [accounts, journalEntries, currentCompany.id, year]);
+  }, [accounts, journalEntries, currentCompany.id, year, exerciseUsdDate]);
 
   const equityReport = useMemo(
-    () => buildEquityChangesReport(journalEntries, accounts, currentCompany.id, Number(year), getReportScaleDate(Number(year))),
-    [journalEntries, accounts, currentCompany.id, year]
+    () => buildEquityChangesReport(journalEntries, accounts, currentCompany.id, Number(year), exerciseUsdDate),
+    [journalEntries, accounts, currentCompany.id, year, exerciseUsdDate]
   );
 
   const money = (bs: number, usd: number) => (
@@ -193,7 +193,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
         <div>
           <div className="mb-1 flex items-center gap-2 text-lg font-bold text-slate-900"><TrendingUp className="h-5 w-5 text-emerald-600" />Reportes Anuales</div>
           <p className="text-sm text-slate-500">{currentCompany.name} · RIF {currentCompany.rif}</p>
-          <p className="mt-1 text-xs text-slate-500">Estado anual consolidado calculado desde los asientos contabilizados de la empresa activa. Los Bs. se reexpresan a la escala vigente al {getReportScaleDate(Number(year))}; los importes USD conservan su valor de origen.</p>
+          <p className="mt-1 text-xs text-slate-500">Estado anual consolidado calculado desde los asientos contabilizados de la empresa activa. Los Bs. se reexpresan a la escala vigente al {exerciseUsdDate}; los importes USD conservan su valor de origen.</p>
         </div>
         <div className="flex flex-wrap gap-2 no-print">
           <button onClick={onBack} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4" />Volver</button>

@@ -98,6 +98,15 @@ const MODULE_HELP: Record<string, { title: string; intro: string; items: HelpIte
       { question: '¿El módulo calcula depreciación fiscal o bajas de activos?', answer: 'Todavía no. La depreciación fiscal, bajas/ventas, deterioro, revaluaciones y efectos de inflación requieren flujos y políticas separados. No utilice el cálculo financiero como deducción fiscal ni registre una baja manual sin el procedimiento contable correspondiente.', kind: 'warning' }
     ]
   },
+  'diagnostico-iva-31': {
+    title: 'Diagnóstico IVA 31 %',
+    intro: 'Revisión de solo lectura de documentos y asientos con tasa combinada 31 %.',
+    items: [
+      { question: '¿Qué detecta este diagnóstico?', answer: 'Identifica compras, ventas, notas y asientos manuales con alícuota combinada 31 % donde el 31 % completo pudo quedar registrado como IVA, sin separar el 16 % de IVA del 15 % de impuesto adicional al consumo suntuario.', kind: 'guide' },
+      { question: '¿Este módulo corrige los documentos automáticamente?', answer: 'No. Es una vista de solo lectura: no modifica documentos, asientos ni períodos históricos. Cuando encuentra hallazgos, muestra una propuesta de asiento de ajuste para un período abierto, pero no la registra.', kind: 'warning' },
+      { question: '¿Qué debo hacer si aparecen hallazgos?', answer: 'Revise cada caso con el contador responsable, confirme la base imponible, el IVA correcto al 16 % y el tratamiento del suntuario 15 %. La corrección contable debe realizarse por el mecanismo trazable que corresponda, sin reescribir el histórico.', kind: 'normative' }
+    ]
+  },
   'ret-iva': {
     title: 'Retenciones de IVA',
     intro: 'Ayuda para revisar comprobantes, períodos y archivos de retenciones.',

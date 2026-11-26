@@ -4,6 +4,8 @@ import type { SaleCorrectionNoteRequest } from '../../types/saleCorrectionNote';
 import type { Account } from '../../types/accounting';
 import { useAccounting } from '../../context/AccountingContext';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 
 type Draft = Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string };
@@ -171,7 +173,7 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
         <label className="block text-xs font-semibold text-slate-700">Papel de trabajo y soporte revisado
           <textarea value={workpaperNote} onChange={e=>setWorkpaperNote(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
         </label>
-        {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
+        {error && <GuidedErrorNotice title={GUIDED_ENTRY_TITLES.saleCorrectionNote} message={error} onDismiss={() => setError('')} />}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button>
           <button type="submit" disabled={submitting || !fiscalEmissionMedium || !sameMediumAsOriginal || (sourceSale.paymentTerm === 'CONTADO' && !treasuryAccountCode)} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{submitting ? 'Confirmando SQLite…' : 'Registrar y confirmar'}</button>

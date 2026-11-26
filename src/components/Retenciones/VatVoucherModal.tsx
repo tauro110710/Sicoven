@@ -116,7 +116,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, corre
               <button type="button" disabled={deliveryBusy || !deliveryDate || (deliveryMethod === 'ELECTRONIC' && !electronicAgreed)} onClick={() => void handleRecordDelivery()} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
                 {deliveryBusy ? 'Guardando…' : 'Registrar entrega'}
               </button>
-              {deliveryMessage && <p role="status" className="text-xs text-slate-700">{deliveryMessage}</p>}
+              {deliveryMessage && <p role="status" className="min-w-0 break-words text-xs text-slate-700">{deliveryMessage}</p>}
             </div>
           </div>
         ) : (

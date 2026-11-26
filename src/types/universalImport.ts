@@ -1,7 +1,7 @@
 import type { InventoryProduct, SaleInventoryLine } from './accounting';
 import type { SupplierDirectAdvanceDraft } from './supplierDirectAdvance';
 import type { SupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
-import { calculateLineVat } from './vatFiscalEngine';
+import { calculateLineVat, isSupportedFiscalRate } from './vatFiscalEngine';
 
 export type UniversalSupplierDirectAdvanceDraft = { sourceRowId: string; draft: SupplierDirectAdvanceDraft };
 export type UniversalSupplierAdvanceSettlementDraft = { sourceRowId: string; draft: SupplierAdvanceSettlementDraft };
@@ -447,6 +447,9 @@ export const prepareUniversalSaleInventoryLines = (
   invoice: { taxRate: number; taxableBaseBs: number; exemptAmountBs: number; vatAmountBs: number; bcvRate?: number }
 ): SaleInventoryLine[] => {
   if (!Array.isArray(rawLines) || rawLines.length === 0) throw new Error('La factura no contiene renglones de mercancía importables.');
+  if (!isSupportedFiscalRate(invoice.taxRate)) {
+    throw new Error('La factura declara una alícuota no admitida. SICOVEN solo acepta 0 %, 8 %, 16 % y 31 % (16 % IVA + 15 % suntuario).');
+  }
   const normalize = (value: unknown) => String(value ?? '').trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pickValue = (row: Record<string, unknown>, keys: string[]) => {
     const wanted = new Set(keys.map(normalize));
@@ -1198,3 +1201,4 @@ export const planUniversalInvoiceSettlements = (
     return { invoiceRowId, invoiceKind, settlements };
   });
 };
+

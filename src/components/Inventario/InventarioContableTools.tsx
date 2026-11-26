@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown, calculatePeriodicCostOfSales, calculateVnrProvisionLedgerBalance } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
@@ -624,6 +626,7 @@ export const InventarioContableTools: React.FC = () => {
       {vnr?.required && <p className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="h-4 w-4" />El VNR está por debajo del costo. Debe registrarse una provisión por desvalorización.</p>}
       <button disabled={!selectedProduct || !vnr || Math.abs(vnr.writeDownBs - Number(selectedProduct.vnrProvisionBs || 0)) < 0.01} onClick={recordVnr} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Registrar / actualizar provisión VNR</button>
     </section>
-    {(message || error) && <p role={error ? 'alert' : 'status'} className={'rounded-lg p-3 text-sm ' + (error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800')}>{error || message}</p>}
+    {error && <GuidedErrorNotice title={GUIDED_ENTRY_TITLES.import} message={error} onDismiss={() => setError('')} />}
+    {!error && message && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p>}
   </div>;
 };

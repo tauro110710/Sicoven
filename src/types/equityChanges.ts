@@ -1,5 +1,5 @@
 import type { Account, JournalEntry } from './accounting';
-import { getReportScaleDate, reexpressReportAmount } from './reportMonetaryReexpression';
+import { getReportScaleDate, reexpressReportAmount, roundReportCents, roundReportMicroUsd } from './reportMonetaryReexpression';
 
 export interface EquityChangeRow {
   accountCode: string;
@@ -57,15 +57,32 @@ const emptyRow = (accountCode: string, accountName: string): EquityChangeRow => 
 });
 const isProfitLoss = (account: Account | undefined) =>
   account?.type === 'INGRESOS' || account?.type === 'COSTOS' || account?.type === 'GASTOS';
-const signedProfitLoss = (entry: JournalEntry, accountsByCode: Map<string, Account>, reportScaleDate: string) =>
-  entry.items.reduce((sum, item) => {
-    if (!isProfitLoss(accountsByCode.get(item.accountCode))) return sum;
-    return {
-      bs: sum.bs + reexpressReportAmount(item.creditBs, entry.date, reportScaleDate) -
-        reexpressReportAmount(item.debitBs, entry.date, reportScaleDate),
-      usd: sum.usd + amount(item.creditUsd) - amount(item.debitUsd)
-    };
-  }, { bs: 0, usd: 0 });
+/**
+ * Resultado de un conjunto de asientos con el redondeo por cuenta del asiento
+ * de cierre: cada cuenta nominal aporta su neto en centavos (millonésimas de
+ * USD) antes de sumar, para que el estado de cambios coincida al centavo con
+ * el resultado contabilizado.
+ */
+const signedProfitLoss = (entries: JournalEntry[], accountsByCode: Map<string, Account>, reportScaleDate: string) => {
+  const byAccount = new Map<string, { bs: number; usd: number }>();
+  for (const entry of entries) {
+    for (const item of entry.items) {
+      if (!isProfitLoss(accountsByCode.get(item.accountCode))) continue;
+      const current = byAccount.get(item.accountCode) || { bs: 0, usd: 0 };
+      current.bs += reexpressReportAmount(item.creditBs, entry.date, reportScaleDate) -
+        reexpressReportAmount(item.debitBs, entry.date, reportScaleDate);
+      current.usd += amount(item.creditUsd) - amount(item.debitUsd);
+      byAccount.set(item.accountCode, current);
+    }
+  }
+  let bs = 0;
+  let usd = 0;
+  for (const value of byAccount.values()) {
+    bs += roundReportCents(value.bs);
+    usd += roundReportMicroUsd(value.usd);
+  }
+  return { bs: roundReportCents(bs), usd: roundReportMicroUsd(usd) };
+};
 
 /**
  * Builds a traceable equity roll-forward from posted ledger entries only.
@@ -137,12 +154,11 @@ export function buildEquityChangesReport(
       entry.items.some(item => equityCodes.has(item.accountCode)) &&
       entry.items.some(item => isProfitLoss(accountsByCode.get(item.accountCode))));
     const lastPriorClosing = priorClosings.at(-1)?.date || '';
-    const priorResult = companyEntries
-      .filter(entry => entry.date < start && entry.date > lastPriorClosing && entry.type !== 'CIERRE' && entry.type !== 'APERTURA')
-      .reduce((sum, entry) => {
-        const value = signedProfitLoss(entry, accountsByCode, reportScaleDate);
-        return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
-      }, { bs: 0, usd: 0 });
+    const priorResult = signedProfitLoss(
+      companyEntries.filter(entry => entry.date < start && entry.date > lastPriorClosing && entry.type !== 'CIERRE' && entry.type !== 'APERTURA'),
+      accountsByCode,
+      reportScaleDate
+    );
     if (Math.abs(priorResult.bs) > 0.005 || Math.abs(priorResult.usd) > 0.0000005) {
       addOpening('RESULTADOS-ACUMULADOS', 'Resultados acumulados no transferidos', priorResult.bs, priorResult.usd);
     }
@@ -177,11 +193,13 @@ export function buildEquityChangesReport(
 
   let periodResultBs = 0, periodResultUsd = 0;
   if (!resultTransferredToEquity) {
-    for (const entry of periodEntries.filter(item => item.type !== 'CIERRE' && item.type !== 'APERTURA')) {
-      const result = signedProfitLoss(entry, accountsByCode, reportScaleDate);
-      periodResultBs += result.bs;
-      periodResultUsd += result.usd;
-    }
+    const periodResult = signedProfitLoss(
+      periodEntries.filter(item => item.type !== 'CIERRE' && item.type !== 'APERTURA'),
+      accountsByCode,
+      reportScaleDate
+    );
+    periodResultBs = periodResult.bs;
+    periodResultUsd = periodResult.usd;
     if (Math.abs(periodResultBs) > 0.005 || Math.abs(periodResultUsd) > 0.0000005) {
       addMovement('RESULTADO-EJERCICIO', 'Resultado neto del ejercicio', periodResultBs, periodResultUsd);
       const resultRow = rows.get('RESULTADO-EJERCICIO')!;

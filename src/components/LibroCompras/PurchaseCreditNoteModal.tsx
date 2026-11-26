@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { PurchaseRecord } from '../../types/accounting';
+import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
+import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 
 interface Props {
   purchase: PurchaseRecord;
@@ -125,7 +127,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
           <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
             {!eligible && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />No elegible: el flujo automático requiere factura vigente (contado o crédito) y líneas de mercancía vinculadas al Kardex. Las facturas históricas sin detalle siguen bloqueadas.</div>}
             {eligible && invalidRows.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />La factura tiene artículos sin conciliación única o sin cantidad pendiente. No se habilitará el registro parcial mientras falte esa conciliación.</div>}
-            {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+            {error && <GuidedErrorNotice title={GUIDED_ENTRY_TITLES.purchaseCreditNote} message={error} onDismiss={() => setError('')} />}
             {success && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</div>}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="text-xs font-semibold text-slate-700">Fecha de la nota
