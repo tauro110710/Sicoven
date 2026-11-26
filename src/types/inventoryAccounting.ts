@@ -102,6 +102,12 @@ export function getDefaultInventoryAccountCode(itemType?: InventoryItemType): st
   return '1.1.4.01';
 }
 
+/**
+ * Capa de costo PEPS con trazabilidad monetaria.
+ * `unitCostBs` está expresado en la escala de `costScaleDate` (o de `date` si
+ * no se indica), mientras que `originalUnitCostBs` conserva el costo tal como
+ * fue documentado en la fecha del movimiento de origen.
+ */
 export interface CostLayer {
   quantity: number;
   unitCostBs: number;
@@ -109,11 +115,32 @@ export interface CostLayer {
   date?: string;
   documentRef?: string;
   sourceMovementId?: string;
+  /** Costo unitario documentado, en la escala de la fecha original. */
+  originalUnitCostBs?: number;
+  /** Fecha contable que define la escala monetaria de `unitCostBs`. */
+  costScaleDate?: string;
+  /** Tasa BCV histórica del documento que originó el costo. */
+  bcvRate?: number;
+}
+
+export interface ConsumedFifoLayer {
+  sourceMovementId?: string;
+  date?: string;
+  documentRef?: string;
+  quantity: number;
+  unitCostBs: number;
+  unitCostUsd: number;
+  /** Costo unitario documentado, conservado sin alteración. */
+  originalUnitCostBs?: number;
+  /** Fecha contable que define la escala monetaria del costo consumido. */
+  costScaleDate?: string;
+  /** Tasa BCV histórica del documento de origen. */
+  bcvRate?: number;
 }
 
 export interface InventoryCostResult {
   /** Capas PEPS consumidas por una salida; se omite en cálculos de promedio. */
-  consumedLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
+  consumedLayers?: ConsumedFifoLayer[];
   quantity: number;
   totalCostBs: number;
   totalCostUsd: number;
@@ -132,8 +159,13 @@ export interface FifoMovementSnapshot {
   id?: string;
   concept?: string;
   correctionForMovementId?: string;
+  bcvRate?: number;
+  /** Escala monetaria de `unitCostBs`; por defecto es la fecha del movimiento. */
+  costScaleDate?: string;
+  /** Costo documentado antes de reexpresarlo a la fecha de consumo. */
+  originalUnitCostBs?: number;
   /** Layer provenance restored by a customer return; quantities must match the movement. */
-  consumedFifoLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
+  consumedFifoLayers?: ConsumedFifoLayer[];
 }
 
 
@@ -202,10 +234,21 @@ export function reconstructFifoLayers(
           throw new Error('La devolución PEPS no conserva capas originales válidas o su cantidad no concilia.');
         }
         for (const layer of restored) {
-          layers.push({ quantity: Number(layer.quantity), unitCostBs: Number(layer.unitCostBs), unitCostUsd: Number(layer.unitCostUsd), date: layer.date || date, documentRef: layer.documentRef, sourceMovementId: layer.sourceMovementId });
+          layers.push({
+            quantity: Number(layer.quantity), unitCostBs: Number(layer.unitCostBs), unitCostUsd: Number(layer.unitCostUsd),
+            date: layer.date || date, documentRef: layer.documentRef, sourceMovementId: layer.sourceMovementId,
+            ...(layer.originalUnitCostBs !== undefined ? { originalUnitCostBs: Number(layer.originalUnitCostBs) } : {}),
+            ...(layer.costScaleDate ? { costScaleDate: layer.costScaleDate } : {}),
+            ...(layer.bcvRate !== undefined ? { bcvRate: Number(layer.bcvRate) } : {})
+          });
         }
       } else {
-        layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+        layers.push({
+          quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id,
+          originalUnitCostBs: movement.originalUnitCostBs ?? unitCostBs,
+          costScaleDate: movement.costScaleDate || date,
+          ...(movement.bcvRate !== undefined ? { bcvRate: Number(movement.bcvRate) } : {})
+        });
       }
       runningQuantity += quantity;
     } else if (movement.type === 'SALIDA') {
@@ -225,7 +268,12 @@ export function reconstructFifoLayers(
     } else if (movement.type === 'AJUSTE') {
       const delta = balanceQuantity - runningQuantity;
       if (delta > 1e-8) {
-        layers.push({ quantity: delta, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
+        layers.push({
+          quantity: delta, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id,
+          originalUnitCostBs: movement.originalUnitCostBs ?? unitCostBs,
+          costScaleDate: movement.costScaleDate || date,
+          ...(movement.bcvRate !== undefined ? { bcvRate: Number(movement.bcvRate) } : {})
+        });
       } else if (delta < -1e-8) {
         consumeLayers(Math.abs(delta), movement.documentRef || date);
       }
@@ -333,13 +381,16 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
   }
   let remaining = quantityToIssue;
-  const consumedLayers: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }> = [];
+  const consumedLayers: ConsumedFifoLayer[] = [];
   for (const layer of layers) {
     if (remaining <= 1e-8) break;
     const consumed = Math.min(remaining, layer.quantity);
     consumedLayers.push({
       sourceMovementId: layer.sourceMovementId, date: layer.date, documentRef: layer.documentRef,
-      quantity: consumed, unitCostBs: layer.unitCostBs, unitCostUsd: layer.unitCostUsd
+      quantity: consumed, unitCostBs: layer.unitCostBs, unitCostUsd: layer.unitCostUsd,
+      ...(layer.originalUnitCostBs !== undefined ? { originalUnitCostBs: layer.originalUnitCostBs } : {}),
+      ...(layer.costScaleDate ? { costScaleDate: layer.costScaleDate } : {}),
+      ...(layer.bcvRate !== undefined ? { bcvRate: layer.bcvRate } : {})
     });
     remaining -= consumed;
   }

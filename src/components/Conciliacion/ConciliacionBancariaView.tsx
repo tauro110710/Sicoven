@@ -29,6 +29,7 @@ import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
 import { calculateBankReconciliationBalances } from '../../types/bankStatementMatching';
+import { reexpressBsAmountToDate } from '../../types/bankAccountAvailability';
 import { requestNonBlockingConfirm } from '../../utils/safeAlert';
 
 export const ConciliacionBancariaView: React.FC = () => {
@@ -146,24 +147,40 @@ export const ConciliacionBancariaView: React.FC = () => {
     .filter(m => m.companyId === currentCompany.id && m.bankAccountId === activeBank.id && m.date <= cutoffDate)
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Cédula de conciliación: cada importe en Bs. se reexpresa desde su fecha
+  // contable a la escala vigente en la fecha de corte, para no mezclar
+  // bolívares de 2008, 2018 y 2021. Los importes en USD no se reconvierten.
+  const bookMovementsAtCutoff = bookMovements.map(row => ({
+    ...row,
+    debitBs: reexpressBsAmountToDate(row.debitBs, row.date, cutoffDate),
+    creditBs: reexpressBsAmountToDate(row.creditBs, row.date, cutoffDate)
+  }));
+  const statementMovementsAtCutoff = statementMovements.map(row => ({
+    ...row,
+    amountBs: reexpressBsAmountToDate(row.amountBs, row.date, cutoffDate)
+  }));
+
   // Cotejo y cédula: se calculan y validan los saldos en ambas monedas.
-  const depositsInTransit = bookMovements.filter(m => !m.isReconciled && m.debitBs > 0);
+  const depositsInTransit = bookMovementsAtCutoff.filter(m => !m.isReconciled && m.debitBs > 0);
   const totalDepositsInTransitBs = depositsInTransit.reduce((sum, m) => sum + m.debitBs, 0);
   const totalDepositsInTransitUsd = depositsInTransit.reduce((sum, m) => sum + m.debitUsd, 0);
 
-  const checksInTransit = bookMovements.filter(m => !m.isReconciled && m.creditBs > 0);
+  const checksInTransit = bookMovementsAtCutoff.filter(m => !m.isReconciled && m.creditBs > 0);
   const totalChecksInTransitBs = checksInTransit.reduce((sum, m) => sum + m.creditBs, 0);
   const totalChecksInTransitUsd = checksInTransit.reduce((sum, m) => sum + m.creditUsd, 0);
 
-  const bankDebitsNotInBooks = statementMovements.filter(m => !m.isReconciled && m.type === 'DEBIT');
+  const bankDebitsNotInBooks = statementMovementsAtCutoff.filter(m => !m.isReconciled && m.type === 'DEBIT');
   const totalBankDebitsNotInBooksBs = bankDebitsNotInBooks.reduce((sum, m) => sum + m.amountBs, 0);
   const totalBankDebitsNotInBooksUsd = bankDebitsNotInBooks.reduce((sum, m) => sum + m.amountUsd, 0);
 
-  const bankCreditsNotInBooks = statementMovements.filter(m => !m.isReconciled && m.type === 'CREDIT');
+  const bankCreditsNotInBooks = statementMovementsAtCutoff.filter(m => !m.isReconciled && m.type === 'CREDIT');
   const totalBankCreditsNotInBooksBs = bankCreditsNotInBooks.reduce((sum, m) => sum + m.amountBs, 0);
   const totalBankCreditsNotInBooksUsd = bankCreditsNotInBooks.reduce((sum, m) => sum + m.amountUsd, 0);
 
-  const reconciliationBalances = calculateBankReconciliationBalances({ bookMovements, statementMovements });
+  const reconciliationBalances = calculateBankReconciliationBalances({
+    bookMovements: bookMovementsAtCutoff,
+    statementMovements: statementMovementsAtCutoff
+  });
   const {
     bookBalanceBs, bankStatementBalanceBs, adjustedBankBalanceBs, adjustedBookBalanceBs, differenceBs,
     bookBalanceUsd, bankStatementBalanceUsd, adjustedBankBalanceUsd, adjustedBookBalanceUsd, differenceUsd

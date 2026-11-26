@@ -1,6 +1,6 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 import { isJournalEntryBalanced } from './journalEntryValidation';
-import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
+import { reexpressAmountBetweenDates } from '../utils/monetaryPolicy';
 
 export interface OpeningEntryBuildInput {
   companyId: string;
@@ -104,6 +104,17 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
   const priorEntries = latestAnnualOpening
     ? companyHistory.filter(entry => entry.date >= latestAnnualOpening.date)
     : companyHistory;
+  // Un cierre anual vigente ya trasladó el resultado del ejercicio al patrimonio.
+  // En ese caso la apertura no vuelve a calcularlo desde las cuentas nominales:
+  // el saldo patrimonial del cierre es la única fuente del resultado acumulado y
+  // así una reexpresión intermedia no puede duplicarlo ni perderlo por redondeo.
+  const annualClosingForPeriod = companyHistory.find(entry =>
+    entry.type === 'CIERRE' &&
+    String(entry.referenceDoc || '') === 'CIERRE:' + companyId + ':' + periodEndDate &&
+    entry.isAdjusted !== true &&
+    !reversedEntryIds.has(entry.id)
+  );
+  const closingDistributesResult = Boolean(annualClosingForPeriod);
 
   for (const entry of priorEntries) {
     const totals = emptyTotals();
@@ -127,20 +138,20 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
       totals.creditUsd += Number(line.creditUsd);
 
       if (account.type === 'INGRESOS') {
-        if (entry.date >= input.periodStartDate) {
-          profitLoss.bs += Number(convertVenezuelanAmountBetweenDates(String(Number(line.creditBs) - Number(line.debitBs)), entry.date, openingDate));
+        if (!closingDistributesResult && entry.date >= input.periodStartDate) {
+          profitLoss.bs += Number(reexpressAmountBetweenDates(Number(line.creditBs) - Number(line.debitBs), entry.date, openingDate));
           profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
         }
       } else if (account.type === 'COSTOS' || account.type === 'GASTOS') {
-        if (entry.date >= input.periodStartDate) {
+        if (!closingDistributesResult && entry.date >= input.periodStartDate) {
           // Costs and expenses reduce the period result (income less expenses).
-          profitLoss.bs += Number(convertVenezuelanAmountBetweenDates(String(Number(line.creditBs) - Number(line.debitBs)), entry.date, openingDate));
+          profitLoss.bs += Number(reexpressAmountBetweenDates(Number(line.creditBs) - Number(line.debitBs), entry.date, openingDate));
           profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
         }
       } else {
         const current = balances.get(account.code) || emptyTotals();
-        current.debitBs += Number(convertVenezuelanAmountBetweenDates(String(line.debitBs), entry.date, openingDate));
-        current.creditBs += Number(convertVenezuelanAmountBetweenDates(String(line.creditBs), entry.date, openingDate));
+        current.debitBs += Number(reexpressAmountBetweenDates(Number(line.debitBs), entry.date, openingDate));
+        current.creditBs += Number(reexpressAmountBetweenDates(Number(line.creditBs), entry.date, openingDate));
         current.debitUsd += Number(line.debitUsd);
         current.creditUsd += Number(line.creditUsd);
         balances.set(account.code, current);

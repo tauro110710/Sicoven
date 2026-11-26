@@ -1,3 +1,5 @@
+import type { ConsumedFifoLayer } from './inventoryAccounting';
+
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
 export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
 export type IvaRetentionAgentBasis = 'ARTICLE_1_SPECIAL_DESIGNATED' | 'ARTICLE_2_METALS' | 'ARTICLE_1_AND_2' | 'NOT_AGENT' | 'UNCONFIRMED';
@@ -680,9 +682,13 @@ export interface InventoryMovement {
   counterpartyName?: string;
   warehouseId?: string;
   /** Capas PEPS consumidas por salidas o restituidas por devoluciones, conservadas con su procedencia y costo original. */
-  consumedFifoLayers?: Array<{ sourceMovementId?: string; date?: string; documentRef?: string; quantity: number; unitCostBs: number; unitCostUsd: number }>;
+  consumedFifoLayers?: ConsumedFifoLayer[];
   /** Costo unitario aplicado por el método del artículo, distinto del costo digitado. */
   costingMethod?: InventoryCostingMethod;
+  /** Fecha contable que define la escala monetaria de `unitCostBs` cuando difiere de `date`. */
+  costScaleDate?: string;
+  /** Costo documentado antes de reexpresarse a la escala de `date`. */
+  originalUnitCostBs?: number;
   /** Fletes y gastos de importación asignados a esta entrada, en Bs. */
   additionalLandedCostsBs?: number;
 }
@@ -871,6 +877,8 @@ export interface BankAccount {
   currency: 'BS' | 'USD';
   initialBalanceBs: number;
   initialBalanceUsd: number;
+  /** Fecha contable que define la escala monetaria del saldo inicial. */
+  openingDate?: string;
   accountType?: 'CORRIENTE' | 'AHORRO';
   checkbookNumber?: string;
   accountHolderName?: string;

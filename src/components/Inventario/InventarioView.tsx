@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { formatBs, formatDate } from '../../utils/formatters';
 import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
+import { todayLocalIso } from '../../utils/localDate';
+import { resolveInventoryCostScale, valueInventoryAtDate } from '../../types/inventoryMonetaryReexpression';
 import type { InventoryProduct } from '../../types/accounting';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
@@ -46,6 +48,23 @@ export const InventarioView: React.FC = () => {
   // Fecha contable de valoración por artículo: su apertura o el inicio del ejercicio.
   const inventoryUsdDate = (product: InventoryProduct) => product.openingDate || `${Number(currentCompany.fiscalYear)}-01-01`;
   const allProductsUsdEligible = companyProducts.every(product => allowsUsdForOperationDate(inventoryUsdDate(product)));
+  // La valoración se presenta en la escala vigente: cada artículo se reexpresa
+  // desde su propia fecha de costo antes de sumarse a los demás.
+  const inventoryValuationDate = todayLocalIso();
+  const inventoryCostScaleDate = (product: InventoryProduct) => resolveInventoryCostScale({
+    productId: product.id,
+    movements: companyMovements,
+    openingDate: product.openingDate,
+    operationDate: inventoryValuationDate,
+    quantity: product.currentStock,
+    averageBs: product.avgCostBs
+  }).costScaleDate;
+  const productValueAtPresentation = (product: InventoryProduct, vnrBs: number) => valueInventoryAtDate([{
+    quantity: product.currentStock,
+    unitCostBs: product.avgCostBs,
+    costScaleDate: inventoryCostScaleDate(product),
+    provisionBs: vnrBs
+  }], inventoryValuationDate);
 
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
@@ -87,10 +106,12 @@ export const InventarioView: React.FC = () => {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   // Valuations
-  const totalInventoryValueBs = hasUnreconciledVnr ? null : companyProducts.reduce((sum, product) => {
-    const vnr = vnrLedgerBalances.get(product.id)!;
-    return sum + Math.max(0, product.currentStock * product.avgCostBs - vnr.provisionBs);
-  }, 0);
+  const totalInventoryValueBs = hasUnreconciledVnr ? null : valueInventoryAtDate(companyProducts.map(product => ({
+    quantity: product.currentStock,
+    unitCostBs: product.avgCostBs,
+    costScaleDate: inventoryCostScaleDate(product),
+    provisionBs: vnrLedgerBalances.get(product.id)!.provisionBs
+  })), inventoryValuationDate);
   const totalInventoryValueUsd = hasUnreconciledVnr ? null : companyProducts.reduce((sum, product) => {
     const vnr = vnrLedgerBalances.get(product.id)!;
     return sum + Math.max(0, product.currentStock * product.avgCostUsd - vnr.provisionUsd);
@@ -287,7 +308,7 @@ export const InventarioView: React.FC = () => {
                 ) : (
                   filteredProducts.map(prod => {
                     const vnrBalance = vnrLedgerBalances.get(prod.id) || null;
-                    const totalValBs = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostBs - vnrBalance.provisionBs) : null;
+                    const totalValBs = vnrBalance ? productValueAtPresentation(prod, vnrBalance.provisionBs) : null;
                     const totalValUsd = vnrBalance ? Math.max(0, prod.currentStock * prod.avgCostUsd - vnrBalance.provisionUsd) : null;
                     const isLow = prod.currentStock <= prod.minStock;
 

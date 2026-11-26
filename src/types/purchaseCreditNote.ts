@@ -1,6 +1,7 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+import { reexpressInventoryCostBs } from './inventoryMonetaryReexpression';
 
 export interface PurchaseCreditNoteLineRequest {
   productId: string;
@@ -219,7 +220,10 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     if (!Number.isFinite(currentStock) || currentStock < 0 || quantity > currentStock + 0.000001) {
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
-    let returnUnitCostBs = movementUnitCost;
+    // La devolución se documenta en la escala monetaria de su propia fecha: el
+    // costo original se reexpresa antes de valorar la salida de inventario.
+    const movementCostScaleDate = movement.costScaleDate || movement.date;
+    let returnUnitCostBs = reexpressInventoryCostBs(movementUnitCost, movementCostScaleDate, draft.returnDate);
     const returnUnitCostUsd = Number(movement.unitCostUsd ?? 0);
     if (!Number.isFinite(returnUnitCostUsd) || returnUnitCostUsd < 0) throw new Error('El costo USD de la entrada original no es válido.');
     if (product.costingMethod === 'PEPS') {
@@ -227,7 +231,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       if (!Number.isFinite(availableOriginalLayer) || availableOriginalLayer + 0.000001 < quantity) {
         throw new Error('La capa PEPS de la compra original no conserva existencia suficiente. No se puede devolver inventario de otra compra como si perteneciera a esta factura.');
       }
-      returnUnitCostBs = movementUnitCost;
+      returnUnitCostBs = reexpressInventoryCostBs(movementUnitCost, movementCostScaleDate, draft.returnDate);
     } else if (!Number.isFinite(Number(requested.currentAverageCostBs)) ||
         Math.abs(Number(requested.currentAverageCostBs) - effectiveLineUnitCost) > 0.01) {
       throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');

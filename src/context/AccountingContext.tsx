@@ -68,6 +68,8 @@ import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalT
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
+import { reexpressInventoryAverageCost, reexpressInventoryCostBs, reexpressInventoryCostLayers, resolveInventoryCostScale } from '../types/inventoryMonetaryReexpression';
+import { buildCostOfSalesLines, calculateLiveEntryCosting, calculateLiveIssueCosting } from '../types/inventoryLiveCosting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { isOperationDateWithinAccountingStart } from '../utils/isoDateValidation';
 import { buildBankAuxiliaryAccounts } from '../types/bankAccountAccounting';
@@ -3677,6 +3679,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (hasInventoryLines && purchaseData.inventoryLines!.length > 0) {
       const autoMovements: InventoryMovement[] = [];
       const productStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      // Fecha contable que define la escala del costo promedio almacenado de cada artículo.
+      const productCostScaleMap = new Map<string, string>();
       // Inicializar el mapa con el estado actual de cada producto implicado.
       for (const line of purchaseData.inventoryLines!) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
@@ -3696,20 +3700,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const unitCostBs = Number(line.unitCostBs);
         const landedCostsBs = Number(line.additionalLandedCostsBs || 0);
         const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
-        const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
         const unitCostUsd = rate > 0 ? toUsd(effectiveUnitCost) : pState.avgCostUsd;
-        // El total USD se deriva del total en Bs. ya redondeado para que la
-        // validación de SQLite concilie ambos importes a la tasa de la factura.
-        const totalCostUsd = toUsd(totalCostBs);
-        // Ponderar Bs y USD independientemente: la tasa nueva solo valora la entrada,
-        // nunca reexpresa el costo USD histórico de las existencias anteriores.
-        const weighted = calculateWeightedAverageCostDual(
-          pState.currentStock, pState.avgCostBs, pState.avgCostUsd,
-          qty, effectiveUnitCost, unitCostUsd
-        );
-        const newStock = weighted.quantity;
-        const newAverageBs = weighted.unitCostBs;
-        const newAverageUsd = weighted.unitCostUsd;
+        const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
+        // Un único helper resuelve la escala, reexpresa la existencia previa y
+        // pondera la entrada sin mezclar reconversiones.
+        const entry = calculateLiveEntryCosting({
+          productId: product.id,
+          movements,
+          openingDate: product.openingDate,
+          date: purchaseData.invoiceDate,
+          currentStock: pState.currentStock,
+          averageBs: pState.avgCostBs,
+          averageUsd: pState.avgCostUsd,
+          costingMethod: product.costingMethod,
+          currentScaleDate: productCostScaleMap.get(product.id),
+          quantity: qty,
+          unitCostBs: effectiveUnitCost,
+          unitCostUsd,
+          totalCostBs,
+          // El total USD se deriva del total en Bs. ya redondeado para que la
+          // validación de SQLite concilie ambos importes a la tasa de la factura.
+          totalCostUsd: toUsd(totalCostBs)
+        });
+        const newStock = entry.newStock;
+        const newAverageBs = entry.newAverageBs;
+        const newAverageUsd = entry.newAverageUsd;
         const movId = `mov-auto-pur-${purchaseId}-${line.productId}-${Date.now()}`;
         const autoMov: InventoryMovement = {
           id: movId,
@@ -3723,10 +3738,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           documentType: 'Factura',
           documentRef: `FAC-${purchaseData.invoiceNumber}`,
           quantity: qty,
-          unitCostBs: effectiveUnitCost,
-          unitCostUsd,
-          totalCostBs,
-          totalCostUsd,
+          unitCostBs: entry.unitCostBs,
+          unitCostUsd: entry.unitCostUsd,
+          totalCostBs: entry.totalCostBs,
+          totalCostUsd: entry.totalCostUsd,
           counterpartyRif: purchaseData.supplierRif,
           counterpartyName: purchaseData.supplierName,
           balanceQty: newStock,
@@ -3743,6 +3758,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           avgCostBs: newAverageBs,
           avgCostUsd: newAverageUsd
         });
+        productCostScaleMap.set(product.id, purchaseData.invoiceDate);
       }
       if (autoMovements.length > 0) {
         setMovements(prev => [...prev, ...autoMovements]);
@@ -3939,7 +3955,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
             unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
             balanceQty: item.balanceQty, id: item.id, concept: item.concept,
-            correctionForMovementId: item.correctionForMovementId
+            correctionForMovementId: item.correctionForMovementId, bcvRate: item.bcvRate
           }));
         const fifoLayers = reconstructFifoLayers(productHistory, product.currentStock);
         const normalizeRef = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -3962,9 +3978,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         fifoBalanceAfterReturnBs = Math.round(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) * 100) / 100;
         fifoBalanceAfterReturnUsd = Math.round(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) * 1000000) / 1000000;
       }
+      // El costo promedio se compara en la escala del movimiento original: no se
+      // contrastan importes de reconversiones distintas.
+      const originalCostScale = resolveInventoryCostScale({
+        productId: product.id,
+        movements,
+        openingDate: product.openingDate,
+        operationDate: originalMovement.date,
+        quantity: product.currentStock,
+        averageBs: product.avgCostBs
+      });
       return {
         product, originalMovement, quantity: requestedQuantity, previouslyReturnedQuantity: priorReturnedQuantity,
-        currentStock: product.currentStock, currentAverageCostBs: product.avgCostBs,
+        currentStock: product.currentStock,
+        currentAverageCostBs: originalCostScale.existingAverageBs,
         fifoLayerAvailableQuantity, fifoBalanceAfterReturnBs, fifoBalanceAfterReturnUsd
       };
     });
@@ -4059,9 +4086,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
           balanceQty: item.balanceQty, id: item.id, concept: item.concept,
           correctionForMovementId: item.correctionForMovementId,
-          consumedFifoLayers: item.consumedFifoLayers
+          consumedFifoLayers: item.consumedFifoLayers, bcvRate: item.bcvRate
         }));
-      const layers = reconstructFifoLayers(history, product.currentStock).map(layer => ({ ...layer }));
+      const layers = reexpressInventoryCostLayers(reconstructFifoLayers(history, product.currentStock), request.returnDate);
       for (const returnedLine of valuation.lines.filter(item => item.productId === product.id)) {
         const layer = layers.find(item => item.sourceMovementId === returnedLine.originalMovementId);
         if (!layer || Number(layer.quantity) + 0.000001 < Number(returnedLine.quantity)) {
@@ -4099,7 +4126,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           unitCostUsd: returnedLine.unitCostUsd,
           totalCostBs: returnedLine.inventoryCostBs, totalCostUsd: returnedLine.inventoryCostUsd,
           balanceQty: newStock,
-          balanceTotalBs: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.bs) : Math.round(newStock * product.avgCostBs * 100) / 100,
+          balanceTotalBs: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.bs) : Math.round(newStock * resolveInventoryCostScale({
+            productId: product.id,
+            movements,
+            openingDate: product.openingDate,
+            operationDate: request.returnDate,
+            quantity: product.currentStock,
+            averageBs: product.avgCostBs
+          }).existingAverageBs * 100) / 100,
           balanceTotalUsd: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.usd) : Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
           journalEntryId: journalId, correctionForMovementId: returnedLine.originalMovementId,
           bcvRate: rate, documentType: 'Nota de crédito proveedor',
@@ -4875,6 +4909,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const saleAutoMovements: InventoryMovement[] = [];
       const cogsItems: JournalEntryItem[] = [];
       const saleProductStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      const saleProductCostScaleMap = new Map<string, string>();
       // Consolidar líneas repetidas por producto para que PEPS consuma el stock virtual secuencialmente.
       const consolidatedSaleInventoryLines = Array.from(saleData.inventoryLines!.reduce((map, line) => {
         const productId = String(line.productId || '').trim();
@@ -4903,26 +4938,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         let totalCostUsd = 0;
         let unitCostBs = 0;
         let unitCostUsd = 0;
-        let consumedFifoLayers: InventoryMovement['consumedFifoLayers'];
-        if (product.costingMethod === 'PEPS') {
-          const history = movements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, pState.currentStock);
-          const fifoResult = calculateFifoIssue(layers, qty);
-          totalCostBs = fifoResult.totalCostBs;
-          totalCostUsd = fifoResult.totalCostUsd;
-          unitCostBs = fifoResult.unitCostBs;
-          unitCostUsd = fifoResult.unitCostUsd;
-          consumedFifoLayers = fifoResult.consumedLayers;
-        } else {
-          unitCostBs = pState.avgCostBs;
-          unitCostUsd = pState.avgCostUsd;
-          totalCostBs = Math.round(qty * unitCostBs * 100) / 100;
-          totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
-        }
-        const newStock = Math.max(0, pState.currentStock - qty);
-        const newAverageBs = newStock > 0 ? pState.avgCostBs : 0;
-        // El saldo USD remanente conserva su costo promedio histórico; no se reexpresa con la tasa de venta.
-        const newAverageUsd = newStock > 0 ? pState.avgCostUsd : 0;
+        // Un único helper reexpresa las capas PEPS o el promedio a la fecha de la
+        // venta y devuelve el costo de venta y el saldo remanente.
+        const issue = calculateLiveIssueCosting({
+          productId: product.id,
+          movements,
+          openingDate: product.openingDate,
+          date: saleData.invoiceDate,
+          currentStock: pState.currentStock,
+          averageBs: pState.avgCostBs,
+          averageUsd: pState.avgCostUsd,
+          costingMethod: product.costingMethod,
+          currentScaleDate: saleProductCostScaleMap.get(product.id),
+          quantity: qty
+        });
+        totalCostBs = issue.totalCostBs;
+        totalCostUsd = issue.totalCostUsd;
+        unitCostBs = issue.unitCostBs;
+        unitCostUsd = issue.unitCostUsd;
+        const consumedFifoLayers = issue.consumedFifoLayers;
+        const newStock = issue.newStock;
+        const newAverageBs = issue.newAverageBs;
+        const newAverageUsd = issue.newAverageUsd;
         const saleMovId = `mov-auto-sale-${saleId}-${line.productId}-${Date.now()}`;
         const saleAutoMov: InventoryMovement = {
           id: saleMovId,
@@ -4954,14 +4991,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           avgCostBs: newAverageBs,
           avgCostUsd: newAverageUsd
         });
+        saleProductCostScaleMap.set(product.id, saleData.invoiceDate);
         // Acumular costo de ventas para el asiento.
         const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
         const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
-        if (cogsAccount && inventoryAccount && totalCostBs > 0) {
-          cogsItems.push(
-            { accountCode: cogsAccount.code, accountName: cogsAccount.name, debitBs: totalCostBs, creditBs: 0, debitUsd: totalCostUsd, creditUsd: 0, description: `CMV ${product.code} · ${qty} und · Fac. ${saleData.invoiceNumber}` },
-            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalCostBs, debitUsd: 0, creditUsd: totalCostUsd, description: `Salida inventario ${product.code} · venta Fac. ${saleData.invoiceNumber}` }
-          );
+        if (cogsAccount && inventoryAccount) {
+          cogsItems.push(...buildCostOfSalesLines({
+            productCode: product.code, quantity: qty, invoiceNumber: saleData.invoiceNumber,
+            costOfSalesAccount: cogsAccount, inventoryAccount,
+            totalCostBs, totalCostUsd
+          }));
         }
       }
       if (saleAutoMovements.length > 0) {
@@ -5563,83 +5602,98 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (isAdjustment && (!Number.isFinite(targetStock) || targetStock < 0 || quantity < 0.00000001)) {
         throw new Error('Fila ' + (index + 2) + ': indique una existencia final de ajuste distinta de la actual.');
       }
+      // La escala del costo promedio almacenado la define el último movimiento
+      // del artículo (los movimientos se importan en orden cronológico).
+      const { costScaleDate, existingAverageBs } = resolveInventoryCostScale({
+        productId: product.id,
+        movements: virtualMovements,
+        openingDate: product.openingDate,
+        operationDate: row.date,
+        quantity: product.currentStock,
+        averageBs: product.avgCostBs
+      });
       let unitCostBs = requestedCost;
       let unitCostUsd = rate > 0 ? effectiveUnitCost / rate : 0;
       let totalCostBs = 0;
       let totalCostUsd = 0;
       let newAverageUsd = Number(product.avgCostUsd || 0);
-      let salidaFifoUsdCost: number | null = null;
       let salidaFifoConsumedLayers: InventoryMovement['consumedFifoLayers'];
       let newStock = product.currentStock;
-      let newAverageBs = product.avgCostBs;
+      let newAverageBs = existingAverageBs;
       let movementQuantity = Number(row.quantity);
       if (row.type === 'ENTRADA') {
-        unitCostBs = effectiveUnitCost;
-        const weighted = calculateWeightedAverageCostDual(
-          product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0),
-          Number(row.quantity), effectiveUnitCost, unitCostUsd
-        );
-        newStock = weighted.quantity; newAverageBs = weighted.unitCostBs; newAverageUsd = weighted.unitCostUsd;
-        totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
-        totalCostUsd = Math.round(Number(row.quantity) * unitCostUsd * 1000000) / 1000000;
+        const entry = calculateLiveEntryCosting({
+          productId: product.id,
+          movements: virtualMovements,
+          openingDate: product.openingDate,
+          date: row.date,
+          currentStock: product.currentStock,
+          averageBs: product.avgCostBs,
+          averageUsd: Number(product.avgCostUsd || 0),
+          costingMethod: product.costingMethod,
+          currentScaleDate: costScaleDate,
+          quantity: Number(row.quantity),
+          unitCostBs: effectiveUnitCost,
+          unitCostUsd
+        });
+        unitCostBs = entry.unitCostBs;
+        unitCostUsd = entry.unitCostUsd;
+        newStock = entry.newStock;
+        newAverageBs = entry.newAverageBs;
+        newAverageUsd = entry.newAverageUsd;
+        totalCostBs = entry.totalCostBs;
+        totalCostUsd = entry.totalCostUsd;
       } else if (row.type === 'SALIDA') {
-        if (product.costingMethod === 'PEPS') {
-          const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, product.currentStock);
-          const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
-          const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
-          const fifoIssue = calculateFifoIssue(layers, Number(row.quantity));
-          totalCostBs = fifoIssue.totalCostBs;
-          salidaFifoUsdCost = fifoIssue.totalCostUsd;
-          salidaFifoConsumedLayers = fifoIssue.consumedLayers;
-          unitCostUsd = fifoIssue.unitCostUsd;
-          newStock = Math.max(0, product.currentStock - Number(row.quantity));
-          newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
-          newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - fifoIssue.totalCostUsd) / newStock : 0;
-        } else {
-          unitCostBs = Number(product.avgCostBs || 0);
-          unitCostUsd = Number(product.avgCostUsd || 0);
-          totalCostBs = Math.round(Number(row.quantity) * unitCostBs * 100) / 100;
-          totalCostUsd = Math.round(Number(row.quantity) * unitCostUsd * 1000000) / 1000000;
-        }
-        if (product.costingMethod === 'PEPS') unitCostBs = totalCostBs / Number(row.quantity);
-        newStock = Math.max(0, product.currentStock - Number(row.quantity));
+        const issue = calculateLiveIssueCosting({
+          productId: product.id,
+          movements: virtualMovements,
+          openingDate: product.openingDate,
+          date: row.date,
+          currentStock: product.currentStock,
+          averageBs: product.avgCostBs,
+          averageUsd: Number(product.avgCostUsd || 0),
+          costingMethod: product.costingMethod,
+          currentScaleDate: costScaleDate,
+          quantity: Number(row.quantity)
+        });
+        unitCostBs = issue.unitCostBs;
+        unitCostUsd = issue.unitCostUsd;
+        totalCostBs = issue.totalCostBs;
+        totalCostUsd = issue.totalCostUsd;
+        newStock = issue.newStock;
+        newAverageBs = issue.newAverageBs;
+        newAverageUsd = issue.newAverageUsd;
+        salidaFifoConsumedLayers = issue.consumedFifoLayers;
       } else {
         movementQuantity = quantity;
         newStock = targetStock;
         if (product.costingMethod === 'PEPS') {
           const history = virtualMovements.filter(m => m.companyId === targetCompany.id && m.productId === product.id);
-          const layers = reconstructFifoLayers(history, product.currentStock);
+          const layers = reexpressInventoryCostLayers(reconstructFifoLayers(history, product.currentStock), row.date);
           const fifoAdjustment = applyFifoAdjustment(layers, targetStock - product.currentStock,
             requestedCost, rate > 0 ? requestedCost / rate : 0, row.date, row.documentRef);
           totalCostBs = fifoAdjustment.totalCostBs;
-          unitCostBs = fifoAdjustment.unitCostBs;
-          unitCostUsd = fifoAdjustment.unitCostUsd;
-          var adjustmentUsd = fifoAdjustment.totalCostUsd;
+          unitCostUsd = fifoAdjustment.totalCostUsd;
+          unitCostBs = fifoAdjustment.unitCostUsd;
           newAverageBs = newStock > 0 ? fifoAdjustment.balanceTotalBs / newStock : 0;
-          var adjustmentAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
+          newAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
         } else if (targetStock > product.currentStock) {
           unitCostBs = requestedCost;
           unitCostUsd = rate > 0 ? requestedCost / rate : 0;
           const weighted = calculateWeightedAverageCostDual(
-            product.currentStock, product.avgCostBs, Number(product.avgCostUsd || 0),
+            product.currentStock, existingAverageBs, Number(product.avgCostUsd || 0),
             quantity, requestedCost, unitCostUsd
           );
           newAverageBs = weighted.unitCostBs; newAverageUsd = weighted.unitCostUsd;
           totalCostBs = Math.round(quantity * requestedCost * 100) / 100;
           totalCostUsd = Math.round(quantity * unitCostUsd * 1000000) / 1000000;
         } else {
-          unitCostBs = Number(product.avgCostBs || 0);
+          unitCostBs = existingAverageBs;
           unitCostUsd = Number(product.avgCostUsd || 0);
           totalCostBs = Math.round(quantity * unitCostBs * 100) / 100;
           totalCostUsd = Math.round(quantity * unitCostUsd * 1000000) / 1000000;
         }
         if (quantity > 0) { unitCostBs = totalCostBs / quantity; unitCostUsd = totalCostUsd / quantity; }
-      }
-      if (row.type === 'SALIDA' && product.costingMethod === 'PEPS') totalCostUsd = salidaFifoUsdCost ?? totalCostUsd;
-      if (row.type === 'AJUSTE' && product.costingMethod === 'PEPS') {
-        totalCostUsd = adjustmentUsd!;
-        newAverageUsd = adjustmentAverageUsd!;
       }
       if (expectedBalanceQty !== undefined && (!Number.isFinite(expectedBalanceQty) || Math.abs(expectedBalanceQty - newStock) > 0.000001)) {
         throw new Error('Fila ' + (index + 2) + ': la existencia final declarada (' + expectedBalanceQty + ') no coincide con la existencia calculada (' + newStock + ') para ' + product.code + '. Revise el orden y los movimientos previos.');
@@ -6073,6 +6127,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prior = movements.filter(m => m.companyId === currentCompany.id && m.productId === prod.id)
       .slice().sort((a, b) => a.date.localeCompare(b.date));
     if (prior.length && movData.date < prior[prior.length - 1].date) throw new Error('El movimiento está fechado antes del último registro del Kardex. Importe primero los períodos históricos en orden cronológico para evitar saldos y costos incorrectos.');
+    // Helper único de escala: resuelve la fecha del costo vigente y reexpresa el
+    // promedio existente a la fecha del movimiento.
+    const { costScaleDate, existingAverageBs } = resolveInventoryCostScale({
+      productId: prod.id,
+      movements: prior,
+      openingDate: prod.openingDate,
+      operationDate: movData.date,
+      quantity: prod.currentStock,
+      averageBs: prod.avgCostBs
+    });
+    const customerReturnOriginal = movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE' && movData.correctionForMovementId
+      ? movements.find(m => m.id === movData.correctionForMovementId && m.companyId === currentCompany.id)
+      : undefined;
+    // Una devolución de cliente revierte el costo original de la venta, expresado
+    // en la escala de la fecha de la devolución, no un costo digitado a mano.
+    const entryUnitCostBs = customerReturnOriginal
+      ? reexpressInventoryCostBs(customerReturnOriginal.unitCostBs, customerReturnOriginal.costScaleDate || customerReturnOriginal.date, movData.date)
+      : effectiveUnitCost;
     let unitCostBs = requestedCost;
     // Helper seguro: si no hay tasa, equivalencia USD = 0 (pendiente).
     const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
@@ -6080,53 +6152,60 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let totalCostBs = 0;
     let totalCostUsd = 0;
     let newStock = prod.currentStock;
-    let newAverageBs = prod.avgCostBs;
-    let newAverageUsd = rate > 0 ? toUsd(prod.avgCostBs) : Number(prod.avgCostUsd || 0);
+    let newAverageBs = existingAverageBs;
+    let newAverageUsd = rate > 0 ? toUsd(existingAverageBs) : Number(prod.avgCostUsd || 0);
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {
-      unitCostBs = effectiveUnitCost;
-      unitCostUsd = toUsd(unitCostBs);
-      // Preservar la valoración USD histórica del inventario existente, aunque haya una tasa BCV
-      // nueva para la entrada: Bs y USD se ponderan independientemente para evitar revaluación retroactiva.
-      const weighted = calculateWeightedAverageCostDual(
-        prod.currentStock, prod.avgCostBs, Number(prod.avgCostUsd || 0),
-        Number(movData.quantity), effectiveUnitCost, unitCostUsd
-      );
-      newStock = weighted.quantity;
-      newAverageBs = weighted.unitCostBs;
-      newAverageUsd = weighted.unitCostUsd;
-      totalCostBs = Math.round(Number(movData.quantity) * effectiveUnitCost * 100) / 100;
-      totalCostUsd = toUsd(totalCostBs);
+      const entry = calculateLiveEntryCosting({
+        productId: prod.id,
+        movements: prior,
+        openingDate: prod.openingDate,
+        date: movData.date,
+        currentStock: prod.currentStock,
+        averageBs: prod.avgCostBs,
+        averageUsd: Number(prod.avgCostUsd || 0),
+        costingMethod: prod.costingMethod,
+        currentScaleDate: costScaleDate,
+        quantity: Number(movData.quantity),
+        unitCostBs: entryUnitCostBs,
+        unitCostUsd: customerReturnOriginal ? Number(customerReturnOriginal.unitCostUsd || 0) : toUsd(entryUnitCostBs),
+        totalCostBs: Math.round(Number(movData.quantity) * entryUnitCostBs * 100) / 100
+      });
+      unitCostBs = entry.unitCostBs;
+      unitCostUsd = entry.unitCostUsd;
+      newStock = entry.newStock;
+      newAverageBs = entry.newAverageBs;
+      newAverageUsd = entry.newAverageUsd;
+      totalCostBs = entry.totalCostBs;
+      totalCostUsd = entry.totalCostUsd;
     } else if (movData.type === 'SALIDA') {
-      if (prod.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(prior, prod.currentStock);
-        const fifoLayerValueBs = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
-        const fifoLayerValueUsd = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0);
-        const fifo = calculateFifoIssue(layers, Number(movData.quantity));
-        totalCostBs = fifo.totalCostBs;
-        totalCostUsd = fifo.totalCostUsd;
-        unitCostBs = fifo.unitCostBs;
-        unitCostUsd = fifo.unitCostUsd;
-        newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
-        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValueBs - totalCostBs) / newStock : 0;
-        newAverageUsd = newStock > 0 ? Math.max(0, fifoLayerValueUsd - totalCostUsd) / newStock : 0;
-      } else {
-        unitCostBs = prod.avgCostBs;
-        // La salida por promedio consume el costo histórico en USD, no lo convierte
-        // nuevamente usando la tasa del día de salida.
-        unitCostUsd = Number(prod.avgCostUsd || 0);
-        totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = Math.round(Number(movData.quantity) * unitCostUsd * 1000000) / 1000000;
-        newStock = prod.currentStock - Number(movData.quantity);
-      }
+      const issue = calculateLiveIssueCosting({
+        productId: prod.id,
+        movements: prior,
+        openingDate: prod.openingDate,
+        date: movData.date,
+        currentStock: prod.currentStock,
+        averageBs: prod.avgCostBs,
+        averageUsd: Number(prod.avgCostUsd || 0),
+        costingMethod: prod.costingMethod,
+        currentScaleDate: costScaleDate,
+        quantity: Number(movData.quantity)
+      });
+      unitCostBs = issue.unitCostBs;
+      unitCostUsd = issue.unitCostUsd;
+      totalCostBs = issue.totalCostBs;
+      totalCostUsd = issue.totalCostUsd;
+      newStock = issue.newStock;
+      newAverageBs = issue.newAverageBs;
+      newAverageUsd = issue.newAverageUsd;
     } else {
       movementQuantity = actualQuantity;
       const targetStock = Number(movData.balanceQty);
       if (!Number.isFinite(targetStock) || targetStock < 0) throw new Error('La existencia final del ajuste no es válida.');
       newStock = targetStock;
       if (prod.costingMethod === 'PEPS') {
-        const layers = reconstructFifoLayers(prior, prod.currentStock);
+        const layers = reexpressInventoryCostLayers(reconstructFifoLayers(prior, prod.currentStock), movData.date);
         const fifoAdjustment = applyFifoAdjustment(layers, targetStock - prod.currentStock,
           requestedCost, toUsd(requestedCost), movData.date, movData.documentRef);
         totalCostBs = fifoAdjustment.totalCostBs;
@@ -6137,11 +6216,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newAverageUsd = newStock > 0 ? fifoAdjustment.balanceTotalUsd / newStock : 0;
       } else {
         if (targetStock > prod.currentStock) {
-          const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, targetStock - prod.currentStock, requestedCost, rate);
+          const weighted = calculateWeightedAverageCost(prod.currentStock, existingAverageBs, targetStock - prod.currentStock, requestedCost, rate);
           newAverageBs = weighted.unitCostBs;
           newAverageUsd = weighted.unitCostUsd;
         }
-        totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
+        totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? existingAverageBs : requestedCost) * 100) / 100;
         totalCostUsd = toUsd(totalCostBs);
         unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
         unitCostUsd = toUsd(unitCostBs);
@@ -6211,8 +6290,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setMovements(prev => [...prev, newMov]);
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
-      lastCostBs: movData.type === 'ENTRADA' ? effectiveUnitCost : p.lastCostBs,
-      lastCostUsd: movData.type === 'ENTRADA' ? toUsd(effectiveUnitCost) : p.lastCostUsd
+      lastCostBs: movData.type === 'ENTRADA' ? entryUnitCostBs : p.lastCostBs,
+      lastCostUsd: movData.type === 'ENTRADA' ? toUsd(entryUnitCostBs) : p.lastCostUsd
     } : p));
     if (generatedEntries.length > 0) setJournalEntries(prev => [...prev, ...generatedEntries]);
     return newMov;
@@ -6273,29 +6352,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
       if (!Number.isFinite(requiredQuantity) || requiredQuantity <= 0) throw new Error('La cantidad requerida para ' + component.code + ' no es válida.');
       if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
-      let totalBs = 0;
-      let totalUsd = 0;
-      let componentNewAverageBs = component.avgCostBs;
-      let componentNewAverageUsd = component.avgCostUsd;
-      if (component.costingMethod === 'PEPS') {
-        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id);
-        const layers = reconstructFifoLayers(history, component.currentStock);
-        const availableLayers = layers.reduce((sum, layer) => sum + layer.quantity, 0);
-        if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
-        const fifoLayerValueBs = layers.reduce((sum, layer) => layer.quantity > 0 ? sum + layer.quantity * layer.unitCostBs : sum, 0);
-        const fifoLayerValueUsd = layers.reduce((sum, layer) => layer.quantity > 0 ? sum + layer.quantity * layer.unitCostUsd : sum, 0);
-        const fifoIssue = calculateFifoIssue(layers, requiredQuantity);
-        totalBs = fifoIssue.totalCostBs;
-        totalUsd = fifoIssue.totalCostUsd;
-        const remainingQuantity = Math.max(0, component.currentStock - requiredQuantity);
-        componentNewAverageBs = remainingQuantity > 0 ? Math.max(0, fifoLayerValueBs - totalBs) / remainingQuantity : 0;
-        componentNewAverageUsd = remainingQuantity > 0 ? Math.max(0, fifoLayerValueUsd - totalUsd) / remainingQuantity : 0;
-      } else {
-        totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
-        totalUsd = Math.round(requiredQuantity * Number(component.avgCostUsd || 0) * 1000000) / 1000000;
-      }
-      const unitCostBs = totalBs / requiredQuantity;
-      const unitCostUsd = totalUsd / requiredQuantity;
+      // El consumo de producción usa el mismo helper de salida que ventas e
+      // importaciones: reexpresa capas o promedio a la fecha de la orden.
+      const componentIssue = calculateLiveIssueCosting({
+        productId: component.id,
+        movements,
+        openingDate: component.openingDate,
+        date,
+        currentStock: component.currentStock,
+        averageBs: component.avgCostBs,
+        averageUsd: Number(component.avgCostUsd || 0),
+        costingMethod: component.costingMethod,
+        quantity: requiredQuantity
+      });
+      const totalBs = componentIssue.totalCostBs;
+      const totalUsd = componentIssue.totalCostUsd;
+      const unitCostBs = componentIssue.unitCostBs;
+      const unitCostUsd = componentIssue.unitCostUsd;
+      const componentNewAverageBs = componentIssue.newAverageBs;
+      const componentNewAverageUsd = componentIssue.newAverageUsd;
       totalProductionCostBs += totalBs;
       totalProductionCostUsd += totalUsd;
       const inventoryCode = component.inventoryAccountCode || getDefaultInventoryAccountCode(component.itemType);
@@ -6306,9 +6381,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
         date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
         quantity: requiredQuantity, unitCostBs, unitCostUsd, totalCostBs: totalBs, totalCostUsd: totalUsd,
-        balanceQty: Math.max(0, component.currentStock - requiredQuantity),
-        balanceTotalBs: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageBs * 100) / 100,
-        balanceTotalUsd: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageUsd * 1000000) / 1000000,
+        balanceQty: componentIssue.newStock,
+        balanceTotalBs: componentIssue.balanceTotalBs,
+        balanceTotalUsd: componentIssue.balanceTotalUsd,
         bcvRate: rate, costingMethod: component.costingMethod
       };
       movementsToAdd.push(outMovement);
@@ -6316,20 +6391,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalUsd, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
         { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Salida de materia prima: ' + component.code }
       );
-      productUpdates.set(component.id, { ...component, currentStock: Math.max(0, component.currentStock - requiredQuantity), avgCostBs: componentNewAverageBs, avgCostUsd: componentNewAverageUsd });
+      productUpdates.set(component.id, { ...component, currentStock: componentIssue.newStock, avgCostBs: componentNewAverageBs, avgCostUsd: componentNewAverageUsd });
     }
     totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
     const productionUnitCostBs = totalProductionCostBs / outputQuantity;
     const productionUnitCostUsd = totalProductionCostUsd / outputQuantity;
-    const weightedFinished = calculateWeightedAverageCostDual(
-      finished.currentStock, finished.avgCostBs, Number(finished.avgCostUsd || 0),
-      outputQuantity, productionUnitCostBs, productionUnitCostUsd
-    );
+    const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
+    // La entrada del producto terminado usa el mismo helper que compras y ventas.
+    const finishedEntry = calculateLiveEntryCosting({
+      productId: finished.id,
+      movements,
+      openingDate: finished.openingDate,
+      date,
+      currentStock: finished.currentStock,
+      averageBs: finished.avgCostBs,
+      averageUsd: Number(finished.avgCostUsd || 0),
+      costingMethod: finished.costingMethod,
+      quantity: outputQuantity,
+      unitCostBs: productionUnitCostBs,
+      unitCostUsd: productionUnitCostUsd,
+      totalCostBs: totalFinishedBs,
+      totalCostUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000
+    });
     const finishedInventoryCode = finished.inventoryAccountCode || getDefaultInventoryAccountCode(finished.itemType);
     const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
     if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
     if (finished.itemType === 'PRODUCTO_EN_PROCESO' && finishedInventoryCode !== '1.1.4.04') throw new Error('El producto en proceso debe estar asociado a la cuenta 1.1.4.04.');
-    const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
     if (finished.itemType !== 'PRODUCTO_EN_PROCESO') {
       journalItems.push(
         { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
@@ -6345,14 +6432,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       id: 'mov-prod-finished-' + Date.now(), companyId: currentCompany.id, productId: finished.id, productName: finished.name, productCode: finished.code,
       date, type: 'ENTRADA', concept: 'PRODUCCION', documentRef: entry.referenceDoc || '', documentType: 'Orden de producción',
       quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostUsd,
-      totalCostBs: totalFinishedBs, totalCostUsd: Math.round(totalProductionCostUsd * 1000000) / 1000000, balanceQty: weightedFinished.quantity,
-      balanceTotalBs: weightedFinished.totalCostBs, balanceTotalUsd: weightedFinished.totalCostUsd,
+      totalCostBs: finishedEntry.totalCostBs, totalCostUsd: finishedEntry.totalCostUsd, balanceQty: finishedEntry.newStock,
+      balanceTotalBs: finishedEntry.balanceTotalBs, balanceTotalUsd: finishedEntry.balanceTotalUsd,
       bcvRate: rate, costingMethod: finished.costingMethod, journalEntryId: entry.id
     };
     movementsToAdd.push(finishedMovement);
     productUpdates.set(finished.id, {
-      ...finished, currentStock: weightedFinished.quantity, avgCostBs: weightedFinished.unitCostBs,
-      avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostUsd
+      ...finished, currentStock: finishedEntry.newStock, avgCostBs: finishedEntry.newAverageBs,
+      avgCostUsd: finishedEntry.newAverageUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostUsd
     });
     const persistenceConfirmation = waitForPersistence();
     setProducts(prev => prev.map(product => productUpdates.get(product.id) || product));
@@ -7201,24 +7288,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
     const { bcvRate: _openingBcvRate, parentAccountCode: _parentAccountCode, ...bankFields } = bankData;
-    const newBank: BankAccount = { ...bankFields, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
-    // La validación del asiento debe reconocer el auxiliar recién generado.
-    // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
-    if (hasOpeningBalance && equity) {
-      // Usar la fecha histórica del saldo inicial si el contador la proporcionó;
-      // si no, usar la fecha de hoy. El asiento de apertura queda en la fecha
-      // real de la cuenta, no en la fecha en que el contador la registró en SICOVEN.
-      let openingEntryDate: string;
+    // Fecha contable que define la escala monetaria del saldo inicial. Se usa la
+    // fecha histórica declarada por el contador; si falta o es inválida, la de hoy.
+    const openingDateValue = (() => {
       const candidateDate = bankData.openingDate;
       if (candidateDate && /^\d{4}-\d{2}-\d{2}$/.test(candidateDate)) {
         const parsed = new Date(candidateDate + 'T00:00:00.000Z');
-        openingEntryDate = Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidateDate
-          ? candidateDate
-          : (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
-      } else {
-        const now = new Date();
-        openingEntryDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidateDate) return candidateDate;
       }
+      const now = new Date();
+      return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    })();
+    const newBank: BankAccount = { ...bankFields, openingDate: openingDateValue, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    // La validación del asiento debe reconocer el auxiliar recién generado.
+    // Se valida contra el catálogo proyectado y luego se guardan ambos estados juntos.
+    if (hasOpeningBalance && equity) {
+      // El asiento de apertura queda en la fecha real de la cuenta, no en la
+      // fecha en que el contador la registró en SICOVEN.
+      const openingEntryDate = openingDateValue;
       addJournalEntry({
         entryNumber: 0, date: openingEntryDate,
         description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,

@@ -61,8 +61,8 @@ test('conserva el orden original de movimientos del mismo día para PEPS', () =>
   assert.equal(result.movements[2].totalCostBs, 40);
   assert.equal(result.movements[2].totalCostUsd, 0.4);
   assert.deepEqual(result.movements[2].consumedFifoLayers, [
-    { sourceMovementId: 'layer-first', documentRef: 'layer-first', date: '2010-01-01', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 },
-    { sourceMovementId: 'layer-second', documentRef: 'layer-second', date: '2010-01-01', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 }
+    { sourceMovementId: 'layer-first', documentRef: 'layer-first', date: '2010-01-01', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, originalUnitCostBs: 10, costScaleDate: '2010-01-02', bcvRate: 100 },
+    { sourceMovementId: 'layer-second', documentRef: 'layer-second', date: '2010-01-01', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2, originalUnitCostBs: 20, costScaleDate: '2010-01-02', bcvRate: 100 }
   ]);
   assert.equal(result.products[0].currentStock, 1);
   assert.equal(result.products[0].avgCostBs, 20);
@@ -122,12 +122,12 @@ test('PEPS devuelve unidades a las capas originales y las ventas posteriores las
   assert.equal(result.movements[3].totalCostBs, 20);
   assert.equal(result.movements[3].totalCostUsd, 0.2);
   assert.deepEqual(result.movements[3].consumedFifoLayers, [
-    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1 }
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 2, unitCostBs: 10, unitCostUsd: 0.1, originalUnitCostBs: 10, costScaleDate: '2010-01-03', bcvRate: 100 }
   ]);
   assert.equal(result.movements[4].totalCostBs, 30, 'consume primero la capa restante anterior y luego la capa restitituida, con sus costos fuente');
   assert.deepEqual(result.movements[4].consumedFifoLayers, [
-    { sourceMovementId: 'layer-second', date: '2010-01-01', documentRef: 'layer-second', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2 },
-    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1 }
+    { sourceMovementId: 'layer-second', date: '2010-01-01', documentRef: 'layer-second', quantity: 1, unitCostBs: 20, unitCostUsd: 0.2, originalUnitCostBs: 20, costScaleDate: '2010-01-04', bcvRate: 100 },
+    { sourceMovementId: 'layer-first', date: '2010-01-03', documentRef: 'layer-first', quantity: 1, unitCostBs: 10, unitCostUsd: 0.1, originalUnitCostBs: 10, costScaleDate: '2010-01-04', bcvRate: 100 }
   ]);
   assert.equal(result.products[0].currentStock, 1);
 });

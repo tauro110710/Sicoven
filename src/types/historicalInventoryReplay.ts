@@ -1,6 +1,10 @@
 import type { InventoryMovement, InventoryProduct } from './accounting';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
-import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
+import {
+  reexpressInventoryAverageCost,
+  reexpressInventoryCostBs,
+  reexpressInventoryCostLayers
+} from './inventoryMonetaryReexpression';
 import {
   applyFifoAdjustment,
   calculateFifoIssue,
@@ -46,25 +50,30 @@ const validDate = (value: string): boolean => {
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
 const validNonNegative = (value: number): boolean => Number.isFinite(value) && value >= 0;
 
+/**
+ * Reexpresa el movimiento a la escala del día que se está reconstruyendo.
+ * Cada capa se convierte desde su propia fecha de escala, nunca desde la fecha
+ * del movimiento que la consume, para no reinterpretar una capa ya reexpresada.
+ */
 const toFifoSnapshot = (movement: InventoryMovement, targetDate = movement.date): FifoMovementSnapshot => ({
   id: movement.id,
   type: movement.type,
   concept: movement.concept,
   quantity: movement.quantity,
-  unitCostBs: movement.unitCostBs > 0 && validDate(movement.date) && validDate(targetDate)
-    ? Number(convertVenezuelanAmountBetweenDates(movement.unitCostBs, movement.date, targetDate))
+  unitCostBs: validDate(movement.date) && validDate(targetDate)
+    ? reexpressInventoryCostBs(movement.unitCostBs, movement.date, targetDate)
     : movement.unitCostBs,
   unitCostUsd: movement.unitCostUsd,
   date: movement.date,
   documentRef: movement.documentRef,
   balanceQty: movement.balanceQty,
   correctionForMovementId: movement.correctionForMovementId,
-  consumedFifoLayers: movement.consumedFifoLayers?.map(layer => ({
-    ...layer,
-    unitCostBs: layer.unitCostBs > 0 && validDate(movement.date) && validDate(targetDate)
-      ? Number(convertVenezuelanAmountBetweenDates(layer.unitCostBs, movement.date, targetDate))
-      : layer.unitCostBs
-  }))
+  bcvRate: movement.bcvRate,
+  costScaleDate: targetDate,
+  originalUnitCostBs: movement.unitCostBs,
+  consumedFifoLayers: (movement.consumedFifoLayers || []).map(layer =>
+    reexpressInventoryCostLayers([{ ...layer, costScaleDate: layer.costScaleDate || layer.date || movement.date }], targetDate)[0]
+  )
 });
 
 /**
@@ -137,8 +146,15 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
     }
     const state = states.get(source.productId);
     if (!state) throw new Error('El movimiento ' + (source.documentRef || id) + ' referencia un artículo inexistente en la empresa.');
+    // Reexpresión monetaria única: el costo promedio existente se lleva a la
+    // escala de la operación antes de mezclarlo con la entrada o consumirlo.
     if (state.quantity > 0 && state.averageBs > 0 && state.lastBsDate !== source.date) {
-      state.averageBs = Number(convertVenezuelanAmountBetweenDates(state.averageBs, state.lastBsDate, source.date));
+      state.averageBs = reexpressInventoryAverageCost({
+        quantity: state.quantity,
+        averageBs: state.averageBs,
+        costScaleDate: state.lastBsDate,
+        operationDate: source.date
+      });
     }
     const rate = Number(source.bcvRate || 0);
     const requestedQuantity = Number(source.quantity);
@@ -203,14 +219,18 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
             const availableFromLayer = Number(soldLayer.quantity) - returnedLayerAmounts[layerIndex];
             if (availableFromLayer <= 1e-8) continue;
             const restoredQuantity = Math.min(availableFromLayer, remainingReturn);
-            const restoredCostBs = Number(convertVenezuelanAmountBetweenDates(Number(soldLayer.unitCostBs), original.date, source.date));
+            const soldCostScaleDate = soldLayer.costScaleDate || original.date;
+            const restoredCostBs = reexpressInventoryCostBs(Number(soldLayer.unitCostBs), soldCostScaleDate, source.date);
             restoredLayers.push({
               sourceMovementId: soldLayer.sourceMovementId,
               date: source.date,
               documentRef: soldLayer.documentRef,
               quantity: restoredQuantity,
               unitCostBs: restoredCostBs,
-              unitCostUsd: Number(soldLayer.unitCostUsd)
+              unitCostUsd: Number(soldLayer.unitCostUsd),
+              originalUnitCostBs: soldLayer.originalUnitCostBs ?? Number(soldLayer.unitCostBs),
+              costScaleDate: source.date,
+              bcvRate: Number(source.bcvRate || 0)
             });
             returnedLayerAmounts[layerIndex] += restoredQuantity;
             remainingReturn -= restoredQuantity;
@@ -225,7 +245,7 @@ export function replayHistoricalInventory(input: HistoricalInventoryReplayInput)
           entryUnitCostBs = totalCostBs / requestedQuantity;
           entryUnitCostUsd = totalCostUsd / requestedQuantity;
         } else {
-          entryUnitCostBs = Number(convertVenezuelanAmountBetweenDates(original.unitCostBs, original.date, source.date));
+          entryUnitCostBs = reexpressInventoryCostBs(original.unitCostBs, original.date, source.date);
           entryUnitCostUsd = Number(original.unitCostUsd);
         }
       }

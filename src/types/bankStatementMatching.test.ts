@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchesBankStatementLine, matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement, calculateBankReconciliationBalances } from './bankStatementMatching';
+import { reexpressBsAmountToDate } from './bankAccountAvailability';
 
 test('detects repeated statement rows without rejecting distinct movements', () => {
   const existing = [{
@@ -153,6 +154,25 @@ test('rejects any non-zero rounded reconciliation residual', () => {
   });
   assert.equal(usdResidual.differenceUsd, 0.000001);
   assert.equal(usdResidual.isBalanced, false);
+});
+
+test('reconciles a cédula whose movements cross the 2008 and 2018 reconversions', () => {
+  const cutoffDate = '2018-08-21';
+  const at = (amount: number, date: string) => reexpressBsAmountToDate(amount, date, cutoffDate);
+  const bookMovements = [
+    { date: '2007-12-31', debitBs: at(100_000_000, '2007-12-31'), creditBs: 0, debitUsd: 1, creditUsd: 0, isReconciled: true },
+    { date: '2018-08-20', debitBs: at(2, '2018-08-20'), creditBs: 0, debitUsd: 2, creditUsd: 0, isReconciled: true }
+  ];
+  const statementMovements = [
+    { date: '2007-12-31', type: 'CREDIT' as const, amountBs: at(100_000_000, '2007-12-31'), amountUsd: 1, isReconciled: true },
+    { date: '2018-08-20', type: 'CREDIT' as const, amountBs: at(2, '2018-08-20'), amountUsd: 2, isReconciled: true }
+  ];
+  const balances = calculateBankReconciliationBalances({ bookMovements, statementMovements });
+  // 1 Bs.S (2008) + 2 Bs.S (2018) = 3 en la escala del corte, no 100.000.002.
+  assert.equal(balances.bookBalanceBs, 3);
+  assert.equal(balances.bankStatementBalanceBs, 3);
+  assert.equal(balances.isBalanced, true);
+  assert.equal(balances.bookBalanceUsd, 3);
 });
 
 test('rejects a dual-currency bank snapshot mismatch of exactly one cent', () => {

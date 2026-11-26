@@ -1,5 +1,6 @@
 import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 import { isJournalEntryBalanced } from './journalEntryValidation';
+import { reexpressAmountBetweenDates } from '../utils/monetaryPolicy';
 
 export interface ClosingEntryBuildInput {
   companyId: string;
@@ -75,8 +76,11 @@ export function buildClosingEntryItems(input: ClosingEntryBuildInput): JournalEn
 
       if (['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type)) {
         const current = nominalBalances.get(account.code) || emptyTotals();
-        current.debitBs += Number(line.debitBs);
-        current.creditBs += Number(line.creditBs);
+        // Cada línea en Bs. se lleva desde su fecha contable original a la escala
+        // vigente en la fecha de cierre, con el mecanismo monetario central. Los
+        // importes USD son la contrapartida histórica y no se reconvierten.
+        current.debitBs += Number(reexpressAmountBetweenDates(Number(line.debitBs), entry.date, periodEndDate));
+        current.creditBs += Number(reexpressAmountBetweenDates(Number(line.creditBs), entry.date, periodEndDate));
         current.debitUsd += Number(line.debitUsd);
         current.creditUsd += Number(line.creditUsd);
         nominalBalances.set(account.code, current);
