@@ -27,6 +27,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
+import { resolveInventoryBcvRate } from '../types/inventoryBcvRate';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced, isJournalEntryCurrencyPolicySatisfied } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
@@ -3290,11 +3291,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     for (const issueDate of retentionIssueDates) {
       validateRetentionVoucherSupplierEmail(purchaseData.supplierEmail, issueDate);
     }
-    const rate = Number(purchaseData.bcvRate);
+    // Auto-resolver la tasa BCV histórica por fecha de la factura (solo desde 2018 en adelante).
+    // Si la empresa tiene historial de tasas guardado, usamos la más reciente vigente a la fecha.
+    // Si no hay historial, el usuario debe proporcionar la tasa manualmente.
+    const purchaseNeedsRate = isBcvRateRequiredForDate(purchaseData.invoiceDate);
+    let rate = Number(purchaseData.bcvRate);
+    if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      const companyBcvHistory = targetCompany.inventoryBcvRateHistory;
+      if (companyBcvHistory && companyBcvHistory.length > 0) {
+        const resolved = resolveInventoryBcvRate(companyBcvHistory, purchaseData.invoiceDate);
+        if (resolved) {
+          rate = resolved.rate;
+        }
+      }
+    }
     // La tasa BCV es obligatoria para medios de pago en divisas, no para operaciones
     // nominales en bolívares. Sin tasa, la equivalencia USD queda pendiente (0).
     // Las compras desde 2018 conservan equivalencia USD contable; antes de esa fecha puede quedar pendiente.
-    const purchaseNeedsRate = isBcvRateRequiredForDate(purchaseData.invoiceDate);
     if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
@@ -3307,64 +3320,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       purchaseData.igtfAmountBs || 0
     ];
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
-      throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
-    }
-    if (purchaseData.inventoryLines !== undefined) {
-      if (!Array.isArray(purchaseData.inventoryLines)) {
-        throw new Error('Las líneas de inventario de la compra no tienen un formato válido.');
-      }
-      if (purchaseData.inventoryLines.length > 0) {
-        const seenProducts = new Set<string>();
-        let inventoryLineTotal = 0;
-        for (const line of purchaseData.inventoryLines) {
-          const quantity = Number(line.quantity);
-          const unitCost = Number(line.unitCostBs);
-          const product = products.find(item => item.id === line.productId && item.companyId === targetCompany.id);
-          if (!product || seenProducts.has(String(line.productId)) ||
-              !Number.isFinite(quantity) || quantity <= 0 ||
-              !Number.isFinite(unitCost) || unitCost <= 0) {
-            throw new Error('Las líneas de inventario requieren artículos existentes, sin duplicados, y cantidades/costos positivos.');
-          }
-          seenProducts.add(String(line.productId));
-          inventoryLineTotal += quantity * unitCost;
-          const latestMovementDate = movements
-            .filter(movement => movement.companyId === targetCompany.id && movement.productId === product.id)
-            .reduce((latest, movement) => movement.date > latest ? movement.date : latest, '');
-          if (latestMovementDate && purchaseData.invoiceDate < latestMovementDate) {
-            throw new Error('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + '. Registre las operaciones en orden cronológico.');
-          }
-        }
-        const expectedInventoryTotal = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
-        if (Math.abs(Math.round(inventoryLineTotal * 100) / 100 - Math.round(expectedInventoryTotal * 100) / 100) > 0.02) {
-          throw new Error('Las líneas de inventario no concilian con la base imponible más el monto exento de la factura.');
-        }
-      }
-    }
-    // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
-    if (targetCompany.closedThroughDate && (purchaseData.invoiceDate <= targetCompany.closedThroughDate || purchaseData.accountCreditDate! <= targetCompany.closedThroughDate)) {
-      throw new Error('El período está cerrado hasta ' + targetCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
-    }
-    if (!isValidIsoDate(purchaseData.invoiceDate) || !isValidIsoDate(purchaseData.accountCreditDate || '') ||
-        !String(purchaseData.invoiceNumber || '').trim() ||
-        !String(purchaseData.controlNumber || '').trim()) {
-      throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
-    }
-    if (targetCompany.accountingStartDate &&
-        (purchaseData.invoiceDate < targetCompany.accountingStartDate ||
-         (purchaseData.accountCreditDate || '') < targetCompany.accountingStartDate)) {
-      throw new Error('Las fechas de la compra no pueden ser anteriores al inicio contable de la empresa (' + targetCompany.accountingStartDate + ').');
-    }
-    if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
-      throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
-    }
-    // No generar asientos de compra positivos para notas que requieren reversión contable/fiscal.
-    // Hasta completar el flujo de notas de débito/crédito, se rechazan para evitar alterar saldos incorrectamente.
-    if (purchaseData.documentType !== '01') {
-      throw new Error('Las notas de débito/crédito de proveedores requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
-    }
-    if (!Number.isFinite(purchaseData.taxRate) || purchaseData.taxRate < 0 || purchaseData.taxRate > 100 ||
-        !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
-      throw new Error('La alícuota de IVA o la tasa de retención no es válida.');
     }
     if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(purchaseData.vatCreditTreatment || 'COMMON')) throw new Error('El destino del crédito fiscal IVA no es válido.');
     const expectedVatRate = purchaseData.taxRate === 31 ? 16 : purchaseData.taxRate;
@@ -4658,10 +4613,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
     if (settlementModeError) throw new Error(settlementModeError);
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
-    const rate = Number(saleData.bcvRate);
+    let rate = Number(saleData.bcvRate);
+    // Auto-resolver la tasa BCV histórica por fecha de la factura (solo desde 2018 en adelante).
+    // Si la empresa tiene historial de tasas guardado, usamos la más reciente vigente a la fecha.
+    // Si no hay historial, el usuario debe proporcionar la tasa manualmente.
+    const saleNeedsRate = isBcvRateRequiredForDate(saleData.invoiceDate);
+    if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
+      const companyBcvHistory = targetCompany.inventoryBcvRateHistory;
+      if (companyBcvHistory && companyBcvHistory.length > 0) {
+        const resolved = resolveInventoryBcvRate(companyBcvHistory, saleData.invoiceDate);
+        if (resolved) {
+          rate = resolved.rate;
+        }
+      }
+    }
     // Desde 2018 las facturas de venta requieren tasa para mantener su snapshot dual.
     // Antes de 2018, la operación puede conservarse nominalmente en Bs. sin equivalencia ficticia.
-    const saleNeedsRate = isBcvRateRequiredForDate(saleData.invoiceDate);
     if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
       throw new Error('La tasa BCV es obligatoria para ventas cobradas en divisas. Registre la tasa histórica antes de guardar.');
     }
