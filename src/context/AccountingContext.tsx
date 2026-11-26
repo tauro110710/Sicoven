@@ -3743,7 +3743,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const effectiveUnitCost = unitCostBs + (qty > 0 ? landedCostsBs / qty : 0);
         const totalCostBs = Math.round(qty * effectiveUnitCost * 100) / 100;
         const unitCostUsd = rate > 0 ? toUsd(effectiveUnitCost) : pState.avgCostUsd;
-        const totalCostUsd = Math.round(qty * unitCostUsd * 1000000) / 1000000;
+        // El total USD se deriva del total en Bs. ya redondeado para que la
+        // validación de SQLite concilie ambos importes a la tasa de la factura.
+        const totalCostUsd = toUsd(totalCostBs);
         // Ponderar Bs y USD independientemente: la tasa nueva solo valora la entrada,
         // nunca reexpresa el costo USD histórico de las existencias anteriores.
         const weighted = calculateWeightedAverageCostDual(
@@ -3770,6 +3772,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           unitCostUsd,
           totalCostBs,
           totalCostUsd,
+          counterpartyRif: purchaseData.supplierRif,
+          counterpartyName: purchaseData.supplierName,
           balanceQty: newStock,
           balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,

@@ -102,8 +102,6 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     setBcvRateInput('');
   }, [date, currentCompany.id, currentCompany.inventoryBcvRate, currentCompany.inventoryBcvRateEffectiveDate, currentCompany.inventoryBcvRateHistory, currentCompany.accountingBcvRateHistory]);
 
-  if (!isOpen || !selectedProduct) return null;
-
   const parseDecimalInput = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
   const quantity = parseDecimalInput(quantityInput);
   const unitCostBs = parseDecimalInput(unitCostInput);
@@ -116,7 +114,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const rateRequired = monetaryRule.requiresBcvRate && type !== 'SALIDA' && unitCostBs > 0;
   const unitCostUsd = effectiveBcvRate > 0 ? unitCostBs / effectiveBcvRate : 0;
   const fifoPreview = React.useMemo(() => {
-    if (type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
+    if (!isOpen || !selectedProduct || type !== 'SALIDA' || selectedProduct.costingMethod !== 'PEPS') return undefined;
     try {
       const prior = companyMovements.filter(m => m.productId === selectedProduct.id && m.date <= date);
       const priorOrdered = [...prior].sort((x, y) => x.date.localeCompare(y.date));
@@ -126,7 +124,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     } catch {
       return undefined;
     }
-  }, [type, selectedProduct.id, selectedProduct.costingMethod, selectedProduct.currentStock, companyMovements, date, quantity]);
+  }, [isOpen, type, selectedProduct?.id, selectedProduct?.costingMethod, selectedProduct?.currentStock, companyMovements, date, quantity]);
+
+  // Todos los hooks deben ejecutarse en cada render: el retorno anticipado va al final.
+  if (!isOpen || !selectedProduct) return null;
+
   const totalCostBs = type === 'ENTRADA'
     ? quantity * unitCostBs + additionalLandedCostsBs
     : type === 'SALIDA'
