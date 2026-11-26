@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import { buildClosingEntryItems } from '../src/types/accountingYearClosing';
 import { buildOpeningEntryItems } from '../src/types/accountingYearOpening';
 import type { Account, Company, JournalEntry } from '../src/types/accounting';
-import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../src/types/fiscalExerciseLifecycle';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle, initializeFiscalCalendarForAccountingStart } from '../src/types/fiscalExerciseLifecycle';
 
 const require = createRequire(import.meta.url);
 const { persistAccountingSnapshot, registerAccountingPersistenceHandler } =
@@ -166,7 +166,8 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
     assert.equal(firstReopen.company.closedThroughDate, undefined);
     assert.equal(firstReopen.company.fiscalExercises[0].status, 'REABIERTO');
     assert.equal(firstReopen.company.fiscalExercises[0].closingEntryId, firstCycle.closing.id);
-    assert.equal(firstReopen.company.fiscalExercises[0].openingEntryId, firstCycle.opening.id);
+    assert.equal(firstReopen.company.fiscalExercises[0].openingEntryId, undefined);
+    assert.equal(firstReopen.company.fiscalExercises[0].cycles[0].openingEntryId, firstCycle.opening.id);
     assert.equal(firstReopen.company.fiscalExercises[0].cycles[0].reopenedAt, new Date().toISOString().slice(0, 10));
     assert.ok(firstReopen.company.fiscalExercises[0].cycles[0].reopeningId);
     assert.equal(firstReopen.company.fiscalExercises[1].openingEntryId, undefined);
@@ -236,6 +237,40 @@ test('recorre dos ciclos anuales reales con builders, persistencia SQLite, IPC y
       "SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_year_reopened'"
     ).get() as { count: number };
     assert.equal(auditEvents.count, 2);
+  } finally {
+    harness.db.close();
+  }
+});
+
+test('una empresa creada desde 2010 persiste su año fiscal y calendario inicial coherentes', () => {
+  const harness = makeHarness();
+  try {
+    const legacyCompanyId = 'co-created-2010';
+    const setup = initializeFiscalCalendarForAccountingStart({
+      companyId: legacyCompanyId, accountingStartDate: '2010-07-15'
+    });
+    const company: Company = {
+      id: legacyCompanyId, name: 'Empresa histórica 2010', fiscalYear: setup.fiscalYear,
+      accountingStartDate: '2010-07-15', rif: 'J-00000000-0', address: '', phone: '', email: '',
+      taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 0, bcvRate: 1,
+      fiscalExercises: setup.fiscalExercises
+    };
+    assert.equal(company.fiscalYear, 2010);
+    persistAccountingSnapshot(harness.db, {
+      companies: [company], currentCompanyId: legacyCompanyId, accounts, journalEntries: [],
+      purchases: [], sales: [], movements: [], vatVouchers: [], islrVouchers: [],
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL'
+    }, { id: 1, username: 'contador-prueba' });
+    const row = harness.db.prepare(
+      "SELECT state_json FROM app_state WHERE state_key='accounting'"
+    ).get() as { state_json: string };
+    const saved = JSON.parse(row.state_json).companies[0] as Company;
+    assert.equal(saved.fiscalYear, 2010);
+    assert.deepEqual(saved.fiscalExercises?.map(item => item.fiscalYear), [2010, 2011]);
+    assert.equal(saved.fiscalExercises?.[0].startDate, '2010-07-15');
+    assert.equal(saved.fiscalExercises?.[0].endDate, '2010-12-31');
+    assert.equal(saved.fiscalExercises?.[1].startDate, '2011-01-01');
+    assert.ok(saved.fiscalExercises?.every(item => item.status === 'ABIERTO' && !item.closingEntryId && !item.closedAt));
   } finally {
     harness.db.close();
   }

@@ -2,6 +2,7 @@ import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './acco
 import { isValidIsoDate } from './migrationParsing';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import { reexpressInventoryCostBs } from './inventoryMonetaryReexpression';
+import { calculateFiscalBreakdown } from './vatFiscalEngine';
 
 export interface PurchaseCreditNoteLineRequest {
   productId: string;
@@ -114,9 +115,15 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       Number(purchase.islrWithheldBs ?? 0) > Number(purchase.taxableBaseBs) + 0.02) {
     throw new Error('Las retenciones originales superan su base o impuesto de referencia.');
   }
-  const effectiveVatRate = Number(purchase.taxRate) === 31 ? 16 : Number(purchase.taxRate);
-  const expectedOriginalVat = money(Number(purchase.taxableBaseBs) * effectiveVatRate / 100);
-  const expectedOriginalLuxury = Number(purchase.taxRate) === 31 ? money(Number(purchase.taxableBaseBs) * 0.15) : 0;
+  const originalBreakdown = calculateFiscalBreakdown({
+    taxableBaseBs: Number(purchase.taxableBaseBs),
+    exemptAmountBs: Number(purchase.exemptAmountBs),
+    taxRate: Number(purchase.taxRate),
+    igtfAmountBs: Number(purchase.igtfAmountBs ?? 0)
+  });
+  const effectiveVatRate = originalBreakdown.vatRate;
+  const expectedOriginalVat = originalBreakdown.vatAmountBs;
+  const expectedOriginalLuxury = originalBreakdown.additionalLuxuryTaxBs;
   const originalLuxuryTax = Number(purchase.additionalLuxuryTaxBs ?? Math.max(0, Number(purchase.vatAmountBs) - expectedOriginalVat));
   if (Math.abs(originalLuxuryTax - expectedOriginalLuxury) > 0.02) throw new Error('El impuesto adicional del 15% de la factura original no concilia.');
   if (!Number.isFinite(expectedOriginalVat) || Math.abs(expectedOriginalVat - Number(purchase.vatAmountBs)) > 0.02) {
@@ -252,8 +259,9 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   inventoryCostBs = money(inventoryCostBs);
   taxableBaseBs = money(taxableBaseBs);
   exemptAmountBs = money(exemptAmountBs);
-  const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * effectiveVatRate / 100) : 0;
-  const additionalLuxuryTaxBs = Number(purchase.taxRate) === 31 ? money(taxableBaseBs * 0.15) : 0;
+  const noteBreakdown = calculateFiscalBreakdown({ taxableBaseBs, taxRate: Number(purchase.taxRate) });
+  const vatAmountBs = noteBreakdown.vatAmountBs;
+  const additionalLuxuryTaxBs = noteBreakdown.additionalLuxuryTaxBs;
   const vatWithheldBs = Number(purchase.vatAmountBs) > 0
     ? money(Number(purchase.vatWithheldBs ?? 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
   const islrWithheldBs = Number(purchase.taxableBaseBs) > 0

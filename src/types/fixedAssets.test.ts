@@ -127,6 +127,65 @@ test('allows historical Bs-only fixed assets and depreciation without BCV before
   assert.equal(result.netBookValueUsdAfter,0);
 });
 
+const historicalAsset = (overrides: Partial<FixedAsset> = {}): FixedAsset => asset({
+  acquisitionDate:'2017-06-15', serviceDate:'2017-07-01', costScaleDate:'2017-06-15',
+  acquisitionCostBs:36_500_000, acquisitionCostUsd:3650, acquisitionBcvRate:3300,
+  residualValueBs:3_650_000, residualValueUsd:365, usefulLifeMonths:120,
+  ...overrides
+});
+
+test('recalcula la depreciación en la escala vigente al cruzar la reconversión de 2018', () => {
+  const current = historicalAsset();
+  const schedule = getFixedAssetDepreciationScheduleThrough(current, '2018-08-31');
+  assert.equal(schedule.length, 14);
+  const july = schedule.find(item => item.period === '2018-07');
+  const august = schedule.find(item => item.period === '2018-08');
+  assert.ok(july && august);
+  // Julio aún se expresa en Bs.F: importe depreciable de 32.850.000,00.
+  assert.ok(july.amountBs > 278_000 && july.amountBs < 279_000);
+  assert.ok(july.netBookValueBsAfter > 32_000_000);
+  // Agosto ya se expresa en Bs.S: base de 328,50 y acumulado reexpresado.
+  assert.equal(august.postingDate, '2018-08-31');
+  assert.ok(august.amountBs > 2.7 && august.amountBs < 2.9);
+  assert.ok(august.accumulatedBsAfter > 30 && august.accumulatedBsAfter < 45);
+  assert.ok(august.netBookValueBsAfter > 320 && august.netBookValueBsAfter < 335);
+  // El costo original nunca se modifica.
+  assert.equal(current.acquisitionCostBs, 36_500_000);
+});
+
+test('deprecia en Bs. tras la reconversión de 2021 sin acumular escalas incompatibles', () => {
+  const current = historicalAsset();
+  const schedule = getFixedAssetDepreciationScheduleThrough(current, '2021-10-31');
+  const october = schedule.find(item => item.period === '2021-10');
+  assert.ok(october);
+  // Base reexpresada a Bs. digitales: 0,0003285; ninguna escala anterior se suma nominalmente.
+  assert.ok(october.amountBs > 0 && october.amountBs < 0.00001);
+  assert.ok(october.accumulatedBsAfter > 0 && october.accumulatedBsAfter < 0.0004);
+  assert.ok(october.netBookValueBsAfter > 0.0002 && october.netBookValueBsAfter < 0.0004);
+  // USD no se reconvierte: la cuota mantiene la proporción de días.
+  assert.ok(october.amountUsd > 27 && october.amountUsd < 29);
+});
+
+test('agota el importe depreciable en la escala vigente y respeta el valor residual', () => {
+  const current = historicalAsset();
+  const schedule = getFixedAssetDepreciationScheduleThrough(current, '2027-12-31');
+  assert.equal(schedule.length, 120);
+  assert.ok(schedule.every(item => item.amountBs > 0));
+  const last = schedule[schedule.length - 1];
+  assert.equal(last.period, '2027-06');
+  assert.ok(Math.abs(last.netBookValueBsAfter - 0.0000365) < 1e-7);
+  assert.equal(last.netBookValueUsdAfter, 365);
+  // Al cierre de la vida útil el acumulado queda en la escala vigente, sin mezclar nominales.
+  assert.ok(Math.abs(last.accumulatedBsAfter - 0.0003285) < 1e-7);
+});
+
+test('rechaza una fecha de escala del costo anterior a la adquisición', () => {
+  assert.throws(
+    () => getNextFixedAssetDepreciationPeriod(historicalAsset({ costScaleDate: '2017-06-01' })),
+    /anterior a la adquisición/
+  );
+});
+
 test('requires BCV for fixed asset acquisition dated from 2018 when valuation is dual', () => {
   const modernBsOnly = asset({
     acquisitionDate:'2018-01-10',serviceDate:'2018-01-15',acquisitionCostBs:36500,acquisitionCostUsd:0,acquisitionBcvRate:0,

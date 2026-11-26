@@ -1,4 +1,10 @@
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+import {
+  getFixedAssetAccumulatedDepreciationAtDate,
+  getFixedAssetCostScaleDate,
+  reexpressFixedAssetBs,
+  roundFixedAssetBs
+} from './fixedAssetsMonetaryReexpression';
 
 export type FixedAssetDepreciationMethod = 'STRAIGHT_LINE' | 'NON_DEPRECIABLE';
 export type FixedAssetStatus = 'ACTIVE' | 'DISPOSED';
@@ -25,6 +31,12 @@ export interface FixedAsset {
   category: string;
   acquisitionDate: string;
   serviceDate: string;
+  /**
+   * Fecha contable que define la escala monetaria de `acquisitionCostBs` y
+   * `residualValueBs`. Es la fecha del asiento de capitalización. En activos
+   * anteriores a este campo se asume la fecha de adquisición.
+   */
+  costScaleDate?: string;
   acquisitionCostBs: number;
   acquisitionCostUsd: number;
   acquisitionBcvRate: number;
@@ -91,7 +103,9 @@ function daysBetween(start: Date, end: Date): number {
 }
 
 function roundBs(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  // Los importes reexpresados pueden quedar por debajo del centavo; se conserva
+  // precisión de cálculo para que una depreciación mensual no desaparezca.
+  return roundFixedAssetBs(value);
 }
 
 function roundUsd(value: number): number {
@@ -102,6 +116,11 @@ function validateAsset(asset: FixedAsset): { serviceDate: Date; lifeEnd: Date } 
   const acquisitionDate = parseIsoDate(asset.acquisitionDate, 'La fecha de adquisición');
   const serviceDate = parseIsoDate(asset.serviceDate, 'La fecha de puesta en servicio');
   if (serviceDate < acquisitionDate) throw new Error('La puesta en servicio no puede ser anterior a la adquisición.');
+  if (asset.costScaleDate !== undefined) {
+    const costScaleDate = parseIsoDate(asset.costScaleDate, 'La fecha de escala del costo');
+    if (costScaleDate < acquisitionDate) throw new Error('La fecha de escala del costo no puede ser anterior a la adquisición.');
+  }
+  getFixedAssetCostScaleDate(asset);
   const nonDepreciable = asset.depreciationMethod === 'NON_DEPRECIABLE';
   if (!Number.isInteger(asset.usefulLifeMonths) || (nonDepreciable ? asset.usefulLifeMonths !== 0 : asset.usefulLifeMonths <= 0)) {
     throw new Error(nonDepreciable ? 'Un activo no depreciable debe tener vida útil cero.' : 'La vida útil debe ser un número entero de meses mayor que cero.');
@@ -191,35 +210,51 @@ export function calculateFixedAssetDepreciation(
   const usefulLifeDays = daysBetween(serviceDate, lifeEnd);
   if (usefulLifeDays <= 0) throw new Error('La vida útil del activo no contiene días válidos.');
 
+  const postingDate = new Date(overlapEnd.getTime() - DAY_MS).toISOString().slice(0, 10);
+  const costScaleDate = getFixedAssetCostScaleDate(asset);
+
+  // Toda la aritmética en bolívares se hace en la escala vigente en la fecha
+  // contable de este período. El costo y el residual se reexpresan desde su
+  // fecha documentada y el acumulado se reconstruye evento por evento, de modo
+  // que nunca se suman ni se restan importes de escalas incompatibles.
+  const baseBs = reexpressFixedAssetBs(asset.acquisitionCostBs, costScaleDate, postingDate) -
+    reexpressFixedAssetBs(asset.residualValueBs, costScaleDate, postingDate);
   const priorEvents = asset.depreciationEvents.filter(event => !event.reversedByJournalEntryId && event.period < period);
-  const accumulatedBs = priorEvents.reduce((sum, event) => sum + Number(event.amountBs || 0), 0);
+  const accumulatedBs = getFixedAssetAccumulatedDepreciationAtDate({ depreciationEvents: priorEvents }, postingDate);
   const accumulatedUsd = priorEvents.reduce((sum, event) => sum + Number(event.amountUsd || 0), 0);
-  if (![accumulatedBs, accumulatedUsd].every(Number.isFinite)) {
+  if (![baseBs, accumulatedBs, accumulatedUsd].every(Number.isFinite)) {
     throw new Error('El historial de depreciación contiene importes no válidos.');
   }
 
-  const baseBs = asset.acquisitionCostBs - asset.residualValueBs;
   const baseUsd = asset.acquisitionCostUsd - asset.residualValueUsd;
-  if (accumulatedBs > baseBs + 0.01 || accumulatedUsd > baseUsd + 0.000001) {
+  // Solo se tolera el residuo de redondeo propio de la escala de cálculo.
+  const bsTolerance = Math.max(1e-7, priorEvents.length * 1e-8);
+  if (accumulatedBs > baseBs + bsTolerance || accumulatedUsd > baseUsd + 0.000001) {
     throw new Error('La depreciación acumulada supera el importe depreciable del activo.');
   }
+  if (baseBs <= 0) {
+    throw new Error('El importe depreciable en Bs. se extinguió con la reconversión monetaria vigente en este período.');
+  }
   const isFinalPeriod = overlapEnd.getTime() === lifeEnd.getTime();
-  const amountBs = isFinalPeriod
-    ? roundBs(Math.max(0, baseBs - accumulatedBs))
-    : roundBs(baseBs * days / usefulLifeDays);
+  const exactBs = isFinalPeriod
+    ? Math.max(0, baseBs - accumulatedBs)
+    : baseBs * days / usefulLifeDays;
+  const amountBs = roundBs(exactBs);
   const amountUsd = isFinalPeriod
     ? roundUsd(Math.max(0, baseUsd - accumulatedUsd))
     : roundUsd(baseUsd * days / usefulLifeDays);
   if (amountBs <= 0 && amountUsd <= 0) {
     throw new Error('El período no genera depreciación pendiente para este activo.');
   }
+  if (amountBs <= 0) {
+    throw new Error('La escala vigente en ' + postingDate + ' reduce la depreciación en Bs. por debajo de la precisión mínima; no se puede generar un asiento dual.');
+  }
 
-  const postingDate = new Date(overlapEnd.getTime() - DAY_MS).toISOString().slice(0, 10);
   return {
     period, postingDate, days, amountBs, amountUsd,
     accumulatedBsAfter: roundBs(accumulatedBs + amountBs),
     accumulatedUsdAfter: roundUsd(accumulatedUsd + amountUsd),
-    netBookValueBsAfter: roundBs(asset.acquisitionCostBs - accumulatedBs - amountBs),
+    netBookValueBsAfter: roundBs(reexpressFixedAssetBs(asset.acquisitionCostBs, costScaleDate, postingDate) - accumulatedBs - amountBs),
     netBookValueUsdAfter: roundUsd(asset.acquisitionCostUsd - accumulatedUsd - amountUsd)
   };
 }
@@ -262,6 +297,6 @@ export function getFixedAssetDepreciationScheduleThrough(
 
 export type FixedAssetRegistrationDraft = Omit<
   FixedAsset,
-  'id' | 'companyId' | 'acquisitionCostBs' | 'acquisitionCostUsd' |
+  'id' | 'companyId' | 'costScaleDate' | 'acquisitionCostBs' | 'acquisitionCostUsd' |
   'acquisitionBcvRate' | 'status' | 'depreciationEvents' | 'createdAt'
 >;

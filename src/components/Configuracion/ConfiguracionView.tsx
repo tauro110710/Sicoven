@@ -23,6 +23,7 @@ import type { InventoryPricingConfiguration } from '../../types/accounting';
 import { DEFAULT_INVENTORY_PRICING } from '../../types/inventoryPricing';
 import { validateFunctionalCurrencyAssessment, validateExchangeabilityAssessment } from '../../types/functionalCurrency';
 import { buildOpeningEntryItems } from '../../types/accountingYearOpening';
+import { getFiscalExerciseStartDate } from '../../types/fiscalExerciseLifecycle';
 import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
@@ -218,7 +219,9 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   }, [currentCompany.id, currentCompany.closedThroughDate]);
 
   React.useEffect(() => {
-    const start = String(currentCompany.fiscalYear) + '-01-01';
+    // El primer ejercicio puede comenzar a mitad de año según la fecha inicial
+    // contable; los siguientes abarcan el año calendario completo.
+    const start = getFiscalExerciseStartDate(currentCompany, Number(currentCompany.fiscalYear));
     const end = String(currentCompany.fiscalYear) + '-12-31';
     const next = new Date(end + 'T00:00:00.000Z');
     next.setUTCDate(next.getUTCDate() + 1);
@@ -229,7 +232,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     setClosingPreview(null);
     setOpeningPreview(null);
     setOpeningError(null);
-  }, [currentCompany.id, currentCompany.fiscalYear, currentCompany.closedThroughDate]);
+  }, [currentCompany.id, currentCompany.fiscalYear, currentCompany.closedThroughDate, currentCompany.accountingStartDate]);
 
   React.useEffect(() => {
     setClosingPreview(null);

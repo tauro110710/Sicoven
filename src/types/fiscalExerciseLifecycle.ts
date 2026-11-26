@@ -1,5 +1,29 @@
 import type { Company, PersistedFiscalExercise, PersistedFiscalExerciseCycle } from './accounting';
 
+/** Año fiscal inicial derivado de la fecha de inicio contable (nunca del año en curso). */
+export function getInitialFiscalYear(accountingStartDate: string): number {
+  if (!isValidIsoDate(accountingStartDate)) {
+    throw new Error('La fecha de inicio contable no es válida para determinar el ejercicio fiscal inicial.');
+  }
+  return Number(accountingStartDate.slice(0, 4));
+}
+
+/**
+ * Inicializa el calendario de una empresa nueva a partir de su fecha de inicio
+ * contable: solo crea el ejercicio inicial y el siguiente, ambos abiertos, sin
+ * cierres ni períodos ficticios anteriores.
+ */
+export function initializeFiscalCalendarForAccountingStart(input: {
+  companyId: string;
+  accountingStartDate: string;
+}): { fiscalYear: number; fiscalExercises: PersistedFiscalExercise[] } {
+  const companyId = String(input.companyId || '').trim();
+  if (!companyId) throw new Error('La empresa debe estar identificada para inicializar su calendario fiscal.');
+  const fiscalYear = getInitialFiscalYear(input.accountingStartDate);
+  const calendar = createInitialFiscalExerciseCalendar(companyId, input.accountingStartDate, fiscalYear);
+  return { fiscalYear, fiscalExercises: calendar };
+}
+
 /** The first ordinary SICOVEN period follows accountingStartDate, never the historical operational start. */
 export function getFiscalExerciseStartDate(company: Pick<Company, 'accountingStartDate'>, fiscalYear: number): string {
   if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
@@ -17,6 +41,19 @@ export function getFiscalExerciseStartDate(company: Pick<Company, 'accountingSta
     if (configuredYear === fiscalYear) return configuredStart;
   }
   return String(fiscalYear).padStart(4, '0') + '-01-01';
+}
+
+function createInitialFiscalExerciseCalendar(
+  companyId: string,
+  accountingStartDate: string,
+  fiscalYear: number
+): PersistedFiscalExercise[] {
+  const exercises = [
+    createExercise(companyId, fiscalYear, accountingStartDate),
+    createExercise(companyId, fiscalYear + 1, String(fiscalYear + 1) + '-01-01')
+  ];
+  validatePersistedFiscalExerciseCalendar(exercises, companyId);
+  return exercises;
 }
 
 export function ensureFiscalExerciseCalendar(
@@ -132,8 +169,11 @@ export function confirmFiscalExerciseCycle(input: FiscalExerciseCycleInput): Per
   };
   return exercises.map((item, index) => {
     if (index === targetIndex) {
+      // openingEntryId identifica la apertura que inició ESTE ejercicio y no se
+      // sobrescribe con la apertura que produce su cierre: así el ejercicio
+      // anterior conserva su enlace cuando el siguiente también se cierra.
       return {
-        ...item, status: 'CERRADO', closingEntryId, openingEntryId, closedAt,
+        ...item, status: 'CERRADO', closingEntryId, closedAt,
         cycles: [...targetCycles, cycle]
       };
     }
@@ -220,12 +260,12 @@ export function validatePersistedFiscalExerciseCalendar(
     }
     const latest = cycles[cycles.length - 1];
     if (item.status === 'CERRADO' && (!latest || latest.reopenedAt ||
-        item.closingEntryId !== latest.closingEntryId || item.openingEntryId !== latest.openingEntryId ||
+        item.closingEntryId !== latest.closingEntryId ||
         item.closedAt !== latest.closedAt || companyExercises[index + 1]?.openingEntryId !== latest.openingEntryId)) {
       throw new Error('Un ejercicio cerrado debe conservar el último cierre, la apertura siguiente y su fecha de confirmación.');
     }
     if (item.status === 'REABIERTO' && (!latest?.reopenedAt || latest.closingEntryId !== item.closingEntryId ||
-        latest.openingEntryId !== item.openingEntryId || companyExercises[index + 1]?.openingEntryId === latest.openingEntryId)) {
+        companyExercises[index + 1]?.openingEntryId === latest.openingEntryId)) {
       throw new Error('Un ejercicio reabierto debe conservar el ciclo original y haber retirado la apertura vigente siguiente.');
     }
   }

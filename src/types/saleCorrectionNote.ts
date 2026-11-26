@@ -1,6 +1,7 @@
 import type { SaleRecord } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
+import { calculateFiscalBreakdown } from './vatFiscalEngine';
 
 export interface SaleCorrectionNoteRequest {
   kind: 'CREDIT' | 'DEBIT';
@@ -85,10 +86,14 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
     throw new Error('Los importes, la alícuota o la tasa BCV de la nota no son válidos.');
   }
 
-  const vatRate = sourceSale.taxRate === 31 ? 16 : sourceSale.taxRate;
-  const luxuryRate = sourceSale.taxRate === 31 ? 15 : 0;
-  const expectedSourceVat = money(sourceSale.taxableBaseBs * vatRate / 100);
-  const expectedSourceLuxury = money(sourceSale.taxableBaseBs * luxuryRate / 100);
+  const sourceBreakdown = calculateFiscalBreakdown({
+    taxableBaseBs: Number(sourceSale.taxableBaseBs),
+    exemptAmountBs: Number(sourceSale.exemptAmountBs),
+    taxRate: Number(sourceSale.taxRate),
+    igtfRatePercent: Number(sourceSale.igtfRate || 0)
+  });
+  const expectedSourceVat = sourceBreakdown.vatAmountBs;
+  const expectedSourceLuxury = sourceBreakdown.additionalLuxuryTaxBs;
   if (Math.abs(expectedSourceVat - money(sourceSale.vatAmountBs)) > 0.02) {
     throw new Error('La factura original no concilia el componente IVA con su base y alícuota. En operaciones al 31%, el IVA debe ser 16%.');
   }
@@ -102,17 +107,21 @@ export function calculateSaleCorrectionNote(request: SaleCorrectionNoteRequest):
     throw new Error('La retención de IVA original supera el IVA causado; debe conciliarse antes de emitir la nota.');
   }
 
-  const taxableBaseBs = money(request.taxableBaseBs);
-  const exemptAmountBs = money(request.exemptAmountBs);
-  const vatAmountBs = money(taxableBaseBs * vatRate / 100);
-  const additionalLuxuryTaxBs = money(taxableBaseBs * luxuryRate / 100);
-  const igtfAmountBs = sourceSale.igtfApplicable
-    ? money((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * Number(sourceSale.igtfRate || 0) / 100)
-    : 0;
+  const noteBreakdown = calculateFiscalBreakdown({
+    taxableBaseBs: request.taxableBaseBs,
+    exemptAmountBs: request.exemptAmountBs,
+    taxRate: Number(sourceSale.taxRate),
+    igtfRatePercent: sourceSale.igtfApplicable ? Number(sourceSale.igtfRate || 0) : 0
+  });
+  const taxableBaseBs = noteBreakdown.taxableBaseBs;
+  const exemptAmountBs = noteBreakdown.exemptAmountBs;
+  const vatAmountBs = noteBreakdown.vatAmountBs;
+  const additionalLuxuryTaxBs = noteBreakdown.additionalLuxuryTaxBs;
+  const igtfAmountBs = noteBreakdown.igtfAmountBs;
   const vatWithheldBs = sourceSale.vatAmountBs > 0
     ? money(Number(sourceSale.vatWithheldBs || 0) * vatAmountBs / Number(sourceSale.vatAmountBs))
     : 0;
-  const totalAmountBs = money(taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs + igtfAmountBs);
+  const totalAmountBs = noteBreakdown.totalAmountBs;
   const netReceivableAdjustmentBs = money(totalAmountBs - vatWithheldBs);
   if (netReceivableAdjustmentBs < 0) throw new Error('La retención distribuida supera el total de la nota.');
 

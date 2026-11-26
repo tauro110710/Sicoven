@@ -19,6 +19,34 @@ function isValidIsoDate(value) {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+// Escalas monetarias venezolanas: la fecha contable define la escala del importe.
+// Debe coincidir con VENEZUELAN_MONETARY_ERAS de src/types/historicalAccountingCalendar.ts.
+const MONETARY_ERA_SCALES = Object.freeze([
+  { effectiveFrom: '1900-01-01', exponent: 14 },
+  { effectiveFrom: '2008-01-01', exponent: 11 },
+  { effectiveFrom: '2018-08-20', exponent: 6 },
+  { effectiveFrom: '2021-10-01', exponent: 0 }
+]);
+
+function monetaryScaleExponent(date) {
+  let exponent = MONETARY_ERA_SCALES[0].exponent;
+  for (const era of MONETARY_ERA_SCALES) {
+    if (date >= era.effectiveFrom) exponent = era.exponent;
+    else break;
+  }
+  return exponent;
+}
+
+/** Reexpresa un importe Bs. entre dos fechas contables, igual que el mecanismo central del renderer. */
+function reexpressFixedAssetBsForIntegrity(amount, fromDate, toDate) {
+  const shift = monetaryScaleExponent(toDate) - monetaryScaleExponent(fromDate);
+  return shift === 0 ? Number(amount) : Number(amount) * Math.pow(10, shift);
+}
+
+function roundFixedAssetBsForIntegrity(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 1e8) / 1e8;
+}
+
 // Regla monetaria central: desde 2018-01-01 se exige tasa BCV y equivalencia USD.
 // Antes de esa fecha la operación es nominal en bolívares.
 const USD_EQUIVALENCE_START_DATE = '2018-01-01';
@@ -2116,6 +2144,8 @@ function validateFixedAssetLedger(previousState, nextState) {
         !String(asset.description || '').trim() || !String(asset.category || '').trim() ||
         !isValidIsoDate(asset.acquisitionDate) || !isValidIsoDate(asset.serviceDate) ||
         asset.serviceDate < asset.acquisitionDate ||
+        (asset.costScaleDate !== undefined &&
+          (!isValidIsoDate(asset.costScaleDate) || asset.costScaleDate < asset.acquisitionDate)) ||
         !Number.isInteger(asset.usefulLifeMonths) || (nonDepreciable ? asset.usefulLifeMonths !== 0 : asset.usefulLifeMonths <= 0) ||
         asset.status !== 'ACTIVE' || !['STRAIGHT_LINE', 'NON_DEPRECIABLE'].includes(asset.depreciationMethod) ||
         !Number.isFinite(Number(asset.acquisitionCostBs)) || Number(asset.acquisitionCostBs) <= 0 ||
@@ -2227,7 +2257,7 @@ function validateFixedAssetLedger(previousState, nextState) {
     const sortedActiveEvents = activeEvents.slice().sort((a, b) => String(a.period).localeCompare(String(b.period)));
     let expectedPeriod = firstPeriod;
     const usefulLifeDays = Math.round((lifeEnd.getTime() - serviceDateUtc.getTime()) / 86400000);
-    let calculatedAccumulatedBs = 0;
+    const costScaleDate = String(asset.costScaleDate || asset.acquisitionDate);
     let calculatedAccumulatedUsd = 0;
     for (const event of sortedActiveEvents) {
       if (String(event.period) !== expectedPeriod) {
@@ -2240,17 +2270,25 @@ function validateFixedAssetLedger(previousState, nextState) {
       const overlapEnd = periodEnd < lifeEnd ? periodEnd : lifeEnd;
       const expectedDays = Math.max(0, Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000));
       const finalPeriod = overlapEnd.getTime() === lifeEnd.getTime();
+      const postingDate = new Date(overlapEnd.getTime() - 86400000).toISOString().slice(0, 10);
+      // La escala vigente en la fecha contable del período manda: el costo, el
+      // residual y cada depreciación anterior se reexpresan antes de operar.
+      const baseBs = reexpressFixedAssetBsForIntegrity(Number(asset.acquisitionCostBs), costScaleDate, postingDate) -
+        reexpressFixedAssetBsForIntegrity(Number(asset.residualValueBs), costScaleDate, postingDate);
+      const accumulatedAtPosting = sortedActiveEvents
+        .filter(prior => String(prior.period) < String(event.period))
+        .reduce((sum, prior) => sum + reexpressFixedAssetBsForIntegrity(Number(prior.amountBs), prior.date, postingDate), 0);
       const expectedBs = finalPeriod
-        ? Math.round((depreciableBs - calculatedAccumulatedBs + Number.EPSILON) * 100) / 100
-        : Math.round((depreciableBs * expectedDays / usefulLifeDays + Number.EPSILON) * 100) / 100;
+        ? roundFixedAssetBsForIntegrity(baseBs - accumulatedAtPosting)
+        : roundFixedAssetBsForIntegrity(baseBs * expectedDays / usefulLifeDays);
       const expectedUsd = finalPeriod
         ? Math.round((depreciableUsd - calculatedAccumulatedUsd + Number.EPSILON) * 1000000) / 1000000
         : Math.round((depreciableUsd * expectedDays / usefulLifeDays + Number.EPSILON) * 1000000) / 1000000;
-      if (event.days !== expectedDays || Math.abs(Number(event.amountBs) - expectedBs) > 0.01 ||
+      if (event.days !== expectedDays || event.date !== postingDate ||
+          Math.abs(Number(event.amountBs) - expectedBs) > 0.01 ||
           Math.abs(Number(event.amountUsd) - expectedUsd) > 0.000001) {
         throw new Error('SQLite rechazó importes de depreciación que no coinciden con el método lineal prorrateado y el período ' + expectedPeriod + '.');
       }
-      calculatedAccumulatedBs += Number(event.amountBs);
       calculatedAccumulatedUsd += Number(event.amountUsd);
       expectedPeriod = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
     }

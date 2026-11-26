@@ -1,6 +1,7 @@
 import type { PurchaseRecord } from './accounting';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import { isValidIsoDate } from './migrationParsing';
+import { calculateFiscalBreakdown } from './vatFiscalEngine';
 
 export interface PurchaseServiceCreditNoteRequest {
   purchase: PurchaseRecord;
@@ -75,9 +76,15 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
       request.bcvRate < 0 || (isBcvRateRequiredForDate(request.noteDate) && request.bcvRate <= 0) || purchase.taxRate < 0 || purchase.taxRate > 100) {
     throw new Error('Los importes, la alícuota o la tasa BCV de la NC no son válidos para la fecha de emisión.');
   }
-  const effectiveVatRate = Number(purchase.taxRate) === 31 ? 16 : Number(purchase.taxRate);
-  const expectedVat = money(Number(purchase.taxableBaseBs) * effectiveVatRate / 100);
-  const expectedLuxury = Number(purchase.taxRate) === 31 ? money(Number(purchase.taxableBaseBs) * 0.15) : 0;
+  const originalBreakdown = calculateFiscalBreakdown({
+    taxableBaseBs: Number(purchase.taxableBaseBs),
+    exemptAmountBs: Number(purchase.exemptAmountBs),
+    taxRate: Number(purchase.taxRate),
+    igtfAmountBs: Number(purchase.igtfAmountBs || 0)
+  });
+  const effectiveVatRate = originalBreakdown.vatRate;
+  const expectedVat = originalBreakdown.vatAmountBs;
+  const expectedLuxury = originalBreakdown.additionalLuxuryTaxBs;
   const originalLuxury = Number(purchase.additionalLuxuryTaxBs ?? Math.max(0, Number(purchase.vatAmountBs) - expectedVat));
   if (Math.abs(originalLuxury - expectedLuxury) > 0.02) throw new Error('El impuesto adicional del 15% de la factura original no concilia.');
   if (Math.abs(expectedVat - Number(purchase.vatAmountBs)) > 0.02) {
@@ -96,9 +103,10 @@ export function calculatePurchaseServiceCreditNote(request: PurchaseServiceCredi
   }
   const taxableBaseBs = money(request.taxableBaseBs);
   const exemptAmountBs = money(request.exemptAmountBs);
-  const vatAmountBs = money(taxableBaseBs * effectiveVatRate / 100);
-  const additionalLuxuryTaxBs = Number(purchase.taxRate) === 31 ? money(taxableBaseBs * 0.15) : 0;
-  const totalAmountBs = money(taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs);
+  const noteBreakdown = calculateFiscalBreakdown({ taxableBaseBs, exemptAmountBs, taxRate: Number(purchase.taxRate) });
+  const vatAmountBs = noteBreakdown.vatAmountBs;
+  const additionalLuxuryTaxBs = noteBreakdown.additionalLuxuryTaxBs;
+  const totalAmountBs = noteBreakdown.totalAmountBs;
   const taxableBaseUsd = request.bcvRate > 0 ? usd(taxableBaseBs / request.bcvRate) : 0;
   const exemptAmountUsd = request.bcvRate > 0 ? usd(exemptAmountBs / request.bcvRate) : 0;
   const vatAmountUsd = request.bcvRate > 0 ? usd(vatAmountBs / request.bcvRate) : 0;

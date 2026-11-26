@@ -4,6 +4,10 @@ import { formatBs, formatDate } from '../../utils/formatters';
 import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { isBcvRateRequiredForDate } from '../../utils/bcvRatePolicy';
 import { getNextFixedAssetDepreciationPeriod, type FixedAssetRegistrationDraft, type FixedAssetDepreciationMethod } from '../../types/fixedAssets';
+import {
+  getFixedAssetDepreciationExpenseBetweenDates,
+  getFixedAssetMonetaryPosition
+} from '../../types/fixedAssetsMonetaryReexpression';
 
 const parseAmount = (value: string): number => {
   const raw = value.trim();
@@ -35,6 +39,9 @@ export const FixedAssetsView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // Fecha de consulta de los reportes: todos los importes Bs. se reexpresan a
+  // la escala vigente en esta fecha, sin modificar los valores históricos.
+  const [valuationDate, setValuationDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const reversedSourceIds = useMemo(
     () => new Set(journalEntries.filter(entry => entry.reversalOfEntryId).map(entry => String(entry.reversalOfEntryId))),
@@ -65,20 +72,24 @@ export const FixedAssetsView: React.FC = () => {
   const expenseAccounts = accounts.filter(account =>
     account.type === 'GASTOS' && account.isMovement && /DEPRECIACI[ÓO]N/i.test(account.name)
   );
-  const assetSummary = useMemo(() => fixedAssets.reduce((summary, asset) => {
-    const events = asset.depreciationEvents.filter(event => !event.reversedByJournalEntryId);
-    const accumulatedBs = events.reduce((sum, event) => sum + Number(event.amountBs), 0);
-    const accumulatedUsd = events.reduce((sum, event) => sum + Number(event.amountUsd), 0);
-    return {
-      count: summary.count + 1,
-      costBs: summary.costBs + Number(asset.acquisitionCostBs),
-      costUsd: summary.costUsd + Number(asset.acquisitionCostUsd),
-      depreciationBs: summary.depreciationBs + accumulatedBs,
-      depreciationUsd: summary.depreciationUsd + accumulatedUsd,
-      netBs: summary.netBs + Math.max(Number(asset.residualValueBs), Number(asset.acquisitionCostBs) - accumulatedBs),
-      netUsd: summary.netUsd + Math.max(Number(asset.residualValueUsd), Number(asset.acquisitionCostUsd) - accumulatedUsd)
-    };
-  }, { count:0,costBs:0,costUsd:0,depreciationBs:0,depreciationUsd:0,netBs:0,netUsd:0 }), [fixedAssets]);
+  const assetSummary = useMemo(() => {
+    const periodStart = valuationDate.slice(0, 4) + '-01-01';
+    return fixedAssets.reduce((summary, asset) => {
+      const position = getFixedAssetMonetaryPosition(asset, valuationDate);
+      const expenseBs = getFixedAssetDepreciationExpenseBetweenDates(asset, periodStart, valuationDate, valuationDate);
+      return {
+        count: summary.count + 1,
+        historicalCostBs: summary.historicalCostBs + position.historicalCostBs,
+        historicalCostUsd: summary.historicalCostUsd + position.historicalCostUsd,
+        costBs: summary.costBs + position.costBs,
+        depreciationBs: summary.depreciationBs + position.accumulatedDepreciationBs,
+        depreciationUsd: summary.depreciationUsd + position.accumulatedDepreciationUsd,
+        expenseBs: summary.expenseBs + expenseBs,
+        netBs: summary.netBs + position.netBookValueBs,
+        netUsd: summary.netUsd + position.netBookValueUsd
+      };
+    }, { count:0,historicalCostBs:0,historicalCostUsd:0,costBs:0,depreciationBs:0,depreciationUsd:0,expenseBs:0,netBs:0,netUsd:0 });
+  }, [fixedAssets, valuationDate]);
   // Fecha contable que decide si el resumen agregado puede expresarse en USD.
   const usdSummaryDate = useMemo(() => fixedAssets.reduce(
     (latest, asset) => allowsUsdForOperationDate(asset.acquisitionDate) && asset.acquisitionDate > latest
@@ -196,11 +207,17 @@ export const FixedAssetsView: React.FC = () => {
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Activos registrados</p><p className="mt-1 text-2xl font-bold text-slate-900">{assetSummary.count}</p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.costBs)}</p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · USD</p><p className="mt-1 text-lg font-bold text-slate-900">{formatUsdForDate(assetSummary.costUsd, usdSummaryDate)}</p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Depreciación acumulada</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.depreciationBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.depreciationUsd, usdSummaryDate)}</span></p></div>
-        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.netUsd, usdSummaryDate)}</span></p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Costo histórico · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.historicalCostBs)}</p><p className="text-xs text-slate-500">USD {formatUsdForDate(assetSummary.historicalCostUsd, usdSummaryDate)}</p></div>
+        <div className="rounded-xl border bg-white p-4">
+          <label className="text-xs text-slate-500" htmlFor="fixed-assets-valuation-date">Costo reexpresado · Bs.</label>
+          <p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.costBs)}</p>
+          <input id="fixed-assets-valuation-date" type="date" value={valuationDate} onChange={event => setValuationDate(event.target.value)} className="mt-1 w-full rounded-md border px-2 py-1 text-xs" />
+        </div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Depreciación acumulada · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.depreciationBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.depreciationUsd, usdSummaryDate)}</span></p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Valor neto contable · Bs.</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.netBs)} <span className="text-sm font-medium text-slate-500">/ {formatUsdForDate(assetSummary.netUsd, usdSummaryDate)}</span></p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Gasto de depreciación {valuationDate.slice(0, 4)}</p><p className="mt-1 text-lg font-bold text-slate-900">{formatBs(assetSummary.expenseBs)}</p><p className="text-xs text-slate-500">A la escala vigente al {formatDate(valuationDate)}</p></div>
       </section>
+      <p className="text-xs text-slate-500">Los importes Bs. se reexpresan a la escala vigente en la fecha de consulta con la misma política monetaria del sistema (2008, 2018 y 2021). Los costos históricos y los soportes originales no se modifican; los importes USD no se reconvierten.</p>
       <section className="rounded-xl border bg-white p-4 shadow-sm">
         <h2 className="font-semibold text-slate-900">Registrar activo existente</h2>
         <p className="mt-1 text-xs text-slate-500">Seleccione la línea de adquisición ya contabilizada. El costo en Bs. y, cuando exista, USD se toma directamente de ese asiento.</p>
@@ -292,15 +309,15 @@ export const FixedAssetsView: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500">
-                <tr><th className="p-3">Activo</th><th className="p-3">Origen</th><th className="p-3 text-right">Costo Bs.</th><th className="p-3 text-right">Costo USD</th><th className="p-3 text-right">Deprec. Bs.</th><th className="p-3 text-right">Deprec. USD</th><th className="p-3 text-right">Neto Bs.</th><th className="p-3 text-right">Neto USD</th><th className="p-3">Próximo período</th><th className="p-3">Proceso</th></tr>
+                <tr><th className="p-3">Activo</th><th className="p-3">Origen</th><th className="p-3 text-right">Costo histórico Bs.</th><th className="p-3 text-right">Costo reexpresado Bs.</th><th className="p-3 text-right">Costo USD</th><th className="p-3 text-right">Deprec. acum. Bs.</th><th className="p-3 text-right">Deprec. USD</th><th className="p-3 text-right">Neto Bs.</th><th className="p-3 text-right">Neto USD</th><th className="p-3">Próximo período</th><th className="p-3">Proceso</th></tr>
               </thead>
               <tbody>
                 {fixedAssets.map(asset => {
-                  const events = asset.depreciationEvents.filter(event => !event.reversedByJournalEntryId);
-                  const accumulatedBs = events.reduce((sum, event) => sum + event.amountBs, 0);
-                  const accumulatedUsd = events.reduce((sum, event) => sum + event.amountUsd, 0);
-                  const netBs = Math.max(asset.residualValueBs, asset.acquisitionCostBs - accumulatedBs);
-                  const netUsd = Math.max(asset.residualValueUsd, asset.acquisitionCostUsd - accumulatedUsd);
+                  const position = getFixedAssetMonetaryPosition(asset, valuationDate);
+                  const accumulatedBs = position.accumulatedDepreciationBs;
+                  const accumulatedUsd = position.accumulatedDepreciationUsd;
+                  const netBs = position.netBookValueBs;
+                  const netUsd = position.netBookValueUsd;
                   let nextPeriod: string | null = null;
                   let historyError = false;
                   try { nextPeriod = getNextFixedAssetDepreciationPeriod(asset); } catch { historyError = true; }
@@ -328,6 +345,7 @@ export const FixedAssetsView: React.FC = () => {
                       </td>
                       <td className="p-3">{asset.sourceJournalEntryId}<span className="block text-slate-500">{formatDate(asset.acquisitionDate)} · {asset.assetAccountCode}</span></td>
                       <td className="p-3 text-right">{formatBs(asset.acquisitionCostBs)}</td>
+                      <td className="p-3 text-right">{formatBs(position.costBs)}</td>
                       <td className="p-3 text-right">{formatUsdForDate(asset.acquisitionCostUsd, asset.acquisitionDate)}</td>
                       <td className="p-3 text-right">{formatBs(accumulatedBs)}</td>
                       <td className="p-3 text-right">{formatUsdForDate(accumulatedUsd, asset.acquisitionDate)}</td>

@@ -2,6 +2,7 @@ import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } fr
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { cleanRif, validateVenezuelanRif } from './formatters';
 import { getPurchaseAccountCreditDate } from '../types/accounting';
+import { calculateFiscalBreakdown } from '../types/vatFiscalEngine';
 
 /**
  * Prepara un TXT de relación de retenciones IVA con estructura histórica de 16 columnas.
@@ -71,10 +72,11 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const declaredTaxRate = Number(v.taxRate);
     // El 31% combina 16% de IVA con 15% suntuario: la retención y la alícuota
     // exportada cubren solo el IVA, mientras el total del comprobante suma ambos.
-    const effectiveVatRate = declaredTaxRate === 31 ? 16 : declaredTaxRate;
-    const expectedVat = Math.round(Number(v.taxableBaseBs) * effectiveVatRate) / 100;
+    const fiscalBreakdown = calculateFiscalBreakdown({ taxableBaseBs: Number(v.taxableBaseBs), taxRate: declaredTaxRate });
+    const expectedVat = fiscalBreakdown.vatAmountBs;
+    // Se conserva el suntuario histórico del documento vinculado cuando existe.
     const expectedLuxuryTax = declaredTaxRate === 31
-      ? Number(linkedPurchase.additionalLuxuryTaxBs ?? Math.round(Number(v.taxableBaseBs) * 15) / 100)
+      ? Number(linkedPurchase.additionalLuxuryTaxBs ?? fiscalBreakdown.additionalLuxuryTaxBs)
       : 0;
     const expectedWithheld = Math.round(expectedVat * Number(v.retentionRate)) / 100;
     if (v.companyId !== company.id || !validSupplierRif || !validPeriod || !validDate || !/^\d{14}$/.test(voucherNum) || voucherNum.slice(0, 6) !== period ||
@@ -112,7 +114,7 @@ export function generateSeniatIvaTxt(company: Company, vouchers: VatRetentionVou
     const withheldAmount = formatSeniatDecimal(v.vatWithheldBs);
     const affectedDoc = documentType === '01' ? '0' : affectedDocument;
     const exemptAmount = formatSeniatDecimal(v.exemptAmountBs || 0);
-    const rate = formatSeniatDecimal(effectiveVatRate);
+    const rate = formatSeniatDecimal(fiscalBreakdown.vatRate);
     const expeditionNum = '0';
 
     // Fila de agente de retención: la columna 11 es el IVA efectivamente retenido.

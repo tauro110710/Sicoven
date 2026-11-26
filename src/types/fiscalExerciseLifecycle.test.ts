@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersistedFiscalExerciseCalendar, confirmFiscalExerciseCycle, ensureFiscalExerciseCalendar, getFiscalExerciseStartDate, reopenFiscalExerciseCycle, validatePersistedFiscalExerciseCalendar } from './fiscalExerciseLifecycle';
+import { buildPersistedFiscalExerciseCalendar, confirmFiscalExerciseCycle, ensureFiscalExerciseCalendar, getFiscalExerciseStartDate, getInitialFiscalYear, initializeFiscalCalendarForAccountingStart, reopenFiscalExerciseCycle, validatePersistedFiscalExerciseCalendar } from './fiscalExerciseLifecycle';
 import type { PersistedFiscalExercise } from './accounting';
 
 const exercises = (): PersistedFiscalExercise[] => [
@@ -17,9 +17,10 @@ test('confirma un primer ejercicio parcial y enlaza cierre con apertura siguient
   });
   assert.deepEqual(result[0], {
     ...exercises()[0], status: 'CERRADO',
-    closingEntryId: 'entry-close-2015', openingEntryId: 'entry-open-2016', closedAt: '2016-01-02',
+    closingEntryId: 'entry-close-2015', closedAt: '2016-01-02',
     cycles: [{ cycleNumber: 1, closingEntryId: 'entry-close-2015', openingEntryId: 'entry-open-2016', closedAt: '2016-01-02' }]
   });
+  assert.equal(result[0].openingEntryId, undefined);
   assert.equal(result[1].openingEntryId, 'entry-open-2016');
   assert.equal(result[1].status, 'ABIERTO');
   assert.equal(result[2].status, 'ABIERTO');
@@ -116,6 +117,69 @@ test('la reapertura conserva el ciclo original y permite un segundo ciclo sin bo
   assert.equal(second[0].closingEntryId, 'close-2');
   assert.equal(second[1].openingEntryId, 'open-2');
   validatePersistedFiscalExerciseCalendar(second, 'co-1');
+});
+
+test('crea desde 2010 el calendario fiscal derivado de la fecha inicial contable, sin cierres ni años ficticios', () => {
+  const setup = initializeFiscalCalendarForAccountingStart({
+    companyId: 'co-2010', accountingStartDate: '2010-07-15'
+  });
+  assert.equal(setup.fiscalYear, 2010);
+  assert.deepEqual(setup.fiscalExercises.map(item => item.fiscalYear), [2010, 2011]);
+  assert.equal(setup.fiscalExercises[0].startDate, '2010-07-15');
+  assert.equal(setup.fiscalExercises[0].endDate, '2010-12-31');
+  assert.equal(setup.fiscalExercises[1].startDate, '2011-01-01');
+  assert.equal(setup.fiscalExercises[1].endDate, '2011-12-31');
+  assert.ok(setup.fiscalExercises.every(item => item.status === 'ABIERTO'));
+  assert.ok(setup.fiscalExercises.every(item => !item.closingEntryId && !item.openingEntryId && !item.closedAt));
+  assert.ok(setup.fiscalExercises.every(item => item.fiscalYear >= 2010));
+  validatePersistedFiscalExerciseCalendar(setup.fiscalExercises, 'co-2010');
+  assert.equal(getInitialFiscalYear('2010-01-01'), 2010);
+  assert.throws(() => getInitialFiscalYear('2010-02-30'), /inicio contable/);
+  assert.throws(() => initializeFiscalCalendarForAccountingStart({ companyId: '', accountingStartDate: '2010-01-01' }), /identificada/);
+});
+
+test('una empresa de 2010 avanza por ciclos consecutivos 2010-2013 sin saltos ni reconstrucción', () => {
+  const companyId = 'co-ciclos-2010';
+  const setup = initializeFiscalCalendarForAccountingStart({
+    companyId, accountingStartDate: '2010-03-01'
+  });
+  let calendar = setup.fiscalExercises;
+  let activeYear = setup.fiscalYear;
+  assert.equal(getFiscalExerciseStartDate({ accountingStartDate: '2010-03-01' }, 2010), '2010-03-01');
+  assert.equal(getFiscalExerciseStartDate({ accountingStartDate: '2010-03-01' }, 2011), '2011-01-01');
+  for (const closingYear of [2010, 2011, 2012, 2013]) {
+    assert.equal(activeYear, closingYear);
+    const ensured = ensureFiscalExerciseCalendar({
+      id: companyId, accountingStartDate: '2010-03-01', fiscalExercises: calendar
+    }, closingYear);
+    // Cada cierre exige y recibe el ejercicio siguiente, generado de forma consecutiva.
+    assert.ok(ensured.some(item => item.fiscalYear === closingYear + 1));
+    calendar = confirmFiscalExerciseCycle({
+      exercises: ensured, companyId, exerciseId: 'fiscal-exercise:' + companyId + ':' + closingYear,
+      closingEntryId: 'close-' + closingYear, openingEntryId: 'open-' + (closingYear + 1),
+      closedAt: String(closingYear + 1) + '-01-05'
+    });
+    validatePersistedFiscalExerciseCalendar(calendar, companyId);
+    activeYear = closingYear + 1;
+  }
+  assert.deepEqual(calendar.map(item => item.fiscalYear), [2010, 2011, 2012, 2013, 2014]);
+  assert.deepEqual(calendar.map(item => item.status), ['CERRADO', 'CERRADO', 'CERRADO', 'CERRADO', 'ABIERTO']);
+  assert.equal(calendar[0].startDate, '2010-03-01');
+  assert.equal(calendar[4].startDate, '2014-01-01');
+  assert.equal(activeYear, 2014);
+  assert.ok(calendar.slice(1, 4).every(item => item.startDate === String(item.fiscalYear) + '-01-01'));
+});
+
+test('una empresa histórica sin calendario inicial lo obtiene al cerrar, sin reconstruir años anteriores', () => {
+  const companyId = 'co-sin-calendario';
+  const calendar = ensureFiscalExerciseCalendar({ id: companyId, accountingStartDate: '2010-03-01' }, 2010);
+  assert.deepEqual(calendar.map(item => item.fiscalYear), [2010, 2011]);
+  const closed = confirmFiscalExerciseCycle({
+    exercises: calendar, companyId, exerciseId: 'fiscal-exercise:' + companyId + ':2010',
+    closingEntryId: 'close-2010', openingEntryId: 'open-2011', closedAt: '2011-01-05'
+  });
+  assert.deepEqual(closed.map(item => item.status), ['CERRADO', 'ABIERTO']);
+  validatePersistedFiscalExerciseCalendar(closed, companyId);
 });
 
 test('rechaza calendario activo discontinuo en vez de fabricar ejercicios omitidos', () => {

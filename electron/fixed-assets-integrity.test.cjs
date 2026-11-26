@@ -96,6 +96,61 @@ test('requires the asset event to record the journal reversal marker', () => {
 });
 
 
+const historicalAccounting = () => ({
+  accounts,
+  companies: [{ id: 'company-1' }],
+  journalEntries: [
+    {
+      id: 'acq-1', companyId: 'company-1', date: '2017-06-15', type: 'COMPRA', bcvRate: 3300,
+      items: [{ accountCode: '1.2.1.01', debitBs: 36_500_000, creditBs: 0, debitUsd: 3650, creditUsd: 0 }]
+    },
+    {
+      id: 'dep-jul', companyId: 'company-1', date: '2018-07-31', type: 'AJUSTE', bcvRate: 3300,
+      referenceDoc: 'DEP-AF-00001-2018-07',
+      items: [
+        { accountCode: '6.1.1.06', debitBs: 16_425_000, creditBs: 0, debitUsd: 1642.5, creditUsd: 0 },
+        { accountCode: '1.2.1.05', debitBs: 0, creditBs: 16_425_000, debitUsd: 0, creditUsd: 1642.5 }
+      ]
+    },
+    {
+      id: 'dep-aug', companyId: 'company-1', date: '2018-08-31', type: 'AJUSTE', bcvRate: 3300,
+      referenceDoc: 'DEP-AF-00001-2018-08',
+      items: [
+        { accountCode: '6.1.1.06', debitBs: 164.25, creditBs: 0, debitUsd: 1642.5, creditUsd: 0 },
+        { accountCode: '1.2.1.05', debitBs: 0, creditBs: 164.25, debitUsd: 0, creditUsd: 1642.5 }
+      ]
+    }
+  ],
+  fixedAssets: [asset({
+    acquisitionDate: '2017-06-15', serviceDate: '2018-07-01', costScaleDate: '2017-06-15',
+    acquisitionCostBs: 36_500_000, acquisitionCostUsd: 3650, acquisitionBcvRate: 3300,
+    residualValueBs: 3_650_000, residualValueUsd: 365, usefulLifeMonths: 2,
+    depreciationEvents: [
+      event({ id: 'dep-event-jul', period: '2018-07', date: '2018-07-31', days: 31, amountBs: 16_425_000, amountUsd: 1642.5, journalEntryId: 'dep-jul' }),
+      event({ id: 'dep-event-aug', period: '2018-08', date: '2018-08-31', days: 31, amountBs: 164.25, amountUsd: 1642.5, journalEntryId: 'dep-aug' })
+    ]
+  })]
+});
+
+test('acepta depreciaciones reexpresadas al cruzar la reconversión de 2018', () => {
+  assert.doesNotThrow(() => validateFixedAssetLedger({}, historicalAccounting()));
+});
+
+test('rechaza una depreciación posterior a la reconversión calculada con la escala anterior', () => {
+  const state = historicalAccounting();
+  state.journalEntries[2] = {
+    ...state.journalEntries[2],
+    items: [
+      { accountCode: '6.1.1.06', debitBs: 16_425_000, creditBs: 0, debitUsd: 1642.5, creditUsd: 0 },
+      { accountCode: '1.2.1.05', debitBs: 0, creditBs: 16_425_000, debitUsd: 0, creditUsd: 1642.5 }
+    ]
+  };
+  state.fixedAssets[0].depreciationEvents[1] = {
+    ...state.fixedAssets[0].depreciationEvents[1], amountBs: 16_425_000
+  };
+  assert.throws(() => validateFixedAssetLedger({}, state), /no coinciden con el método lineal prorrateado/);
+});
+
 test('accepts a non-depreciable land asset without depreciation accounts or events', () => {
   const land = asset({
     category: 'Terreno', depreciationMethod: 'NON_DEPRECIABLE', usefulLifeMonths: 0,

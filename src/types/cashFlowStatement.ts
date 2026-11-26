@@ -1,6 +1,6 @@
 import type { Account, BankAccount, CashFlowActivity, JournalEntry } from './accounting';
 import { isValidIsoDate } from './migrationParsing';
-import { convertVenezuelanAmountBetweenDates } from './historicalAccountingCalendar';
+import { reexpressReportAmount } from './reportMonetaryReexpression';
 
 export type CashFlowSection = 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'SIN_CLASIFICAR';
 
@@ -77,13 +77,13 @@ const counterpartAmount = (
   entryDate: string,
   reportScaleDate: string
 ): number => {
-  if (currency === 'bs') return Number(convertVenezuelanAmountBetweenDates(side === 'credit' ? amount(item.creditBs) : amount(item.debitBs), entryDate, reportScaleDate));
+  if (currency === 'bs') return reexpressReportAmount(side === 'credit' ? amount(item.creditBs) : amount(item.debitBs), entryDate, reportScaleDate);
   return side === 'credit' ? amount(item.creditUsd) : amount(item.debitUsd);
 };
 const cashNet = (entry: JournalEntry, cashCodes: Set<string>, reportScaleDate: string) =>
   entry.items.reduce((sum, item) => cashCodes.has(item.accountCode)
     ? {
-        bs: sum.bs + Number(convertVenezuelanAmountBetweenDates(amount(item.debitBs) - amount(item.creditBs), entry.date, reportScaleDate)),
+        bs: sum.bs + reexpressReportAmount(amount(item.debitBs) - amount(item.creditBs), entry.date, reportScaleDate),
         usd: sum.usd + amount(item.debitUsd) - amount(item.creditUsd)
       }
     : sum, { bs: 0, usd: 0 });

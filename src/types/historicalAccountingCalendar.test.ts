@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildHistoricalFiscalExercises,
   convertVenezuelanAmount,
   convertVenezuelanAmountBetweenDates,
   normalizeVenezuelanAmountToCurrentScale,
@@ -9,39 +8,6 @@ import {
   roundHistoricalPresentationAmount,
   addExactDecimals
 } from './historicalAccountingCalendar';
-
-test('genera ejercicios desde el inicio real de operaciones sin imponer año mínimo', () => {
-  const exercises = buildHistoricalFiscalExercises({
-    companyId: 'company-1',
-    operationalStartDate: '2015-04-17',
-    throughDate: '2026-11-20',
-    closedThroughDate: '2023-12-31',
-    closingFiscalYears: [2024]
-  });
-  assert.equal(exercises.length, 12);
-  assert.deepEqual(exercises[0], {
-    id: 'company-1:2015',
-    companyId: 'company-1',
-    fiscalYear: 2015,
-    startDate: '2015-04-17',
-    endDate: '2015-12-31',
-    status: 'CERRADO'
-  });
-  assert.equal(exercises[8].fiscalYear, 2023);
-  assert.equal(exercises[8].status, 'CERRADO');
-  assert.equal(exercises[9].status, 'EN_CIERRE');
-  assert.equal(exercises[11].status, 'ABIERTO');
-});
-
-test('permite reconstruir ejercicios anteriores a 2015 cuando esa fue la fecha real', () => {
-  const exercises = buildHistoricalFiscalExercises({
-    companyId: 'company-legacy',
-    operationalStartDate: '1998-09-03',
-    throughDate: '2000-12-31'
-  });
-  assert.deepEqual(exercises.map(item => item.fiscalYear), [1998, 1999, 2000]);
-  assert.equal(exercises[0].startDate, '1998-09-03');
-});
 
 test('determina la escala monetaria histórica por la fecha efectiva legal', () => {
   assert.equal(getVenezuelanMonetaryEra('2015-12-31').id, 'BOLIVAR_FUERTE');
@@ -67,14 +33,9 @@ test('separa la conversión nominal del redondeo de presentación', () => {
   assert.equal(roundHistoricalPresentationAmount('-1.235', 2), '-1.24');
 });
 
-test('bloquea fechas e importes inválidos y ejercicios con cronología incorrecta', () => {
+test('bloquea fechas e importes inválidos', () => {
   assert.throws(() => getVenezuelanMonetaryEra('2021-02-30'));
   assert.throws(() => convertVenezuelanAmount('NaN', 'BOLIVAR_SOBERANO', 'BOLIVAR_DIGITAL'));
-  assert.throws(() => buildHistoricalFiscalExercises({
-    companyId: 'company-1',
-    operationalStartDate: '2026-02-01',
-    throughDate: '2025-12-31'
-  }));
 });
 
 test('normalizes report amounts using effective-date monetary scale without mutating source', () => {

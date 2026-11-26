@@ -1,5 +1,6 @@
 import type { Account, BankAccount, JournalEntry } from './accounting';
 import { buildCashFlowReport, type CashFlowReport } from './cashFlowStatement';
+import { reexpressReportAmount } from './reportMonetaryReexpression';
 
 export type CashFlowIndirectTreatment =
   | 'NON_CASH_EXPENSE_ADD_BACK'
@@ -66,11 +67,20 @@ const round = (value: number, places: number) => {
 const isLinkedAnnualOpening = (entry: JournalEntry) =>
   entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate === entry.date;
 const isExcludedFromIncome = (entry: JournalEntry) => entry.type === 'APERTURA' || entry.type === 'CIERRE';
-const balanceMovement = (entry: JournalEntry, code: string, normal: 'DEBIT' | 'CREDIT') =>
+// Cada línea en Bs. se reexpresa a la escala del reporte antes de acumular;
+// el USD de origen se conserva sin conversiones cruzadas.
+const balanceMovement = (
+  entry: JournalEntry,
+  code: string,
+  normal: 'DEBIT' | 'CREDIT',
+  reportScaleDate: string
+) =>
   entry.items.filter(item => item.accountCode === code).reduce((sum, item) => ({
     bs: sum.bs + (normal === 'DEBIT'
-      ? finite(item.debitBs) - finite(item.creditBs)
-      : finite(item.creditBs) - finite(item.debitBs)),
+      ? reexpressReportAmount(item.debitBs, entry.date, reportScaleDate) -
+        reexpressReportAmount(item.creditBs, entry.date, reportScaleDate)
+      : reexpressReportAmount(item.creditBs, entry.date, reportScaleDate) -
+        reexpressReportAmount(item.debitBs, entry.date, reportScaleDate)),
     usd: sum.usd + (normal === 'DEBIT'
       ? finite(item.debitUsd) - finite(item.creditUsd)
       : finite(item.creditUsd) - finite(item.debitUsd))
@@ -129,7 +139,7 @@ export function buildCashFlowIndirectReport(
   for (const account of accounts.filter(item => item.isMovement)) {
     if (account.type === 'INGRESOS' || account.type === 'COSTOS' || account.type === 'GASTOS') {
       const movement = periodEntries.reduce((sum, entry) => {
-        const value = balanceMovement(entry, account.code, account.type === 'INGRESOS' ? 'CREDIT' : 'DEBIT');
+        const value = balanceMovement(entry, account.code, account.type === 'INGRESOS' ? 'CREDIT' : 'DEBIT', end);
         return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
       }, { bs: 0, usd: 0 });
       netIncomeBs += movement.bs * (account.type === 'INGRESOS' ? 1 : -1);
@@ -157,11 +167,11 @@ export function buildCashFlowIndirectReport(
     const treatment = account.cashFlowIndirectTreatment!;
     const normal = account.type === 'PASIVO' || account.type === 'PATRIMONIO' ? 'CREDIT' : 'DEBIT';
     const opening = openingBasis.reduce((sum, entry) => {
-      const value = balanceMovement(entry, account.code, normal);
+      const value = balanceMovement(entry, account.code, normal, end);
       return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
     }, { bs: 0, usd: 0 });
     const periodChange = periodEntries.reduce((sum, entry) => {
-      const value = balanceMovement(entry, account.code, normal);
+      const value = balanceMovement(entry, account.code, normal, end);
       return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
     }, { bs: 0, usd: 0 });
     const closing = { bs: opening.bs + periodChange.bs, usd: opening.usd + periodChange.usd };

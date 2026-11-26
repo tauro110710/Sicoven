@@ -2,6 +2,7 @@ import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord } from './
 import { isValidIsoDate } from './migrationParsing';
 import { isBcvRateRequiredForDate } from '../utils/bcvRatePolicy';
 import type { SupplierDebitNoteEconomicCause } from './supplierDebitNote';
+import { calculateFiscalBreakdown, resolveFiscalRates } from './vatFiscalEngine';
 
 export interface SupplierDebitNoteAccountingDraft {
   companyId: string;
@@ -164,8 +165,17 @@ export function buildSupplierDebitNoteAccountingPlan(input: {
     throw new Error('El total de la ND no concilia con base imponible, exento e IVA discriminado.');
   }
   const taxRate = Number(draft.taxRate);
+  let expectedVatBs = 0;
+  try {
+    if (resolveFiscalRates(taxRate).combined) {
+      throw new Error('La ND no admite la alícuota combinada 31 %: el IVA y el impuesto suntuario deben desglosarse en un documento especializado.');
+    }
+    expectedVatBs = calculateFiscalBreakdown({ taxableBaseBs, taxRate }).vatAmountBs;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('La alícuota de la ND no es válida.');
+  }
   if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100 ||
-      Math.abs(moneyBs(taxableBaseBs * taxRate / 100) - vatAmountBs) > 0.01 ||
+      Math.abs(expectedVatBs - vatAmountBs) > 0.01 ||
       (taxableBaseBs === 0 && taxRate !== 0)) {
     throw new Error('El IVA de la ND debe conciliar con una única alícuota explícita; las alícuotas mixtas requieren un desglose especializado.');
   }

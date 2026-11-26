@@ -1,4 +1,5 @@
 import type { Account, JournalEntry } from './accounting';
+import { getReportScaleDate, reexpressReportAmount } from './reportMonetaryReexpression';
 
 export interface EquityChangeRow {
   accountCode: string;
@@ -56,11 +57,12 @@ const emptyRow = (accountCode: string, accountName: string): EquityChangeRow => 
 });
 const isProfitLoss = (account: Account | undefined) =>
   account?.type === 'INGRESOS' || account?.type === 'COSTOS' || account?.type === 'GASTOS';
-const signedProfitLoss = (entry: JournalEntry, accountsByCode: Map<string, Account>) =>
+const signedProfitLoss = (entry: JournalEntry, accountsByCode: Map<string, Account>, reportScaleDate: string) =>
   entry.items.reduce((sum, item) => {
     if (!isProfitLoss(accountsByCode.get(item.accountCode))) return sum;
     return {
-      bs: sum.bs + amount(item.creditBs) - amount(item.debitBs),
+      bs: sum.bs + reexpressReportAmount(item.creditBs, entry.date, reportScaleDate) -
+        reexpressReportAmount(item.debitBs, entry.date, reportScaleDate),
       usd: sum.usd + amount(item.creditUsd) - amount(item.debitUsd)
     };
   }, { bs: 0, usd: 0 });
@@ -75,7 +77,9 @@ export function buildEquityChangesReport(
   entries: JournalEntry[],
   accounts: Account[],
   companyId: string,
-  year: number
+  year: number,
+  /** Escala monetaria del reporte; por defecto, el último día del ejercicio. */
+  reportScaleDate: string = getReportScaleDate(year)
 ): EquityChangesReport {
   if (!companyId.trim() || !Number.isInteger(year) || year < 1) {
     throw new Error('La empresa y el ejercicio seleccionado deben ser válidos.');
@@ -114,7 +118,8 @@ export function buildEquityChangesReport(
       if (!equityCodes.has(item.accountCode)) continue;
       const account = accountsByCode.get(item.accountCode);
       addOpening(item.accountCode, account?.name || item.accountName,
-        amount(item.creditBs) - amount(item.debitBs),
+        reexpressReportAmount(item.creditBs, openingEntry.date, reportScaleDate) -
+          reexpressReportAmount(item.debitBs, openingEntry.date, reportScaleDate),
         amount(item.creditUsd) - amount(item.debitUsd));
     }
   } else {
@@ -123,7 +128,8 @@ export function buildEquityChangesReport(
         if (!equityCodes.has(item.accountCode)) continue;
         const account = accountsByCode.get(item.accountCode);
         addOpening(item.accountCode, account?.name || item.accountName,
-          amount(item.creditBs) - amount(item.debitBs),
+          reexpressReportAmount(item.creditBs, entry.date, reportScaleDate) -
+            reexpressReportAmount(item.debitBs, entry.date, reportScaleDate),
           amount(item.creditUsd) - amount(item.debitUsd));
       }
     }
@@ -134,7 +140,7 @@ export function buildEquityChangesReport(
     const priorResult = companyEntries
       .filter(entry => entry.date < start && entry.date > lastPriorClosing && entry.type !== 'CIERRE' && entry.type !== 'APERTURA')
       .reduce((sum, entry) => {
-        const value = signedProfitLoss(entry, accountsByCode);
+        const value = signedProfitLoss(entry, accountsByCode, reportScaleDate);
         return { bs: sum.bs + value.bs, usd: sum.usd + value.usd };
       }, { bs: 0, usd: 0 });
     if (Math.abs(priorResult.bs) > 0.005 || Math.abs(priorResult.usd) > 0.0000005) {
@@ -154,7 +160,8 @@ export function buildEquityChangesReport(
     for (const item of entry.items) {
       if (!equityCodes.has(item.accountCode)) continue;
       const account = accountsByCode.get(item.accountCode);
-      const debitBs = amount(item.debitBs), creditBs = amount(item.creditBs);
+      const debitBs = reexpressReportAmount(item.debitBs, entry.date, reportScaleDate);
+      const creditBs = reexpressReportAmount(item.creditBs, entry.date, reportScaleDate);
       const debitUsd = amount(item.debitUsd), creditUsd = amount(item.creditUsd);
       const netBs = creditBs - debitBs, netUsd = creditUsd - debitUsd;
       addMovement(item.accountCode, account?.name || item.accountName, netBs, netUsd);
@@ -171,7 +178,7 @@ export function buildEquityChangesReport(
   let periodResultBs = 0, periodResultUsd = 0;
   if (!resultTransferredToEquity) {
     for (const entry of periodEntries.filter(item => item.type !== 'CIERRE' && item.type !== 'APERTURA')) {
-      const result = signedProfitLoss(entry, accountsByCode);
+      const result = signedProfitLoss(entry, accountsByCode, reportScaleDate);
       periodResultBs += result.bs;
       periodResultUsd += result.usd;
     }

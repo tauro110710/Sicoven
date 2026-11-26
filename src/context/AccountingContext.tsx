@@ -33,7 +33,7 @@ import { validateJournalEntryAccounts, isJournalEntryBalanced, isJournalEntryCur
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
 import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { buildClosingEntryItems } from '../types/accountingYearClosing';
-import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle } from '../types/fiscalExerciseLifecycle';
+import { ensureFiscalExerciseCalendar, confirmFiscalExerciseCycle, initializeFiscalCalendarForAccountingStart } from '../types/fiscalExerciseLifecycle';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -67,7 +67,7 @@ import type { VatOwnDeclaration, VatOwnDeclarationEvent } from '../types/vatOwnD
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, prepareProductsForHistoricalReconstruction } from '../types/inventoryAccounting';
+import { calculateFifoIssue, applyFifoAdjustment, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { reexpressInventoryAverageCost, reexpressInventoryCostBs, reexpressInventoryCostLayers, resolveInventoryCostScale } from '../types/inventoryMonetaryReexpression';
 import { buildCostOfSalesLines, calculateLiveEntryCosting, calculateLiveIssueCosting } from '../types/inventoryLiveCosting';
 import { isValidIsoDate } from '../types/migrationParsing';
@@ -93,7 +93,12 @@ import { calculateSaleCorrectionNote, type SaleCorrectionNoteRequest } from '../
 import { resolveNonInventoryPurchaseDebitAccount, resolveTreasuryAccountCurrency } from '../types/purchaseAccounting';
 import type { FixedAsset, FixedAssetDepreciationEvent, FixedAssetRegistrationDraft } from '../types/fixedAssets';
 import { calculateFixedAssetDepreciation, getNextFixedAssetDepreciationPeriod, getFixedAssetDepreciationScheduleThrough } from '../types/fixedAssets';
-import { buildHistoricalAccountingReplayPlan, findOrphanedVatWithholdingEvents, findCrossCompanyVatWithholdingEvents, type HistoricalAccountingReplayPlan, type HistoricalReplayRecord } from '../types/historicalAccountingReplayPlan';
+import {
+  assertFiscalBreakdown,
+  calculateFiscalBreakdown,
+  getInputVatAccountCode,
+  getOutputVatAccountCode
+} from '../types/vatFiscalEngine';
 import { getFiscalExerciseStartDate } from '../types/fiscalExerciseLifecycle';
 import { getVenezuelanMonetaryEra } from '../types/historicalAccountingCalendar';
 
@@ -201,8 +206,6 @@ interface AccountingContextType {
   getCompanyInventoryProducts: (companyId: string) => InventoryProduct[];
   getCompanyInventoryMovements: (companyId: string) => InventoryMovement[];
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[], targetCompanyId?: string) => Promise<number>;
-  prepareInventoryProductsForHistoricalReconstruction: (startDate: string) => Promise<number>;
-  prepareHistoricalAccountingReplayPlan: (startDate: string, throughDate?: string) => HistoricalAccountingReplayPlan;
   importInventoryMovements: (movements: InventoryMovementImportDraft[], targetCompanyId?: string, options?: { accountingMode?: 'post' | 'kardex-only' }) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct, reason: string, workpaperNote: string) => Promise<void>;
@@ -1691,9 +1694,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (comp.operationalStartDate && !isValidIsoDate(comp.operationalStartDate)) {
       throw new Error('La fecha real de inicio de operaciones debe ser válida.');
     }
-    const companyToCreate: Omit<Company, 'id'> = {
+    // El ejercicio fiscal inicial y su calendario derivan de la fecha de inicio
+    // contable; nunca del año en curso ni de un valor predeterminado manual.
+    const generatedId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `comp-${Date.now()}`;
+    const companyId = window.sicovenStore ? generatedId : `comp-${Date.now()}`;
+    const fiscalSetup = initializeFiscalCalendarForAccountingStart({
+      companyId,
+      accountingStartDate: comp.accountingStartDate as string
+    });
+    const companyToCreate: Omit<Company, 'id'> & { operationId?: string } = {
       ...comp,
-      registeredAt: comp.registeredAt || new Date().toISOString()
+      fiscalYear: fiscalSetup.fiscalYear,
+      fiscalExercises: fiscalSetup.fiscalExercises,
+      registeredAt: comp.registeredAt || new Date().toISOString(),
+      ...(window.sicovenStore ? { operationId: companyId } : {})
     };
     if (window.sicovenStore) {
       const created = await window.sicovenStore.createCompany(token, companyToCreate as unknown as Record<string, unknown>);
@@ -1707,7 +1723,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const newComp: Company = {
       ...companyToCreate,
-      id: `comp-${Date.now()}`
+      id: companyId
     };
     setCompanies(prev => [...prev, newComp]);
     setCurrentCompanyId(newComp.id);
@@ -2072,6 +2088,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       assetCode,
       description,
       category,
+      // La escala del costo es la fecha contable del asiento de capitalización.
+      costScaleDate: source.date,
       acquisitionCostBs: Number(sourceLine.debitBs),
       acquisitionCostUsd: Number(sourceLine.debitUsd),
       acquisitionBcvRate: Number(source.bcvRate),
@@ -3324,13 +3342,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
     }
     if (!['TAXABLE', 'EXEMPT', 'COMMON'].includes(purchaseData.vatCreditTreatment || 'COMMON')) throw new Error('El destino del crédito fiscal IVA no es válido.');
-    const expectedVatRate = purchaseData.taxRate === 31 ? 16 : purchaseData.taxRate;
-    const expectedVat = Math.round(purchaseData.taxableBaseBs * expectedVatRate) / 100;
-    const expectedLuxuryTax = purchaseData.taxRate === 31 ? Math.round(purchaseData.taxableBaseBs * 15) / 100 : 0;
-    if (Math.abs(expectedLuxuryTax - Number(purchaseData.additionalLuxuryTaxBs || 0)) > 0.01) throw new Error('El impuesto adicional del 15% no coincide con la alícuota combinada de la compra.');
-    if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
-      throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
-    }
+    // Desglose fiscal único: IVA y suntuario separados según el motor central.
+    assertFiscalBreakdown({
+      taxRate: purchaseData.taxRate,
+      taxableBaseBs: purchaseData.taxableBaseBs,
+      exemptAmountBs: purchaseData.exemptAmountBs,
+      vatAmountBs: purchaseData.vatAmountBs,
+      additionalLuxuryTaxBs: Number(purchaseData.additionalLuxuryTaxBs || 0),
+      igtfAmountBs: Number(purchaseData.igtfAmountBs || 0),
+      totalAmountBs: purchaseData.totalAmountBs
+    }, { toleranceBs: 0.01, requireTotal: true });
     if (purchaseData.vatWithheldBs > 0 && !purchaseData.ivaRetentionDecision) {
       throw new Error('No se puede emitir un comprobante de retención sin una decisión fiscal calculada y conservada por SICOVEN.');
     }
@@ -3395,7 +3416,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleIgtfMethods.includes(purchaseData.paymentMethod || '')) {
         throw new Error('El medio de pago seleccionado no corresponde a los medios configurados para IGTF.');
       }
-      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0)) * 0.03 * 100) / 100;
+      const expectedIgtf = calculateFiscalBreakdown({
+        taxableBaseBs: purchaseData.taxableBaseBs,
+        exemptAmountBs: purchaseData.exemptAmountBs,
+        taxRate: purchaseData.taxRate,
+        igtfRatePercent: 3
+      }).igtfAmountBs;
       if (Math.abs(igtfAmount - expectedIgtf) > 0.01 || Number(purchaseData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
@@ -3403,13 +3429,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permite registrar un importe IGTF sin confirmación expresa.');
     }
 
-    const expectedTotal = Math.round((
-      purchaseData.taxableBaseBs + purchaseData.exemptAmountBs +
-      purchaseData.vatAmountBs + Number(purchaseData.additionalLuxuryTaxBs || 0) + igtfAmount
-    ) * 100) / 100;
-    if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
-      throw new Error('El total de la compra no coincide con base imponible, exento, IVA, impuesto adicional e IGTF.');
-    }
     if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
       throw new Error('Las retenciones no pueden superar el total de la factura.');
     }
@@ -3540,7 +3559,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Debe: Crédito Fiscal IVA si aplica
     if (purchaseData.vatAmountBs > 0) {
       items.push({
-        accountCode: purchaseData.taxRate === 8 ? '1.1.3.02' : '1.1.3.01',
+        accountCode: getInputVatAccountCode(purchaseData.taxRate),
         accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
@@ -4023,7 +4042,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = [...(cashPurchase ? [] : [payableAccountCode]), ...inventoryAccountCodes];
     if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
-    if (valuation.vatAmountBs > 0) requiredAccounts.push(purchase.taxRate === 8 ? '1.1.3.02' : '1.1.3.01');
+    if (valuation.vatAmountBs > 0) requiredAccounts.push(getInputVatAccountCode(purchase.taxRate));
     if (valuation.additionalLuxuryTaxBs > 0) requiredAccounts.push('6.1.1.13');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
     if (valuation.islrWithheldBs > 0) requiredAccounts.push('2.1.2.04');
@@ -4690,15 +4709,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
       throw new Error('La alícuota de IVA de la venta no es válida.');
     }
-    const expectedVatRate = saleData.taxRate === 31 ? 16 : saleData.taxRate;
-    const expectedVat = Math.round(saleData.taxableBaseBs * expectedVatRate) / 100;
-    const expectedLuxuryTax = saleData.taxRate === 31 ? Math.round(saleData.taxableBaseBs * 15) / 100 : 0;
-    if (Math.abs(expectedLuxuryTax - Number(saleData.additionalLuxuryTaxBs || 0)) > 0.01) {
-      throw new Error('El impuesto adicional al consumo suntuario no coincide con la alícuota combinada declarada.');
-    }
-    if (Math.abs(expectedVat - saleData.vatAmountBs) > 0.01) {
-      throw new Error('El IVA de la venta no coincide con la base imponible y la alícuota declarada.');
-    }
+    // Mismo motor fiscal que compras, notas y declaraciones.
+    assertFiscalBreakdown({
+      taxRate: saleData.taxRate,
+      taxableBaseBs: saleData.taxableBaseBs,
+      exemptAmountBs: saleData.exemptAmountBs,
+      vatAmountBs: saleData.vatAmountBs,
+      additionalLuxuryTaxBs: Number(saleData.additionalLuxuryTaxBs || 0),
+      igtfAmountBs: Number(saleData.igtfAmountBs || 0),
+      totalAmountBs: saleData.totalAmountBs
+    }, { toleranceBs: 0.01, requireTotal: true });
     if ((saleData.vatWithheldBs || 0) > saleData.vatAmountBs + 0.01) {
       throw new Error('La retención de IVA del cliente no puede superar el IVA causado.');
     }
@@ -4717,16 +4737,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!eligibleSaleIgtf) {
         throw new Error('El IGTF en ventas requiere que la empresa estuviera designada como agente de percepción en la fecha de la factura y que el cobro sea de contado en un medio elegible.');
       }
-      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0)) * 3) / 100;
+      const expectedIgtf = calculateFiscalBreakdown({
+        taxableBaseBs: saleData.taxableBaseBs,
+        exemptAmountBs: saleData.exemptAmountBs,
+        taxRate: saleData.taxRate,
+        igtfRatePercent: 3
+      }).igtfAmountBs;
       if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
       }
     } else if (saleIgtf !== 0) {
       throw new Error('No se permite registrar IGTF sin confirmación expresa.');
-    }
-    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + Number(saleData.additionalLuxuryTaxBs || 0) + saleIgtf) * 100) / 100;
-    if (Math.abs(expectedSaleTotal - saleData.totalAmountBs) > 0.01) {
-      throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
     const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const duplicateSale = [...sales, ...(activeImportBatchRef.current?.sales || [])].some(existing =>
@@ -4844,7 +4865,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
       items.push({
-        accountCode: saleData.taxRate === 8 ? '2.1.2.02' : '2.1.2.01',
+        accountCode: getOutputVatAccountCode(saleData.taxRate),
         accountName: `Débito Fiscal IVA Ventas (${saleData.taxRate}%)`,
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
@@ -5822,158 +5843,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La corrección de ficha quedó guardada en SQLite, pero falta el evento final de auditoría. No repita la corrección. ' +
         (error instanceof Error ? error.message : 'Error de auditoría.'));
     }
-  };
-
-  const prepareHistoricalAccountingReplayPlan = (startDate: string, throughDate?: string): HistoricalAccountingReplayPlan => {
-    assertSQLitePersistenceReady('Preparar plan de reconstrucción histórica');
-    const companyId = currentCompany.id;
-    const withholdingDeclarationById = new Map<string, VatWithholdingDeclaration>(vatWithholdingDeclarations.map(declaration => [declaration.id, declaration] as const));
-    const orphanedWithholdingEvents = findOrphanedVatWithholdingEvents(
-      vatWithholdingDeclarationEvents as unknown as HistoricalReplayRecord[],
-      vatWithholdingDeclarations as unknown as HistoricalReplayRecord[],
-      companyId
-    );
-    const crossCompanyWithholdingEvents = findCrossCompanyVatWithholdingEvents(
-      vatWithholdingDeclarationEvents as unknown as HistoricalReplayRecord[],
-      vatWithholdingDeclarations as unknown as HistoricalReplayRecord[],
-      companyId
-    );
-    const verifiedLegacyFiscalDateByVoucherId = new Map<string, string>();
-    const conflictingLegacyVoucherDates = new Set<string>();
-    for (const declaration of vatWithholdingDeclarations) {
-      if (declaration.companyId !== companyId) continue;
-      for (const assignment of declaration.legacyDateAssignments || []) {
-        if (!declaration.voucherIds.includes(assignment.voucherId) ||
-            !isValidIsoDate(assignment.confirmedFiscalDate) ||
-            String(assignment.note || '').trim().length < 10) continue;
-        const priorDate = verifiedLegacyFiscalDateByVoucherId.get(assignment.voucherId);
-        if (priorDate && priorDate !== assignment.confirmedFiscalDate) conflictingLegacyVoucherDates.add(assignment.voucherId);
-        else verifiedLegacyFiscalDateByVoucherId.set(assignment.voucherId, assignment.confirmedFiscalDate);
-      }
-    }
-    const monthEnd = (period: string): string => {
-      const match = /^(\d{4})-?(\d{2})$/.exec(String(period || ''));
-      if (!match) return '';
-      const year = Number(match[1]);
-      const month = Number(match[2]);
-      if (month < 1 || month > 12) return '';
-      return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-    };
-    const replayRecords = (records: unknown[]): HistoricalReplayRecord[] =>
-      records as HistoricalReplayRecord[];
-    const plan = buildHistoricalAccountingReplayPlan({
-      companyId,
-      company: currentCompany as unknown as HistoricalReplayRecord,
-      accounts: replayRecords(accounts),
-      products: replayRecords(products),
-      bankAccounts: replayRecords(bankAccounts),
-      customers: replayRecords(customers),
-      suppliers: replayRecords(suppliers),
-      financialDisclosures: replayRecords(financialDisclosures),
-      startDate,
-      ...(throughDate ? { throughDate } : {}),
-      purchases: replayRecords(purchases),
-      sales: replayRecords(sales),
-      movements: replayRecords(movements),
-      bankStatementMovements: replayRecords(bankStatementMovements.map(movement => ({
-        ...movement,
-        journalEntryId: movement.isReconciled ? movement.reconciledWithJournalEntryId : undefined
-      }))),
-      creditSettlements: replayRecords(creditSettlements),
-      supplierAdvanceSettlements: replayRecords(supplierAdvanceSettlements),
-      supplierDirectAdvances: replayRecords(supplierDirectAdvances),
-      fixedAssets: replayRecords(fixedAssets),
-      vatVouchers: replayRecords(vatVouchers.map(voucher => ({
-        ...voucher,
-        fiscalDate: voucher.fiscalDate || verifiedLegacyFiscalDateByVoucherId.get(voucher.id)
-      }))),
-      islrVouchers: replayRecords(islrVouchers),
-      vatWithholdingDeclarations: replayRecords(vatWithholdingDeclarations),
-      vatWithholdingDeclarationEvents: replayRecords(vatWithholdingDeclarationEvents.map(event => ({
-        ...event,
-        companyId: event.companyId || withholdingDeclarationById.get(event.declarationId)?.companyId || ''
-      }))),
-      vatOwnDeclarations: replayRecords(vatOwnDeclarations.map(declaration => ({
-        ...declaration,
-        endDate: monthEnd(declaration.period)
-      }))),
-      vatOwnDeclarationEvents: replayRecords(vatOwnDeclarationEvents),
-      islrFiscalEvents: replayRecords(islrFiscalEvents),
-      journalEntries: replayRecords(journalEntries)
-    });
-    if (orphanedWithholdingEvents.length) {
-      plan.blockers.push('Hay ' + orphanedWithholdingEvents.length +
-        ' evento(s) de declaración de retenciones IVA sin declaración de origen; deben resolverse antes de reconstruir.');
-    }
-    if (crossCompanyWithholdingEvents.length) {
-      plan.blockers.push('Hay ' + crossCompanyWithholdingEvents.length +
-        ' evento(s) de retenciones IVA vinculados a declaraciones de otra empresa; deben corregirse los vínculos entre empresas antes de reconstruir: ' +
-        crossCompanyWithholdingEvents.map(event => String(event.id || 'sin-id')).join(', ') + '.');
-    }
-    if (conflictingLegacyVoucherDates.size) {
-      plan.blockers.push('Hay comprobantes de retención IVA con fechas fiscales históricas verificadas contradictorias: ' +
-        [...conflictingLegacyVoucherDates].join(', ') + '.');
-    }
-    if (plan.blockers.length) plan.canProceedToTransactionalReplay = false;
-    return plan;
-  };
-
-  const prepareInventoryProductsForHistoricalReconstruction = async (startDate: string): Promise<number> => {
-    assertSQLitePersistenceReady('Preparar productos para reconstrucción histórica');
-    if (!isValidIsoDate(startDate)) throw new Error('La fecha inicial de reconstrucción no es válida.');
-    const companyId = currentCompany.id;
-    const companyProducts = products.filter(product => product.companyId === companyId);
-    if (!companyProducts.length) throw new Error('La empresa no tiene artículos de inventario para preparar.');
-    if (companyProducts.some(product => Number(product.currentStock) !== 0)) {
-      throw new Error('La preparación exige que todos los artículos tengan existencia cero. No se modificó ningún producto.');
-    }
-    if (movements.some(movement => movement.companyId === companyId)) {
-      throw new Error('La empresa ya tiene movimientos de Kardex. No se borrarán ni alterarán; primero debe resolverse su historial.');
-    }
-    if (purchases.some(purchase => purchase.companyId === companyId) || sales.some(sale => sale.companyId === companyId)) {
-      throw new Error('La empresa ya tiene compras o ventas registradas. La preparación no puede borrar sus efectos históricos.');
-    }
-    const inventoryLedgerExists = journalEntries.some(entry => entry.companyId === companyId &&
-      entry.items.some(item => /^1\.1\.4\./.test(item.accountCode) &&
-        [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => Number(value || 0) !== 0)));
-    if (inventoryLedgerExists) {
-      throw new Error('La empresa ya tiene asientos con saldos de inventario. No se modificó ningún dato.');
-    }
-    if (currentCompany.closedThroughDate && currentCompany.closedThroughDate >= startDate) {
-      throw new Error('La fecha inicial seleccionada pertenece a un período contable cerrado. No se modificó ningún dato.');
-    }
-    const preparedProducts = prepareProductsForHistoricalReconstruction(companyProducts, startDate);
-    const preparedById = new Map(preparedProducts.map(product => [product.id, product]));
-    const reason = 'Preparación autorizada para reconstrucción histórica desde ' + startDate;
-    const workpaperNote = 'Se ponen en cero los costos actuales y se limpia la fecha/tasa BCV de apertura del producto. Se conservan código, nombre, existencia cero, precios comerciales, cuentas y demás datos maestros. No se elimina el historial general de tasas BCV.';
-    for (const original of companyProducts) {
-      const prepared = preparedById.get(original.id)!;
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_requested', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    setProducts(prev => prev.map(product => product.companyId === companyId
-      ? (preparedById.get(product.id) || product) : product));
-    try {
-      await waitForPersistence();
-    } catch (error) {
-      throw new Error('SQLite no confirmó la preparación de los artículos. No continúe con la reconstrucción hasta verificar el estado de la empresa. ' +
-        (error instanceof Error ? error.message : 'Error de persistencia.'));
-    }
-    for (const original of companyProducts) {
-      await recordCorrectionAudit({
-        eventType: 'accounting_correction_executed', entityType: 'INVENTORY_PRODUCT',
-        companyId, entityId: original.id, correctionType: 'HISTORICAL_RECONSTRUCTION_PREPARATION',
-        sourceDocumentRef: original.code + ' · ' + original.name,
-        correctionDocumentRef: original.code + ' · ' + original.name + ' · inicio ' + startDate,
-        reason, workpaperNote
-      });
-    }
-    return preparedProducts.length;
   };
 
   const inventoryCorrectionAuthorizationRef = useRef<string | null>(null);
@@ -8497,8 +8366,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getCompanyInventoryProducts,
         getCompanyInventoryMovements,
         importInventoryProducts,
-        prepareInventoryProductsForHistoricalReconstruction,
-        prepareHistoricalAccountingReplayPlan,
         importInventoryMovements,
         executeProduction,
         updateProduct,

@@ -6,6 +6,7 @@ import { allowsUsdForOperationDate, formatUsdForDate } from './monetaryPolicy';
 import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 import { todayLocalIso } from './localDate';
 import { resolveVatOwnDailySalesSources } from '../types/vatOwnDeclaration';
+import { getDocumentLuxuryTax } from '../types/vatFiscalEngine';
 
 /**
  * Descarga explícita del PDF para Chromium y Electron.
@@ -975,7 +976,7 @@ export async function exportVentasPdf(
   const tableBody: any[] = sales.map(s => {
     const sign = s.documentType === '03' ? -1 : 1;
     const included = selectedIndividualIds.has(s.id);
-    const saleLuxuryTax = s.taxRate === 31 ? (s.additionalLuxuryTaxBs ?? (s.taxableBaseBs || 0) * 0.15) : 0;
+    const saleLuxuryTax = getDocumentLuxuryTax(s);
     const saleUsdAllowed = allowsUsdForOperationDate(s.invoiceDate);
     if (included) {
       totalMonto += sign * (s.totalAmountBs || 0);

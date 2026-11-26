@@ -32,7 +32,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
   const [accountingStartDate, setAccountingStartDate] = useState('');
   const [operationalStartDate, setOperationalStartDate] = useState('');
-  const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
+  // El ejercicio fiscal inicial se deriva siempre de la fecha de inicio contable;
+  // nunca se presupone el año en curso.
+  const fiscalYear = isValidIsoCalendarDate(accountingStartDate)
+    ? accountingStartDate.slice(0, 4)
+    : String(new Date().getFullYear());
   const [accountingFramework, setAccountingFramework] = useState<AccountingFramework | ''>('');
   const [accountingFrameworkVersion, setAccountingFrameworkVersion] = useState('');
   const [accountingFrameworkAdoptionDate, setAccountingFrameworkAdoptionDate] = useState('');
@@ -404,7 +408,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* Inicio del registro contable ordinario en SICOVEN */}
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
             <label className="block text-xs font-bold text-slate-800">
-              Fecha inicial del registro/reconstrucción contable en SICOVEN *
+              Fecha inicial de la contabilidad ordinaria en SICOVEN *
             </label>
             <input
               type="date"
@@ -413,7 +417,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               onChange={e => setAccountingStartDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
-            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se incorporarán las operaciones del registro o reconstrucción contable. Puede ser una fecha histórica anterior al día en que registra la empresa. SICOVEN guardará automáticamente la fecha y hora de registro por separado.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Desde esta fecha se registran las operaciones ordinarias de la empresa y continúa la contabilidad en orden cronológico. Puede ser una fecha histórica anterior al día en que registra la empresa; SICOVEN aplica automáticamente la escala monetaria, la reconversión y la tasa BCV de cada operación. Guardará la fecha y hora de registro por separado.</p>
           </div>
 
           {/* Inicio real de operaciones, dato histórico opcional */}
@@ -427,7 +431,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
               onChange={e => setOperationalStartDate(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-slate-400 focus:outline-none"
             />
-            <p className="text-[10px] leading-4 text-slate-600">Indique cuándo comenzó realmente a operar la empresa, si conoce y tiene documentada esa fecha. Sirve para comprobar que la reconstrucción no omita períodos anteriores; no es requisito para registrar la empresa.</p>
+            <p className="text-[10px] leading-4 text-slate-600">Indique cuándo comenzó realmente a operar la empresa, si conoce y tiene documentada esa fecha. Es una referencia histórica opcional; no es requisito para registrar la empresa ni condiciona el registro ordinario.</p>
           </div>
 
           {/* Ejercicio económico */}
@@ -437,13 +441,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             </label>
             <input
                 type="text"
-                inputMode="numeric"
-                maxLength={4}
+                readOnly
                 required
                 value={fiscalYear}
-                onChange={e => setFiscalYear(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-slate-50 font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
+            <p className="mt-1 text-[10px] leading-4 text-slate-600">Se determina automáticamente a partir de la fecha inicial del registro contable. El calendario fiscal comenzará en ese año y avanzará de forma consecutiva.</p>
           </div>
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">

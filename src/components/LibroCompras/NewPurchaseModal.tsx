@@ -9,6 +9,7 @@ import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaAr
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import { calculateFiscalBreakdown, calculateFiscalBreakdownFromGross, roundFiscalBs } from '../../types/vatFiscalEngine';
 
 // Normaliza texto para búsquedas: ignora mayúsculas y acentos ("cafe" encuentra "Café").
 const normalizeSearchText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -161,13 +162,16 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   function parseDecimalInput(value: string) { const raw = value.trim(); if (!raw) return 0; return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); }
 
   // Real-time calculations
-  const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0 ? Math.round((taxableGrossBs / (1 + taxRate / 100) + Number.EPSILON) * 100) / 100 : taxableBaseBs;
-  const effectiveVatRate = taxRate === 31 ? 16 : taxRate;
-  const vatAmountBs = Math.round(effectiveTaxableBaseBs * (effectiveVatRate / 100) * 100) / 100;
-  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(effectiveTaxableBaseBs * 0.15 * 100) / 100 : 0;
+  const effectiveTaxableBaseBs = vatNotDiscriminated && taxRate > 0
+    ? calculateFiscalBreakdownFromGross({ grossAmountBs: taxableGrossBs, taxRate }).taxableBaseBs
+    : roundFiscalBs(taxableBaseBs);
+  const fiscalBreakdown = calculateFiscalBreakdown({ taxableBaseBs: effectiveTaxableBaseBs, exemptAmountBs, taxRate });
+  const effectiveVatRate = fiscalBreakdown.vatRate;
+  const vatAmountBs = fiscalBreakdown.vatAmountBs;
+  const additionalLuxuryTaxBs = fiscalBreakdown.additionalLuxuryTaxBs;
   const selectedMonthKey = String(accountCreditDate || invoiceDate || '').slice(0, 7);
   const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
-  const operationAmountBs = Math.round((effectiveTaxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs + Number.EPSILON) * 100) / 100;
+  const operationAmountBs = fiscalBreakdown.subtotalBs;
   const supplierRifKeyForProfile = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const supplierProfilePurchase = purchases.filter(item => item.companyId === currentCompany.id && String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierRifKeyForProfile && item.supplierTaxStatus).sort((a, b) => b.opNumber - a.opNumber)[0];
   const resolvedSupplierTaxStatus: IvaSupplierTaxStatus = supplierTaxStatus === 'AUTO' ? (supplierProfilePurchase?.supplierTaxStatus || 'UNKNOWN') : supplierTaxStatus;
@@ -189,7 +193,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf, 3, paymentTerm);
   const igtfApplicable = igtfCalculation.applicable;
   const igtfAmountBs = igtfCalculation.amountBs;
-  const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
+  const totalAmountBs = roundFiscalBs(invoiceSubtotalBs + igtfAmountBs);
   const vatWithheldBs = ivaEligibility.withheldAmount;
 
   // ISLR calculation

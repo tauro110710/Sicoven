@@ -44,61 +44,6 @@ export const VENEZUELAN_MONETARY_ERAS: readonly VenezuelanMonetaryEra[] = [
   }
 ] as const;
 
-export interface HistoricalFiscalExercise {
-  id: string;
-  companyId: string;
-  fiscalYear: number;
-  startDate: string;
-  endDate: string;
-  status: 'ABIERTO' | 'EN_CIERRE' | 'CERRADO';
-}
-
-export interface BuildHistoricalFiscalExercisesInput {
-  companyId: string;
-  operationalStartDate: string;
-  throughDate: string;
-  closedThroughDate?: string | null;
-  closingFiscalYears?: number[];
-}
-
-/** Builds calendar-year exercises from the company's real start date, with no fixed minimum year. */
-export function buildHistoricalFiscalExercises(
-  input: BuildHistoricalFiscalExercisesInput
-): HistoricalFiscalExercise[] {
-  const { companyId, operationalStartDate, throughDate } = input;
-  if (!companyId.trim()) throw new Error('Debe indicar la empresa para generar sus ejercicios.');
-  if (!isValidIsoDate(operationalStartDate) || !isValidIsoDate(throughDate) ||
-      operationalStartDate > throughDate) {
-    throw new Error('La fecha de inicio de operaciones y la fecha final deben ser válidas y cronológicas.');
-  }
-  const closedThroughDate = input.closedThroughDate || '';
-  if (closedThroughDate && !isValidIsoDate(closedThroughDate)) {
-    throw new Error('La fecha de cierre contable de la empresa no es válida.');
-  }
-  const closingYears = new Set(input.closingFiscalYears || []);
-  const startYear = Number(operationalStartDate.slice(0, 4));
-  const endYear = Number(throughDate.slice(0, 4));
-  const exercises: HistoricalFiscalExercise[] = [];
-  for (let year = startYear; year <= endYear; year += 1) {
-    const startDate = year === startYear ? operationalStartDate : year + '-01-01';
-    const endDate = year === endYear ? throughDate : year + '-12-31';
-    const status = closedThroughDate && endDate <= closedThroughDate
-      ? 'CERRADO'
-      : closingYears.has(year)
-        ? 'EN_CIERRE'
-        : 'ABIERTO';
-    exercises.push({
-      id: companyId + ':' + year,
-      companyId,
-      fiscalYear: year,
-      startDate,
-      endDate,
-      status
-    });
-  }
-  return exercises;
-}
-
 export function getVenezuelanMonetaryEra(date: string): VenezuelanMonetaryEra {
   if (!isValidIsoDate(date)) throw new Error('La fecha de la operación no es válida para determinar su escala monetaria.');
   let selected = VENEZUELAN_MONETARY_ERAS[0];

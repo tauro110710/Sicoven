@@ -3,6 +3,7 @@
  * No consulta servicios externos ni persiste datos. Las verificaciones del Portal
  * Fiscal se reciben como resultado explícito; nunca se presumen.
  */
+import { calculateFiscalBreakdownFromGross } from './vatFiscalEngine';
 export type IvaBuyerAgentStatus = 'SPECIAL_DESIGNATED' | 'ARTICLE_2_BUYER' | 'SPECIAL_DESIGNATED_AND_ARTICLE_2' | 'NOT_AGENT' | 'UNKNOWN';
 export type IvaSupplierTaxStatus = 'ORDINARY' | 'FORMAL' | 'SPECIAL' | 'NON_REGISTERED' | 'UNKNOWN';
 
@@ -88,8 +89,8 @@ function resolveVat(input: IvaRetentionEligibilityInput): number | null {
   const gross = Number(input.taxableAmountIncludingVat);
   const rate = Number(input.taxRate);
   if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(rate) || rate <= 0 || rate > 100) return null;
-  const taxableBase = gross / (1 + rate / 100);
-  return roundMoney(taxableBase * (rate === 31 ? 16 : rate) / 100);
+  // El IVA retenible de una factura al 31 % es solo el componente del 16 %.
+  return calculateFiscalBreakdownFromGross({ grossAmountBs: gross, taxRate: rate }).vatAmountBs;
 }
 export function evaluateIvaRetentionEligibility(input: IvaRetentionEligibilityInput): IvaRetentionEligibilityResult {
   if (input.buyerAgentStatus === 'UNKNOWN') return decision('REVIEW', 0, null, 'Confirma la condición del comprador como agente de retención.');

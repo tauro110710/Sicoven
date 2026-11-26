@@ -4,6 +4,11 @@ import { formatBs } from '../../utils/formatters';
 import { allowsUsdForOperationDate, formatUsdForDate } from '../../utils/monetaryPolicy';
 import { buildEquityChangesReport } from '../../types/equityChanges';
 import { buildDisclosureAccountMovements, type FinancialDisclosureKind } from '../../types/financialDisclosures';
+import {
+  buildReportMovementsByAccount,
+  getNormalBalance,
+  getReportScaleDate
+} from '../../types/reportMonetaryReexpression';
 import { ArrowLeft, Download, FileSpreadsheet, Printer, ShieldAlert, TrendingUp } from 'lucide-react';
 
 type AnnualAccountRow = {
@@ -82,22 +87,20 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       e.date <= year + '-12-31' &&
       e.type !== 'CIERRE'
     );
+    // Escala única del reporte anual: cada asiento se reexpresa antes de sumar.
+    const reportScaleDate = getReportScaleDate(Number(year));
+    const movements = buildReportMovementsByAccount(fiscalEntries, reportScaleDate);
     const rows: AnnualAccountRow[] = accounts
       .filter(a => a.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS', 'PASIVO', 'PATRIMONIO'].includes(a.type))
       .map(account => {
-        let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
-        for (const entry of fiscalEntries) for (const item of entry.items) {
-          if (item.accountCode !== account.code) continue;
-          debitBs += Number(item.debitBs || 0);
-          creditBs += Number(item.creditBs || 0);
-          debitUsd += Number(item.debitUsd || 0);
-          creditUsd += Number(item.creditUsd || 0);
-        }
-        const netBs = account.type === 'INGRESOS' || account.type === 'PASIVO' || account.type === 'PATRIMONIO'
-          ? creditBs - debitBs : debitBs - creditBs;
-        const netUsd = account.type === 'INGRESOS' || account.type === 'PASIVO' || account.type === 'PATRIMONIO'
-          ? creditUsd - debitUsd : debitUsd - creditUsd;
-        return { code: account.code, name: account.name, type: account.type, debitBs, creditBs, debitUsd, creditUsd, netBs, netUsd };
+        const totals = movements.get(account.code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+        const { debitBs, creditBs, debitUsd, creditUsd } = totals;
+        return {
+          code: account.code, name: account.name, type: account.type,
+          debitBs, creditBs, debitUsd, creditUsd,
+          netBs: getNormalBalance(account.type, debitBs, creditBs),
+          netUsd: getNormalBalance(account.type, debitUsd, creditUsd)
+        };
       })
       .filter(row => Math.abs(row.debitBs) > 0.004 || Math.abs(row.creditBs) > 0.004 || Math.abs(row.debitUsd) > 0.000004 || Math.abs(row.creditUsd) > 0.000004);
     const sum = (types: string[], field: 'netBs' | 'netUsd') => rows.filter(r => types.includes(r.type)).reduce((total, r) => total + r[field], 0);
@@ -125,7 +128,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
   }, [accounts, journalEntries, currentCompany.id, year]);
 
   const equityReport = useMemo(
-    () => buildEquityChangesReport(journalEntries, accounts, currentCompany.id, Number(year)),
+    () => buildEquityChangesReport(journalEntries, accounts, currentCompany.id, Number(year), getReportScaleDate(Number(year))),
     [journalEntries, accounts, currentCompany.id, year]
   );
 
@@ -190,7 +193,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
         <div>
           <div className="mb-1 flex items-center gap-2 text-lg font-bold text-slate-900"><TrendingUp className="h-5 w-5 text-emerald-600" />Reportes Anuales</div>
           <p className="text-sm text-slate-500">{currentCompany.name} · RIF {currentCompany.rif}</p>
-          <p className="mt-1 text-xs text-slate-500">Estado anual consolidado calculado desde los asientos contabilizados de la empresa activa.</p>
+          <p className="mt-1 text-xs text-slate-500">Estado anual consolidado calculado desde los asientos contabilizados de la empresa activa. Los Bs. se reexpresan a la escala vigente al {getReportScaleDate(Number(year))}; los importes USD conservan su valor de origen.</p>
         </div>
         <div className="flex flex-wrap gap-2 no-print">
           <button onClick={onBack} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4" />Volver</button>

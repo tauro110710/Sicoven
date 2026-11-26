@@ -163,9 +163,9 @@ export interface Company {
   id: string;
   /** Fecha y hora en que la empresa fue registrada en esta instalación de SICOVEN; la asigna el sistema. */
   registeredAt?: string;
-  /** Fecha inicial desde la que se incorporará el registro/reconstrucción contable en SICOVEN. Puede ser histórica y anterior al registro. */
+  /** Fecha inicial de la contabilidad ordinaria en SICOVEN. Puede ser histórica y anterior al registro. */
   accountingStartDate?: string;
-  /** Fecha real desde la que la empresa comenzó a operar; referencia histórica opcional para reconstrucciones. */
+  /** Fecha real desde la que la empresa comenzó a operar; referencia histórica opcional, no condiciona el registro. */
   operationalStartDate?: string;
   rif: string; // e.g., "J-40892182-3"
   name: string; // Razón Social

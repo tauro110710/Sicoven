@@ -3,7 +3,8 @@ import { useAccounting } from '../../context/AccountingContext';
 import { formatBs } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
-import { addExactDecimals, normalizeVenezuelanAmountToCurrentScale } from '../../types/historicalAccountingCalendar';
+import { addExactDecimals } from '../../types/historicalAccountingCalendar';
+import { CURRENT_MONETARY_SCALE_DATE, reexpressReportAmountExact } from '../../types/reportMonetaryReexpression';
 import { History, ArrowLeftRight, Printer } from 'lucide-react';
 
 type ReportKind = 'SITUACION' | 'RESULTADOS';
@@ -30,8 +31,8 @@ export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBac
     const rows = accounts.map(account => {
       let debitBsExact='0', creditBsExact='0', debitUsdExact='0', creditUsdExact='0';
       for (const entry of entries) for (const item of entry.items) if (item.accountCode === account.code) {
-        debitBsExact = addExactDecimals(debitBsExact, normalizeVenezuelanAmountToCurrentScale(String(item.debitBs || 0), entry.date));
-        creditBsExact = addExactDecimals(creditBsExact, normalizeVenezuelanAmountToCurrentScale(String(item.creditBs || 0), entry.date));
+        debitBsExact = addExactDecimals(debitBsExact, reexpressReportAmountExact(item.debitBs, entry.date, CURRENT_MONETARY_SCALE_DATE));
+        creditBsExact = addExactDecimals(creditBsExact, reexpressReportAmountExact(item.creditBs, entry.date, CURRENT_MONETARY_SCALE_DATE));
         debitUsdExact = addExactDecimals(debitUsdExact, String(item.debitUsd || 0));
         creditUsdExact = addExactDecimals(creditUsdExact, String(item.creditUsd || 0));
       }

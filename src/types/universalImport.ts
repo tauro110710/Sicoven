@@ -1,6 +1,7 @@
 import type { InventoryProduct, SaleInventoryLine } from './accounting';
 import type { SupplierDirectAdvanceDraft } from './supplierDirectAdvance';
 import type { SupplierAdvanceSettlementDraft } from './supplierAdvanceSettlement';
+import { calculateLineVat } from './vatFiscalEngine';
 
 export type UniversalSupplierDirectAdvanceDraft = { sourceRowId: string; draft: SupplierDirectAdvanceDraft };
 export type UniversalSupplierAdvanceSettlementDraft = { sourceRowId: string; draft: SupplierAdvanceSettlementDraft };
@@ -502,14 +503,14 @@ export const prepareUniversalSaleInventoryLines = (
     if (declaredRate !== productRate || (productRate !== 0 && productRate !== invoice.taxRate) || invoice.taxRate === 31) {
       throw new Error('Detalle '+(index+1)+': la alícuota del artículo no coincide con la factura o requiere tratamiento fiscal por línea no soportado. No se mezclan tasas ni se infiere impuesto suntuario.');
     }
-    const netAmountBs = Math.round(quantity * unitPriceBs * 100) / 100;
+    const lineFiscal = calculateLineVat({ quantity, unitPriceBs, taxRate: productRate });
+    const netAmountBs = lineFiscal.netAmountBs;
     const declaredNet = pickValue(row, ['netAmountBs','lineTotalBs','subtotalBs','baseImponibleBs','totalLineaBs']);
     if (declaredNet !== undefined && Math.abs(parseNumber(declaredNet) - netAmountBs) > 0.02) {
       throw new Error('Detalle '+(index+1)+': el subtotal declarado no coincide con cantidad por precio unitario. Descuentos o cargos por línea requieren un adaptador explícito.');
     }
-    const taxable = productRate === 0 ? 0 : netAmountBs;
     const exempt = productRate === 0 ? netAmountBs : 0;
-    const vatAmountBs = Math.round(taxable * productRate) / 100;
+    const vatAmountBs = lineFiscal.vatAmountBs;
     return { productId: product.id, productCode: product.code, productName: product.name, quantity, unitPriceBs, unitPriceUsd, netAmountBs, taxRate: productRate, vatAmountBs, exemptAmountBs: exempt, totalBs: netAmountBs + vatAmountBs };
   });
   const sum = (key: 'netAmountBs' | 'vatAmountBs' | 'exemptAmountBs') => Math.round(result.reduce((total, line) => total + line[key], 0) * 100) / 100;

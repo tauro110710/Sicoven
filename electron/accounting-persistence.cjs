@@ -129,7 +129,7 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorBy
       if (exercise.status === 'CERRADO') {
         const next = exercises[index + 1];
         if (!latest || latest.reopenedAt || exercise.closingEntryId !== latest.closingEntryId ||
-            exercise.openingEntryId !== latest.openingEntryId || exercise.closedAt !== latest.closedAt ||
+            exercise.closedAt !== latest.closedAt ||
             !next || next.openingEntryId !== latest.openingEntryId) {
           throw new Error('Un ejercicio cerrado debe enlazar su último cierre y apertura vigente en el ejercicio siguiente.');
         }
@@ -137,7 +137,6 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorBy
         const next = exercises[index + 1];
         if (!latest?.reopenedAt || !latest.reopeningId ||
             exercise.closingEntryId !== latest.closingEntryId ||
-            exercise.openingEntryId !== latest.openingEntryId ||
             next?.openingEntryId === latest.openingEntryId) {
           throw new Error('Un ejercicio reabierto debe conservar el ciclo original y su evidencia de reapertura.');
         }
@@ -167,16 +166,27 @@ function validateFiscalExerciseCalendarSnapshot(state, nextEntries = [], priorBy
       Array.isArray(company.fiscalExercises);
     if (!requiresFiscalCalendar) continue;
     const companyExercises = Array.isArray(company.fiscalExercises) ? company.fiscalExercises : [];
-    const exercise = companyExercises.find(item => String(item.companyId) === String(entry.companyId) &&
-      item.status === 'CERRADO' &&
-      (isAutomaticClose
-        ? String(item.closingEntryId || '') === String(entry.id)
-        : String(item.openingEntryId || '') === String(entry.id)));
-    const closing = exercise
-      ? journal.find(item => String(item.id) === String(exercise.closingEntryId))
+    // El cierre y su apertura se localizan en el ciclo que los produjo: el
+    // ejercicio cerrado conserva la apertura que lo inició, no la siguiente.
+    const cycleMatch = companyExercises
+      .filter(item => String(item.companyId) === String(entry.companyId) && item.status === 'CERRADO')
+      .flatMap(item => {
+        const cycles = Array.isArray(item.cycles) && item.cycles.length
+          ? item.cycles
+          : (item.closingEntryId && item.openingEntryId && item.closedAt
+            ? [{ cycleNumber: 1, closingEntryId: item.closingEntryId, openingEntryId: item.openingEntryId, closedAt: item.closedAt }]
+            : []);
+        return cycles.map(cycle => ({ item, cycle }));
+      })
+      .find(({ cycle }) => isAutomaticClose
+        ? String(cycle.closingEntryId || '') === String(entry.id)
+        : String(cycle.openingEntryId || '') === String(entry.id));
+    const exercise = cycleMatch?.item || null;
+    const closing = cycleMatch
+      ? journal.find(item => String(item.id) === String(cycleMatch.cycle.closingEntryId))
       : null;
-    const opening = exercise
-      ? journal.find(item => String(item.id) === String(exercise.openingEntryId))
+    const opening = cycleMatch
+      ? journal.find(item => String(item.id) === String(cycleMatch.cycle.openingEntryId))
       : null;
     if (!exercise || !closing || !opening ||
         String(company.closedThroughDate || '') !== String(closing.date)) {
@@ -480,6 +490,7 @@ function persistAccountingSnapshot(db, state, actor = null, operationId = null) 
           assetId: asset.id, companyId: asset.companyId, assetCode: asset.assetCode,
           description: asset.description, category: asset.category,
           acquisitionDate: asset.acquisitionDate, serviceDate: asset.serviceDate,
+          costScaleDate: asset.costScaleDate || asset.acquisitionDate,
           acquisitionCostBs: asset.acquisitionCostBs, acquisitionCostUsd: asset.acquisitionCostUsd,
           acquisitionBcvRate: asset.acquisitionBcvRate,
           residualValueBs: asset.residualValueBs, residualValueUsd: asset.residualValueUsd,

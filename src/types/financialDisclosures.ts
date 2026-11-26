@@ -1,4 +1,5 @@
 import type { Account, JournalEntry } from './accounting';
+import { getReportScaleDate, reexpressReportAmount } from './reportMonetaryReexpression';
 
 export type FinancialDisclosureKind =
   | 'ACCOUNTING_POLICY'
@@ -58,12 +59,17 @@ export function validateFinancialDisclosure(
   return null;
 }
 
-/** Importes agregados desde asientos contabilizados; Bs. y USD nunca se convierten entre sí. */
+/**
+ * Importes agregados desde asientos contabilizados; Bs. y USD nunca se
+ * convierten entre sí. Los Bs. se reexpresan a la escala del ejercicio con la
+ * misma política monetaria central que el resto de los reportes.
+ */
 export function buildDisclosureAccountMovements(
   entries: JournalEntry[],
   accounts: Account[],
   companyId: string,
-  fiscalYear: number
+  fiscalYear: number,
+  reportScaleDate: string = getReportScaleDate(fiscalYear)
 ): DisclosureAccountMovement[] {
   if (!companyId.trim()) throw new Error('La empresa del anexo cuantitativo no es válida.');
   if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
@@ -97,8 +103,8 @@ export function buildDisclosureAccountMovements(
         debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
         balanceBs: 0, balanceUsd: 0, entryIds: []
       };
-      row.debitBs += line.debitBs;
-      row.creditBs += line.creditBs;
+      row.debitBs += reexpressReportAmount(line.debitBs, entry.date, reportScaleDate);
+      row.creditBs += reexpressReportAmount(line.creditBs, entry.date, reportScaleDate);
       row.debitUsd += line.debitUsd;
       row.creditUsd += line.creditUsd;
       if (!row.entryIds.includes(entry.id)) row.entryIds.push(entry.id);

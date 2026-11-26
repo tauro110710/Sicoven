@@ -6,6 +6,7 @@ import { getCompanyTaxStatusForDate } from '../../types/accounting';
 import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import { calculateFiscalBreakdown, calculateLineVat, roundFiscalBs } from '../../types/vatFiscalEngine';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -90,10 +91,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
-  const vatRate = taxRate === 31 ? 16 : taxRate;
-  const vatAmountBs = Math.round(taxableBaseBs * (vatRate / 100) * 100) / 100;
-  const additionalLuxuryTaxBs = taxRate === 31 ? Math.round(taxableBaseBs * 0.15 * 100) / 100 : 0;
-  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs + additionalLuxuryTaxBs) * 100) / 100;
+  const fiscalBreakdown = calculateFiscalBreakdown({ taxableBaseBs, exemptAmountBs, taxRate });
+  const vatRate = fiscalBreakdown.vatRate;
+  const vatAmountBs = fiscalBreakdown.vatAmountBs;
+  const additionalLuxuryTaxBs = fiscalBreakdown.additionalLuxuryTaxBs;
+  const invoiceSubtotalBs = fiscalBreakdown.subtotalBs;
   const effectiveCompanyTaxStatus = getCompanyTaxStatusForDate(currentCompany, invoiceDate);
   const hasTaxStatusHistory = (currentCompany.taxStatusHistory || []).length > 0;
   const isIgtfPerceptionAgentForDate = effectiveCompanyTaxStatus
@@ -102,10 +104,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const taxStatusMissingForDate = hasTaxStatusHistory && !effectiveCompanyTaxStatus;
   const igtfEligible = !taxStatusMissingForDate && isIgtfPerceptionAgentForDate && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfApplicable = igtfEligible && applyIgtf;
-  const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
-  const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
+  const igtfAmountBs = igtfApplicable ? roundFiscalBs(invoiceSubtotalBs * 0.03) : 0;
+  const totalAmountBs = roundFiscalBs(invoiceSubtotalBs + igtfAmountBs);
   const vatWithheldBs = clientIsSpecial
-    ? Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100
+    ? roundFiscalBs(vatAmountBs * (retentionRate / 100))
     : 0;
 
   const totalAmountUsd = effectiveBcvRate > 0 ? totalAmountBs / effectiveBcvRate : 0;
@@ -214,7 +216,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             unitPriceBs: parseDecimalInput(line.unitPriceBs),
             netAmountBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * 100) / 100,
             taxRate,
-            vatAmountBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * (vatRate / 100) * 100) / 100,
+            vatAmountBs: calculateLineVat({ quantity: parseDecimalInput(line.quantity), unitPriceBs: parseDecimalInput(line.unitPriceBs), taxRate: vatRate }).vatAmountBs,
             exemptAmountBs: 0,
             totalBs: Math.round(parseDecimalInput(line.quantity) * parseDecimalInput(line.unitPriceBs) * (1 + vatRate / 100) * 100) / 100,
           }))

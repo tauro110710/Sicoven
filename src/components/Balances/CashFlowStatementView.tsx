@@ -89,7 +89,7 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
         <div>
           <div className="mb-1 flex items-center gap-2 text-lg font-bold text-slate-900"><Wallet className="h-5 w-5 text-emerald-600" />Estado de Flujos de Efectivo</div>
           <p className="text-sm text-slate-500">{currentCompany.name} · RIF {currentCompany.rif}</p>
-          <p className="mt-1 text-xs text-slate-500">Método directo · Movimientos contabilizados de caja y bancos · Bs. y USD sin conversión cruzada.</p>
+          <p className="mt-1 text-xs text-slate-500">Método directo · Movimientos contabilizados de caja y bancos · Bs. reexpresados a la escala vigente al {year}-12-31 · USD de origen sin conversión cruzada.</p>
         </div>
         <div className="flex flex-wrap gap-2 no-print">
           <button onClick={onBack} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4" />Volver</button>

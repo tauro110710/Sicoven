@@ -15,7 +15,13 @@ import {
 } from 'lucide-react';
 import { formatBs } from '../../utils/formatters';
 import { formatUsdForDate } from '../../utils/monetaryPolicy';
-import { getUnclosedResultContribution, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
+import { isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
+import {
+  buildIncomeStatementRows,
+  buildTrialBalanceRows,
+  getReportScaleDate,
+  getUnclosedResultAtReportDate
+} from '../../types/reportMonetaryReexpression';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
@@ -94,125 +100,25 @@ export const BalancesView: React.FC = () => {
   const resultEntries = selectHistoricalReportEntries(
     journalEntries, currentCompany.id, Number(currentCompany.fiscalYear), 'RESULTADOS'
   );
+  // Fecha de escala de todos los reportes del ejercicio: cada importe Bs. se
+  // reexpresa desde la fecha de su asiento antes de sumarse.
+  const reportScaleDate = getReportScaleDate(Number(currentCompany.fiscalYear));
 
   // Separate non-adjusted entries and adjusted entries within the selected company's
   // balance-sheet period for the trial balance.
   const regularEntries = companyJournalEntries.filter(e => !e.isAdjusted && e.type !== 'AJUSTE');
   const adjustmentEntries = companyJournalEntries.filter(e => e.isAdjusted || e.type === 'AJUSTE');
 
-  // Build the income-statement account balances from the selected fiscal year only.
-  const resultAccountBalances = accounts.map(account => {
-    let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
-    for (const entry of resultEntries) for (const item of entry.items) {
-      if (item.accountCode !== account.code) continue;
-      debitBs += Number(item.debitBs || 0);
-      creditBs += Number(item.creditBs || 0);
-      debitUsd += Number(item.debitUsd || 0);
-      creditUsd += Number(item.creditUsd || 0);
-    }
-    return {
-      ...account,
-      adjustedDebitBs: debitBs,
-      adjustedCreditBs: creditBs,
-      adjustedDebitUsd: debitUsd,
-      adjustedCreditUsd: creditUsd,
-      hasMovement: hasAccountMovement({ debitBs, creditBs, debitUsd, creditUsd })
-    };
-  }).filter(account => account.hasMovement);
+  // Estado de resultados del ejercicio: cada línea en la escala del reporte.
+  const resultAccountBalances = buildIncomeStatementRows(accounts, resultEntries, reportScaleDate)
+    .filter(account => account.hasMovement);
 
-
-  // Compute balances per account
-  const accountBalances = accounts.map(acc => {
-    // 1. Regular entries
-    let regDebitBs = 0;
-    let regCreditBs = 0;
-    let regDebitUsd = 0;
-    let regCreditUsd = 0;
-
-    for (const e of regularEntries) {
-      for (const it of e.items) {
-        if (it.accountCode === acc.code) {
-          regDebitBs += it.debitBs || 0;
-          regCreditBs += it.creditBs || 0;
-          regDebitUsd += it.debitUsd || 0;
-          regCreditUsd += it.creditUsd || 0;
-        }
-      }
-    }
-
-    // 2. Adjustments
-    let adjDebitBs = 0;
-    let adjCreditBs = 0;
-    let adjDebitUsd = 0;
-    let adjCreditUsd = 0;
-
-    for (const e of adjustmentEntries) {
-      for (const it of e.items) {
-        if (it.accountCode === acc.code) {
-          adjDebitBs += it.debitBs || 0;
-          adjCreditBs += it.creditBs || 0;
-          adjDebitUsd += it.debitUsd || 0;
-          adjCreditUsd += it.creditUsd || 0;
-        }
-      }
-    }
-
-    // Total sums
-    const totalDebitBs = regDebitBs + adjDebitBs;
-    const totalCreditBs = regCreditBs + adjCreditBs;
-    const totalDebitUsd = regDebitUsd + adjDebitUsd;
-    const totalCreditUsd = regCreditUsd + adjCreditUsd;
-
-    // Regular net
-    const regNetBs = regDebitBs - regCreditBs;
-    const regNetUsd = regDebitUsd - regCreditUsd;
-    const unadjustedDebitBs = regNetBs > 0 ? regNetBs : 0;
-    const unadjustedCreditBs = regNetBs < 0 ? Math.abs(regNetBs) : 0;
-    const unadjustedDebitUsd = regNetUsd > 0 ? regNetUsd : 0;
-    const unadjustedCreditUsd = regNetUsd < 0 ? Math.abs(regNetUsd) : 0;
-
-    // Adjusted net
-    const adjNetBs = totalDebitBs - totalCreditBs;
-    const adjNetUsd = totalDebitUsd - totalCreditUsd;
-    const adjustedDebitBs = adjNetBs > 0 ? adjNetBs : 0;
-    const adjustedCreditBs = adjNetBs < 0 ? Math.abs(adjNetBs) : 0;
-    const adjustedDebitUsd = adjNetUsd > 0 ? adjNetUsd : 0;
-    const adjustedCreditUsd = adjNetUsd < 0 ? Math.abs(adjNetUsd) : 0;
-
-    return {
-      code: acc.code,
-      name: acc.name,
-      type: acc.type,
-      level: acc.level,
-      isMovement: acc.isMovement,
-
-      // Sumas
-      totalDebitBs,
-      totalCreditBs,
-      totalDebitUsd,
-      totalCreditUsd,
-
-      // Unadjusted
-      unadjustedDebitBs,
-      unadjustedCreditBs,
-      unadjustedDebitUsd,
-      unadjustedCreditUsd,
-
-      // Adjustments
-      adjDebitBs,
-      adjCreditBs,
-      adjDebitUsd,
-      adjCreditUsd,
-
-      // Final Adjusted
-      adjustedDebitBs,
-      adjustedCreditBs,
-      adjustedDebitUsd,
-      adjustedCreditUsd,
-
-      hasMovement: hasAccountMovement({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd })
-    };
-  });
+  // Hoja de trabajo del Balance de Comprobación y del Balance Ajustado. El
+  // acumulador central reexpresa cada asiento antes de sumar y mantiene el USD
+  // original en columna independiente.
+  const accountBalances = buildTrialBalanceRows(
+    accounts, regularEntries, adjustmentEntries, reportScaleDate
+  );
 
   const activeAccounts = accountBalances.filter(a => a.hasMovement);
 
@@ -298,35 +204,7 @@ export const BalancesView: React.FC = () => {
 
   // The balance sheet must include only the unclosed result since the latest
   // result-transfer entry. Prior closed results are already inside equity.
-  const resultClosingEntries = companyJournalEntries.filter(entry =>
-    entry.type === 'CIERRE' &&
-    entry.items.some(item => accounts.find(account => account.code === item.accountCode)?.type === 'PATRIMONIO') &&
-    entry.items.some(item => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(
-      accounts.find(account => account.code === item.accountCode)?.type || ''
-    ))
-  );
-  const latestResultClosingDate = resultClosingEntries.reduce(
-    (latest, entry) => entry.date > latest ? entry.date : latest,
-    ''
-  );
-  const unclosedResult = companyJournalEntries
-    .filter(entry => !latestResultClosingDate || entry.date > latestResultClosingDate)
-    .reduce((result, entry) => {
-      for (const item of entry.items) {
-        const accountType = accounts.find(account => account.code === item.accountCode)?.type;
-        if (!['INGRESOS', 'COSTOS', 'GASTOS'].includes(accountType || '')) continue;
-        const contribution = getUnclosedResultContribution(
-          accountType,
-          Number(item.debitBs || 0),
-          Number(item.creditBs || 0),
-          Number(item.debitUsd || 0),
-          Number(item.creditUsd || 0)
-        );
-        result.bs += contribution.bs;
-        result.usd += contribution.usd;
-      }
-      return result;
-    }, { bs: 0, usd: 0 });
+  const unclosedResult = getUnclosedResultAtReportDate(companyJournalEntries, accounts, reportScaleDate);
 
   const patrimonioBaseBs = patrimonioAccounts.reduce(
     (s, a) => s + (a.adjustedCreditBs - a.adjustedDebitBs),
@@ -382,7 +260,7 @@ export const BalancesView: React.FC = () => {
               ? 'Hoja de Trabajo de 6 Columnas con Asientos de Ajuste y Saldos Finales'
               : 'Clasificado según Normas Internacionales de Contabilidad VEN-NIF NIC 1'
           }
-          periodText={`Ejercicio Fiscal ${currentCompany.fiscalYear}`}
+          periodText={`Ejercicio Fiscal ${currentCompany.fiscalYear} · Escala Bs. al ${reportScaleDate}`}
         />
 
         {/* Action buttons (hidden on print) */}

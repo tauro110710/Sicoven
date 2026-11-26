@@ -15,6 +15,7 @@ import { formatUsdForDate } from '../../utils/monetaryPolicy';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
 import { filterEntriesByCompany, getAccountBalanceNature } from '../../types/accountingReportIntegrity';
+import { getReportScaleDate, reexpressReportAmount } from '../../types/reportMonetaryReexpression';
 
 interface LedgerMovement {
   entryId: string;
@@ -49,6 +50,16 @@ export const LibroMayorView: React.FC = () => {
   const [selectedAccountCode, setSelectedAccountCode] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  // Escala de presentación del Mayor: el cierre del ejercicio o la última fecha
+  // del libro si ya existen movimientos posteriores. Todos los importes Bs. se
+  // reexpresan a esa escala antes de acumular, igual que en los balances.
+  const presentationScaleDate = (() => {
+    const fiscalEnd = getReportScaleDate(Number(currentCompany.fiscalYear));
+    const latest = journalEntries
+      .filter(entry => entry.companyId === currentCompany.id && /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
+      .reduce((max, entry) => (entry.date > max ? entry.date : max), '');
+    return latest > fiscalEnd ? latest : fiscalEnd;
+  })();
 
   const handleExportPdf = async () => {
     try {
@@ -86,8 +97,8 @@ export const LibroMayorView: React.FC = () => {
               entryNumber: entry.entryNumber,
               date: entry.date,
               description: it.description || entry.description,
-              debitBs: it.debitBs || 0,
-              creditBs: it.creditBs || 0,
+              debitBs: reexpressReportAmount(it.debitBs, entry.date, presentationScaleDate),
+              creditBs: reexpressReportAmount(it.creditBs, entry.date, presentationScaleDate),
               debitUsd: it.debitUsd || 0,
               creditUsd: it.creditUsd || 0
             });
@@ -178,6 +189,8 @@ export const LibroMayorView: React.FC = () => {
             <span>Cuentas con movimiento: <strong className="text-slate-900">{displayedLedgers.length}</strong></span>
             <span>•</span>
             <span className="text-emerald-700 font-medium">Saldos Deudores y Acreedores Conciliados</span>
+            <span>•</span>
+            <span>Escala Bs. vigente al <strong className="text-slate-900">{presentationScaleDate}</strong></span>
           </div>
 
           <div className="flex items-center gap-2.5">

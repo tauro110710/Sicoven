@@ -14,23 +14,28 @@ export interface FiscalZTaxBreakdown {
   totalSalesBs: number;
 }
 
-const roundBs = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+import { calculateFiscalBreakdown, roundFiscalBs } from './vatFiscalEngine';
 
 /**
  * La tasa combinada 31% de SICOVEN representa 16% de IVA más 15%
  * de impuesto adicional al consumo suntuario. Nunca se registra el 31%
- * completo como débito fiscal IVA.
+ * completo como débito fiscal IVA. Todo el desglose proviene del motor fiscal.
  */
 export function calculateFiscalZTaxBreakdown(input: FiscalZTaxInput): FiscalZTaxBreakdown {
-  const vat16Bs = roundBs(input.taxableBase16Bs * 0.16);
-  const vat8Bs = roundBs(input.taxableBase8Bs * 0.08);
-  const vat31Bs = roundBs(input.taxableBase31Bs * 0.16);
-  const additionalLuxuryTaxBs = roundBs(input.taxableBase31Bs * 0.15);
-  const totalSalesBs = roundBs(
-    input.taxableBase16Bs + input.taxableBase8Bs + input.taxableBase31Bs +
-    input.exemptSalesBs + vat16Bs + vat8Bs + vat31Bs + additionalLuxuryTaxBs + input.igtfBs
+  const standard = calculateFiscalBreakdown({ taxableBaseBs: input.taxableBase16Bs, taxRate: 16 });
+  const reduced = calculateFiscalBreakdown({ taxableBaseBs: input.taxableBase8Bs, taxRate: 8 });
+  const combined = calculateFiscalBreakdown({ taxableBaseBs: input.taxableBase31Bs, taxRate: 31 });
+  const totalSalesBs = roundFiscalBs(
+    standard.totalAmountBs + reduced.totalAmountBs + combined.totalAmountBs +
+    input.exemptSalesBs + input.igtfBs
   );
-  return { vat16Bs, vat8Bs, vat31Bs, additionalLuxuryTaxBs, totalSalesBs };
+  return {
+    vat16Bs: standard.vatAmountBs,
+    vat8Bs: reduced.vatAmountBs,
+    vat31Bs: combined.vatAmountBs,
+    additionalLuxuryTaxBs: combined.additionalLuxuryTaxBs,
+    totalSalesBs
+  };
 }
 
 
