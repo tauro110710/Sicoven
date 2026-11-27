@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyGuidedEntryError } from './guidedEntryErrors';
+import { classifyGuidedEntryError, GUIDED_ENTRY_TITLES } from './guidedEntryErrors';
 
 test('asistente guiado: clasifica la alícuota no admitida de compras, ventas y motor fiscal', () => {
   const messages = [
@@ -28,4 +28,44 @@ test('asistente guiado: un mensaje desconocido igual recibe instrucción de rein
   const guided = classifyGuidedEntryError('Ocurrió un problema inesperado.');
   assert.equal(guided.field, 'unknown');
   assert.match(guided.hint, /vuelva a guardar/i);
+});
+
+// El asistente guiado debe señalar el campo exacto que el contador corrige en el
+// formulario de compras, sin cerrar la pantalla ni bloquear la base local.
+
+test('el rechazo de Kardex señala la línea de inventario, no la base de datos', () => {
+  const result = classifyGuidedEntryError(
+    'SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.'
+  );
+  assert.equal(result.field, 'inventory');
+  assert.match(result.hint, /costo unitario/i);
+  assert.match(result.hint, /tasa BCV/i);
+});
+
+test('el rechazo de la factura en Bs. y USD señala los importes', () => {
+  const result = classifyGuidedEntryError(
+    'SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.'
+  );
+  assert.equal(result.field, 'amounts');
+  assert.match(result.hint, /dos decimales/i);
+});
+
+test('un RIF con formato inválido señala el documento con el formato legal', () => {
+  const result = classifyGuidedEntryError('El RIF no cumple con el formato legal de 8 o 9 dígitos.');
+  assert.equal(result.field, 'document');
+  assert.match(result.hint, /J-12345678-9/);
+});
+
+test('una base local inaccesible es el único caso que se informa como almacenamiento', () => {
+  const result = classifyGuidedEntryError('No se pudo abrir la base de datos local: permisos de escritura.');
+  assert.equal(result.field, 'storage');
+});
+
+test('el asiento que no concilia la factura se marca como factura de compra', () => {
+  const result = classifyGuidedEntryError('El asiento contable no concilia con la factura de compra.');
+  assert.equal(result.field, 'purchaseInvoice');
+});
+
+test('el título del flujo de compras nombra la operación que falló', () => {
+  assert.equal(GUIDED_ENTRY_TITLES.purchase, 'No se pudo registrar la compra');
 });

@@ -1330,6 +1330,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   // Una cuenta bancaria solo puede tener un egreso pendiente de confirmación SQLite.
   const bankOutgoingLockRef = useRef(createBankOutgoingLock());
+  // Un rechazo de dominio de SQLite (factura, asiento o Kardex incoherentes) no es
+  // una falla del archivo local: SICOVEN rechazó el documento completo antes de
+  // escribirlo y la base sigue sana. Solo una falla real de persistencia bloquea.
+  const isDocumentRejection = (message: string): boolean => /SQLite rechazó/i.test(String(message || ''));
+
+  // Electron envuelve el error del IPC: "Error invoking remote method 'canal':
+  // \"Error: ...\"". El formulario debe recibir solo el texto redactado por SICOVEN.
+  const describePersistenceError = (message: string): string => String(message || '')
+    .replace(/^Error invoking remote method '[^']*':\s*/i, '')
+    .replace(/^"+/, '')
+    .replace(/^Error:\s*/i, '')
+    .replace(/"+\s*$/, '')
+    .trim();
+
   const flushPendingWrites = useCallback(async (): Promise<void> => {
     if (persistenceFaultRef.current) {
       throw new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones para proteger los datos.');
@@ -1604,10 +1618,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             } catch (error) {
               const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
               console.error('Error guardando los datos contables en SQLite:', normalized);
-              persistenceFaultRef.current = true;
               const queued = pendingSnapshotRef.current as { snapshot: any; operationId: string; waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> } | null;
               pendingSnapshotRef.current = null;
               const confirmed = lastPersistedSnapshotRef.current;
+              // Solo se puede seguir operando si hay una instantánea confirmada a la
+              // que volver; de lo contrario prevalece la protección de datos.
+              const rejectedDocument = isDocumentRejection(normalized.message) && Boolean(confirmed);
               if (confirmed) {
                 // La transacción SQLite falló: regresar la interfaz al último snapshot
                 // confirmado evita mostrar operaciones que nunca llegaron a la base local.
@@ -1643,7 +1659,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
                 setFinancialDisclosures(confirmed.financialDisclosures || []);
                 setDisplayCurrency(confirmed.displayCurrency || 'DUAL');
               }
-              setStorageError(normalized.message);
+              if (rejectedDocument) {
+                // El documento fue rechazado por las reglas contables, no por el
+                // archivo local. Se devuelve el detalle al formulario abierto para
+                // que el asistente guiado señale los campos, sin cerrar la pantalla.
+                const rejection = new Error(describePersistenceError(normalized.message));
+                batch.waiters.forEach(waiter => waiter.reject(rejection));
+                queued?.waiters.forEach(waiter => waiter.reject(rejection));
+                continue;
+              }
+              persistenceFaultRef.current = true;
+              setStorageError(describePersistenceError(normalized.message));
               setStorageReady(false);
               batch.waiters.forEach(waiter => waiter.reject(normalized));
               queued?.waiters.forEach(waiter => waiter.reject(normalized));

@@ -11,6 +11,12 @@ interface GuidedErrorNoticeProps {
   /** Para hacer scroll hasta el aviso cuando el error ocurre al pie del formulario. */
   noticeRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
+  /**
+   * Presenta el aviso como diálogo modal sobre el formulario abierto, en lugar
+   * de una franja dentro del formulario. Nunca cierra ni recarga la pantalla:
+   * al cerrarlo, los datos cargados siguen intactos.
+   */
+  asDialog?: boolean;
 }
 
 /**
@@ -22,13 +28,15 @@ export const GuidedErrorNotice: React.FC<GuidedErrorNoticeProps> = ({
   message,
   onDismiss,
   noticeRef,
-  className = ''
+  className = '',
+  asDialog = false
 }) => {
   const { field, hint } = classifyGuidedEntryError(message);
-  return (
+  const body = (
     <div
       ref={noticeRef}
       role="alertdialog"
+      aria-modal={asDialog || undefined}
       aria-live="assertive"
       className={`rounded-xl border border-rose-300 bg-rose-50 p-4 text-rose-950 shadow-sm ${className}`}
     >
@@ -38,9 +46,9 @@ export const GuidedErrorNotice: React.FC<GuidedErrorNoticeProps> = ({
           <p className="text-sm font-bold">{title}</p>
           <p className="mt-1 text-sm leading-relaxed">{message}</p>
           <p className="mt-2 text-xs font-medium text-rose-800">{hint}</p>
-          {field === 'taxRate' && (
-            <p className="mt-1 text-[11px] text-rose-700/80">El campo de alícuota quedó resaltado con los datos cargados.</p>
-          )}
+          <p className="mt-2 text-[11px] text-rose-700/80">
+            La compra no se guardó. Los datos que cargaste siguen en el formulario: corrige lo indicado y vuelve a guardar.
+          </p>
         </div>
         {onDismiss && (
           <button
@@ -53,6 +61,25 @@ export const GuidedErrorNotice: React.FC<GuidedErrorNoticeProps> = ({
           </button>
         )}
       </div>
+      {asDialog && onDismiss && (
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-bold text-white hover:bg-rose-800"
+          >
+            Revisar y corregir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (!asDialog) return body;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl">{body}</div>
     </div>
   );
 };

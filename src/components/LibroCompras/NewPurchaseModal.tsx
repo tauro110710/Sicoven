@@ -417,40 +417,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       await waitForPersistence();
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.';
-      let field = 'document';
-
-      if (/SQLite rechazó la compra/i.test(message) ||
-          /no reconoce en Bs\. y USD/i.test(message) ||
-          /integridad|no concilia con la factura|no concilia con el asiento/i.test(message)) {
-        showGuidedError(
-          'El asiento no concilia con la factura. Corrija en la compra: número de factura, número de control, RIF, fecha, tasa BCV, cantidad/precio de las 100 unidades y montos de costo/IVA/IGTF/retenciones/CxP en Bs. y USD. Revisa esos importes antes de volver a guardar.'
-        );
-        return;
-      }
-      if (/n[uú]mero de factura/i.test(message)) field = 'document';
-      else if (/n[uú]mero de control/i.test(message)) field = 'document';
-      else if (/rif/i.test(message)) field = 'document';
-      else if (/proveedor|proveedor/i.test(message)) field = 'document';
-      else if (/fecha/i.test(message)) field = 'document';
-      else if (/tasa bcv/i.test(message) || /bcv/i.test(message)) field = 'bcvRate';
-      else if (/base imponible|importe|monto|iva|igtf|retencion/i.test(message)) field = 'amounts';
-      else if (/cantidad|costo|precio|unidad/i.test(message)) field = 'inventory';
-      else if (/cuenta de movimiento|caja|banco|paymentAccount|cuenta contable/i.test(message)) field = 'accounts';
-      else if (/sq|sqlite|persistencia|base de datos|no se pudo guardar|error al guardar/i.test(message)) field = 'storage';
-      else field = 'unknown';
-
-      const fieldLabels: Record<string, string> = {
-        document: 'Completa o corrige en la compra: número de factura, número de control, RIF y fecha.',
-        bcvRate: 'Corrija la tasa BCV de la fecha de la compra (05/01/2026) y vuelva a guardar. No se inventa una tasa de respaldo.',
-        amounts: 'Revise los importes de la factura: base imponible, IVA, IGTF, retenciones y saldo de proveedor en Bs. y USD.',
-        inventory: 'Revise las 100 unidades a Bs. 1200: cantidad, precio unitario, costo y fecha, y concíliguelos con la base imponible y el total.',
-        accounts: 'Selecciona una cuenta de movimiento de Caja o Banco para el pago al contado y el comprobante de pago.',
-        storage: 'La base local de SQLite no está lista. Espere a que se abra la base de datos local y vuelva a guardar sin salir de este formulario.',
-        unknown: 'Revise los datos señalados y vuelva a guardar. El formulario conserva lo que ya cargó.'
-      };
-
-      showGuidedError(fieldLabels[field]);
+      // La compra se rechazó dentro del flujo: se informa aquí mismo, con el
+      // diagnóstico real, sin cerrar el formulario ni recargar la pantalla.
+      const message = error instanceof Error && error.message.trim()
+        ? error.message
+        : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.';
+      showGuidedError(message);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -491,6 +463,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               message={submitError}
               noticeRef={noticeRef}
               onDismiss={clearError}
+              asDialog
             />
           )}
           {/* Supplier Info */}
@@ -806,8 +779,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               {paymentTerm === 'CREDITO' && <div><label className="block font-semibold text-slate-700 mb-1">Plazo del crédito (días)</label><input type="number" min="1" max="3650" value={creditDays} onChange={e => setCreditDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><span className="text-[11px] text-slate-600">Vencimiento calculado: {dueDate}</span></div>}
             </div>
             {paymentTerm === 'CONTADO' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Cuenta contable de pago / origen del dinero *</label><select required value={paymentAccountCode} onChange={e => setPaymentAccountCode(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="">Selecciona Caja o Banco...</option>{paymentAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>{paymentAccounts.length === 0 && <p className="text-xs text-red-700 mt-1">No hay cuentas de Caja/Banco de movimiento disponibles en el Plan de Cuentas.</p>}</div>
-              <div><label className="block font-semibold text-slate-700 mb-1">Comprobante / referencia del pago *</label><input required value={paymentReference} onChange={e => setPaymentReference(e.target.value)} maxLength={200} placeholder="N.º de egreso, transferencia o soporte" className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><p className="text-[11px] text-slate-600 mt-1">Se conserva en la factura y en la descripción del asiento para auditoría.</p></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Cuenta contable de pago / origen del dinero *</label><select required value={paymentAccountCode} onChange={e => { setPaymentAccountCode(e.target.value); clearError(); }} aria-invalid={errorField === 'accounts'} className={`w-full px-3 py-2 rounded-lg bg-white focus:ring-1 focus:outline-none ${fieldTone('accounts')}`}><option value="">Selecciona Caja o Banco...</option>{paymentAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>{paymentAccounts.length === 0 && <p className="text-xs text-red-700 mt-1">No hay cuentas de Caja/Banco de movimiento disponibles en el Plan de Cuentas.</p>}</div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Comprobante / referencia del pago *</label><input required value={paymentReference} onChange={e => { setPaymentReference(e.target.value); clearError(); }} maxLength={200} placeholder="N.º de egreso, transferencia o soporte" aria-invalid={errorField === 'accounts'} className={`w-full px-3 py-2 rounded-lg bg-white focus:ring-1 focus:outline-none ${fieldTone('accounts')}`}/><p className="text-[11px] text-slate-600 mt-1">Se conserva en la factura y en la descripción del asiento para auditoría.</p></div>
               <p className="sm:col-span-2 text-xs text-emerald-900">El asiento acreditará esta cuenta por el neto pagado, después de las retenciones aplicables. No se crea una CxP ni se requiere una caja registradora.</p>
             </div>}
             {paymentTerm === 'CREDITO' && <>
@@ -856,8 +829,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                       ))}
                     </ul>
                   )}</div>
-                <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="text" inputMode="decimal" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
-                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
+                <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="text" inputMode="decimal" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} aria-invalid={errorField === 'inventory'} className={`w-full rounded p-2 focus:ring-1 focus:outline-none ${fieldTone('inventory')}`}/></div>
+                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} aria-invalid={errorField === 'inventory'} className={`w-full rounded p-2 focus:ring-1 focus:outline-none ${fieldTone('inventory')}`}/></div>
                 <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
               </div>)}
               <button type="button" onClick={()=>setInventoryLines(prev=>[...prev,{productId:'',quantity:'1',unitCostBs:''}])} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 font-semibold text-indigo-800">+ Añadir artículo</button>
