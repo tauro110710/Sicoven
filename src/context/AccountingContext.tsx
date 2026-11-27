@@ -3335,7 +3335,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La tasa BCV es obligatoria para compras pagadas en divisas. Registre la tasa histórica antes de guardar.');
     }
     // Para los cálculos de equivalencia USD: si no hay tasa, resultado = 0 (pendiente).
-    const toUsd = (bs: number) => (Number.isFinite(rate) && rate > 0) ? bs / rate : 0;
+    // Redondeo hacia arriba a dos decimales para que la equivalencia se acerque a
+    // la pantalla y concilie con la factura. Con 113014 / 301.3709 queda 375.00 USD.
+    const toUsd = (bs: number) => {
+      if (!Number.isFinite(rate) || rate <= 0) return 0;
+      return Math.ceil((bs / rate) * 100) / 100;
+    };
 
     // Primera barrera de dominio: tipos, finitud, signo, total positivo,
     // límites de retención y equivalencias USD. Se ejecuta antes de crear

@@ -16,6 +16,7 @@ export type GuidedEntryField =
   | 'inventory'
   | 'document'
   | 'accounts'
+  | 'purchaseInvoice'
   | 'storage'
   | 'unknown';
 
@@ -56,6 +57,24 @@ export const classifyGuidedEntryError = (message: string): GuidedEntryError => {
     return {
       field: 'inventory',
       hint: 'Revise las líneas de inventario: artículo, cantidad, costo y fecha deben ser válidos y conciliar con la base imponible.'
+    };
+  }
+  if (has(text, /sqlite|escritorio|persistencia/i)) {
+    return {
+      field: 'storage',
+      hint: 'La base local no está disponible. Reintente cuando SQLite esté listo; no se registró ningún dato parcial.'
+    };
+  }
+  if (has(text, /asiento|factura de compra|concili|retenciones.*CxP|costo.*IVA.*IGTF/i)) {
+    return {
+      field: 'purchaseInvoice',
+      hint: 'El asiento contable no concilia con la factura. Corrija en la compra: base imponible y cálculo de IVA, IGTF, retenciones y saldo de proveedor en Bs. y USD.'
+    };
+  }
+  if (has(text, /SQLException|rechaz[aó]|SQLite|integridad|no reconoce|no concilia|error al guardar|no se pudo guardar/i)) {
+    return {
+      field: 'purchaseInvoice',
+      hint: 'El asiento no reconoce los importes de la factura. Corrige en la compra: base imponible, IVA, IGTF, retenciones, CxP, tasa BCV y los montos en Bs. y USD.'
     };
   }
   if (has(text, /sqlite|escritorio|persistencia/i)) {
