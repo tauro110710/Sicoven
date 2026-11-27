@@ -10,7 +10,11 @@ import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/p
 import { getPurchaseAccountCreditDate, getCompanyTaxStatusForDate, type PurchaseIvaRetentionSnapshot } from '../../types/accounting';
 import { evaluateIvaRetentionEligibility, resolveIvaBuyerAgentStatus, type IvaArticle3Exclusion, type IvaSupplierTaxStatus } from '../../types/ivaRetentionEligibility';
 import { getCompanyPurchasePaymentAccounts } from '../../types/purchaseAccounting';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { isIgtfEligiblePaymentMethod, listPaymentCounterpartAccounts, type PaymentMethodCode } from '../../types/paymentMethods';
+import { validatePurchaseSettlementMode } from '../../types/purchaseSettlement';
+import PaymentMethodField from '../shared/PaymentMethodField';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { calculateFiscalBreakdown, calculateFiscalBreakdownFromGross, roundFiscalBs } from '../../types/vatFiscalEngine';
 
@@ -87,23 +91,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const usdEnabled = monetaryRule.allowsUsd;
   const effectiveBcvRate = usdEnabled ? bcvRate : 0;
 
-  // Sugerencia de tasa BCV histórica basada en el historial de la empresa.
-  // Solo se muestra si el campo está vacío; el contador puede aplicarla con un clic.
-  const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
-  React.useEffect(() => {
-    // Antes de 2018 la operación es solo en bolívares: se limpia cualquier tasa
-    // histórica para no sugerir equivalencias USD que no corresponden.
-    if (!getReglaMonetariaPorFecha(invoiceDate).allowsUsd) {
-      setSuggestedBcvRate(undefined);
-      setBcvRateInput('');
-      return;
-    }
-    // La tasa BCV corresponde a la fecha de factura, no a la fecha de abono en cuenta.
-    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
-    setSuggestedBcvRate(resolved);
-    // Al cambiar la fecha, evitar conservar una tasa de otro período.
-    setBcvRateInput(resolved ? String(resolved) : '');
-  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
+  // Tasa histórica de la fecha de factura; no se pisa una tasa ya editada
+  // cuando solo se actualiza el historial.
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: invoiceDate,
+    value: bcvRateInput,
+    onValueChange: setBcvRateInput,
+    enabled: usdEnabled
+  });
   const [notes, setNotes] = useState<string>('');
   // Clasificación explícita: mercancía al Kardex o cuenta específica de gasto/activo.
   const [linkInventory, setLinkInventory] = useState(true);
@@ -167,7 +163,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('BS');
+  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH_BS');
   const [applyIgtf, setApplyIgtf] = useState(false);
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return formatLocalIsoDate(d); })();
 
@@ -345,12 +341,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
         }
       }
     }
-    if (paymentTerm === 'CONTADO') {
-      if (!paymentAccounts.some(account => account.code === paymentAccountCode)) {
-        showGuidedError('Selecciona una cuenta de movimiento de Caja o Banco del Plan de Cuentas.'); return;
-      }
-      if (!paymentReference.trim()) { showGuidedError('Indica el número de comprobante, referencia bancaria o soporte del desembolso.'); return; }
-    }
+    // Misma regla que `addPurchase`: cuenta de Caja/Banco y soporte del desembolso.
+    const settlementError = validatePurchaseSettlementMode(
+      paymentTerm,
+      paymentAccountCode,
+      listPaymentCounterpartAccounts(accounts, bankAccounts, currentCompany.id),
+      paymentReference,
+      paymentMethod
+    );
+    if (settlementError) { showGuidedError(settlementError); return; }
     if (vatWithheldBs + islrWithheldBs > totalAmountBs + 0.005) {
       showGuidedError('Las retenciones no pueden superar el total de la factura.');
       return;
@@ -604,15 +603,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                       Tasa BCV aplicable a la factura *
                       <input type="text" inputMode="decimal" required value={bcvRateInput} onChange={editText(setBcvRateInput)} placeholder="Obligatoria desde 2018" className={`ml-2 w-36 rounded-lg bg-white px-2 py-1 font-mono focus:ring-1 focus:outline-none ${fieldTone('bcvRate')}`} />
                     </div>
-                    {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
-                      <button
-                        type="button"
-                        onClick={() => setBcvRateInput(String(suggestedBcvRate))}
-                        className="text-xs text-emerald-600 hover:text-emerald-800 underline"
-                      >
-                        Usar tasa del historial: {suggestedBcvRate}
-                      </button>
-                    )}
+                    <HistoricalBcvRateNote
+                      date={invoiceDate}
+                      suggestion={suggestedBcvRate}
+                      appliedRate={bcvRate}
+                      onApply={rate => setBcvRateInput(String(rate))}
+                      className="text-right"
+                    />
                   </>
                 ) : (
                   <span className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
@@ -691,12 +688,27 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">3. Método de pago e IGTF</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Método de pago previsto</label>
-                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as typeof paymentMethod)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
-                  <option value="BS">Bolívares / medios nacionales</option><option value="FOREIGN_CASH">Divisas en efectivo</option><option value="ZELLE">Zelle</option><option value="INTERNATIONAL_TRANSFER">Transferencia internacional</option><option value="CRYPTO">Criptoactivos</option>
-                </select>
+              <div className="sm:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                <PaymentMethodField
+                  kind="PURCHASE"
+                  value={{ method: paymentMethod as PaymentMethodCode, accountCode: paymentAccountCode, reference: paymentReference }}
+                  onChange={next => {
+                    if (next.method !== paymentMethod) setApplyIgtf(false);
+                    setPaymentMethod(next.method);
+                    setPaymentAccountCode(next.accountCode);
+                    setPaymentReference(next.reference);
+                    clearError();
+                  }}
+                  accounts={accounts}
+                  bankAccounts={bankAccounts}
+                  companyId={currentCompany.id}
+                  amountBs={Math.max(0, totalAmountBs - vatWithheldBs - islrWithheldBs)}
+                  disabled={paymentTerm === 'CREDITO'}
+                  invalid={errorField === 'accounts'}
+                  alwaysRequireReference
+                />
               </div>
-              <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS' || paymentTerm === 'CREDITO'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
+              <label className="sm:col-span-2 flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={!isIgtfEligiblePaymentMethod(paymentMethod) || paymentTerm === 'CREDITO'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
             </div>
             <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
             {paymentTerm === 'CREDITO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El IGTF no se anticipa en una factura a crédito. La obligación se evalúa cuando se realice el débito o se cancele la deuda; registre el impuesto en el flujo de pago cuando esté habilitado y conciliado.</p>}
@@ -785,11 +797,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <div><label className="block font-semibold text-slate-700 mb-1">Forma de pago</label><select value={paymentTerm} onChange={e => setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
               {paymentTerm === 'CREDITO' && <div><label className="block font-semibold text-slate-700 mb-1">Plazo del crédito (días)</label><input type="number" min="1" max="3650" value={creditDays} onChange={e => setCreditDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><span className="text-[11px] text-slate-600">Vencimiento calculado: {dueDate}</span></div>}
             </div>
-            {paymentTerm === 'CONTADO' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Cuenta contable de pago / origen del dinero *</label><select required value={paymentAccountCode} onChange={e => { setPaymentAccountCode(e.target.value); clearError(); }} aria-invalid={errorField === 'accounts'} className={`w-full px-3 py-2 rounded-lg bg-white focus:ring-1 focus:outline-none ${fieldTone('accounts')}`}><option value="">Selecciona Caja o Banco...</option>{paymentAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>{paymentAccounts.length === 0 && <p className="text-xs text-red-700 mt-1">No hay cuentas de Caja/Banco de movimiento disponibles en el Plan de Cuentas.</p>}</div>
-              <div><label className="block font-semibold text-slate-700 mb-1">Comprobante / referencia del pago *</label><input required value={paymentReference} onChange={e => { setPaymentReference(e.target.value); clearError(); }} maxLength={200} placeholder="N.º de egreso, transferencia o soporte" aria-invalid={errorField === 'accounts'} className={`w-full px-3 py-2 rounded-lg bg-white focus:ring-1 focus:outline-none ${fieldTone('accounts')}`}/><p className="text-[11px] text-slate-600 mt-1">Se conserva en la factura y en la descripción del asiento para auditoría.</p></div>
-              <p className="sm:col-span-2 text-xs text-emerald-900">El asiento acreditará esta cuenta por el neto pagado, después de las retenciones aplicables. No se crea una CxP ni se requiere una caja registradora.</p>
-            </div>}
+            {paymentTerm === 'CONTADO' && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">El asiento acreditará la cuenta de tesorería elegida en el método de pago por el neto pagado, después de las retenciones aplicables. No se crea una CxP ni se requiere una caja registradora.</p>}
             {paymentTerm === 'CREDITO' && <>
               <div><label className="block font-semibold text-slate-700 mb-1">Condición contractual del precio</label><select value={currencyPricingMode} onChange={e => setCurrencyPricingMode(e.target.value as typeof currencyPricingMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="USD_FIJO">Precio fijo en USD; liquidación según contrato</option><option value="BS_AJUSTABLE">Precio en Bs. ajustable por tasa BCV al liquidar</option><option value="REVISION_MANUAL">Otra condición; requiere revisión manual</option></select></div>
               <div><label className="block font-semibold text-slate-700 mb-1">Tratamiento del ajuste fiscal</label><select value={fiscalAdjustmentMode} onChange={e => setFiscalAdjustmentMode(e.target.value as typeof fiscalAdjustmentMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="IVA_ORIGINAL_DIF_CAMBIARIA">Conservar IVA original y evaluar diferencia cambiaria</option><option value="AJUSTE_BASE_IVA">Evaluar ajuste de base e IVA mediante documento aplicable</option><option value="REVISION_CONTADOR">Revisión del contador antes de registrar ajuste fiscal</option></select></div>

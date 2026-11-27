@@ -6,6 +6,8 @@ import { formatUsdForDate as formatUsdEnFecha } from '../utils/monetaryPolicy';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 import type { VatFiscalIncident } from '../types/vatFiscalIncidents';
 import { requestNonBlockingConfirm } from '../utils/safeAlert';
+import HistoricalBcvRateNote from './shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from './shared/useHistoricalBcvRate';
 
 type CorrectionEmissionMedium = 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '';
 const parseFiscalInput = (value: string) => { const raw = String(value ?? '').trim(); return Number(raw.includes(',') ? raw.split('.').join('').replace(',', '.') : raw); };
@@ -96,6 +98,12 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
   const [correctionQuantity, setCorrectionQuantity] = useState('1');
   const [correctionBcvRate, setCorrectionBcvRate] = useState('');
   const [correctionDate, setCorrectionDate] = useState(today);
+  const suggestedCorrectionBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: correctionDate,
+    value: correctionBcvRate,
+    onValueChange: setCorrectionBcvRate
+  });
   const [correctionDocumentRef, setCorrectionDocumentRef] = useState('');
   const [supplierReturnLines, setSupplierReturnLines] = useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [supplierReturnDate, setSupplierReturnDate] = useState(today);
@@ -1051,7 +1059,7 @@ export const ReversionFiscalView: React.FC<{ userRole?: string }> = ({ userRole 
                     </select>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div><label className="block text-xs font-semibold mb-1">Cantidad devuelta</label><input type="text" inputMode="decimal" value={correctionQuantity} onChange={event=>setCorrectionQuantity(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
-                      <div><label className="block text-xs font-semibold mb-1">Tasa BCV de la devolución (Bs./USD) *</label><input required type="text" inputMode="decimal" placeholder="Ej.: 889,67" value={correctionBcvRate} onChange={event=>setCorrectionBcvRate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                      <div><label className="block text-xs font-semibold mb-1">Tasa BCV de la devolución (Bs./USD) *</label><input required type="text" inputMode="decimal" placeholder="Ej.: 889,67" value={correctionBcvRate} onChange={event=>setCorrectionBcvRate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /><HistoricalBcvRateNote date={correctionDate} suggestion={suggestedCorrectionBcvRate} appliedRate={parseFiscalInput(correctionBcvRate)} onApply={value=>setCorrectionBcvRate(String(value))} className="mt-1" /></div>
                       <div><label className="block text-xs font-semibold mb-1">Fecha del movimiento</label><input type="date" min={selectedCorrectionSource?.date} value={correctionDate} onChange={event=>setCorrectionDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                       <div><label className="block text-xs font-semibold mb-1">Ref. nota/soporte</label><input value={correctionDocumentRef} onChange={event=>setCorrectionDocumentRef(event.target.value)} maxLength={120} placeholder="NC-000123" className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                     </div>

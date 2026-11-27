@@ -3,6 +3,8 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { allocateSupplierAdvanceCreditNotes } from '../../types/supplierAdvanceSettlement';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 interface Props { onClose: () => void; }
 
@@ -30,6 +32,12 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const [amountUsd, setAmountUsd] = useState('');
   const [cashReceivedBs, setCashReceivedBs] = useState('');
   const [bcvRate, setBcvRate] = useState('');
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date,
+    value: bcvRate,
+    onValueChange: setBcvRate
+  });
   const [treasuryAccountCode, setTreasuryAccountCode] = useState('');
   const [targetPurchaseId, setTargetPurchaseId] = useState('');
   const [reference, setReference] = useState('');
@@ -142,6 +150,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
               <label className="text-xs font-semibold text-slate-700">Tasa BCV *<input required type="text" inputMode="decimal" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             </> : <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-wide text-amber-700">Moneda contable: {monetaryRule.currencyLabel}</span><span className="block text-xs text-amber-900">Antes de 2018 no se registran tasas BCV ni anticipos en dólares. Registre la operación en el Libro de Compras del período en bolívares.</span></div>}
           </div>
+          {usdEnabled && <HistoricalBcvRateNote date={date} suggestion={suggestedBcvRate} appliedRate={rate} onApply={value => setBcvRate(String(value))} />}
           {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
             <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>
             {allocationPreview.error ? <p role="alert" className="mt-2 text-xs text-amber-800">{allocationPreview.error}</p> :

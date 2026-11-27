@@ -1,39 +1,34 @@
 import type { AccountingBcvRateHistoryEntry } from '../types/accounting';
 
+const isValidIsoDate = (value: unknown): value is string => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
 /**
- * Devuelve la tasa BCV más reciente del historial contable de la empresa
- * cuya `effectiveDate` sea <= a la fecha dada.
- *
- * - Nunca inventa ni aproxima una tasa ausente: devuelve `undefined` como
- *   faltante explícito cuando no existe ninguna entrada aplicable.
- * - Usar para sugerir la tasa en formularios (Tesorería, Inventario) y para
- *   derivar la equivalencia USD de asientos en bolívares con fecha histórica.
- * - No sustituye la obligación del contador de confirmar la tasa cuando la
- *   operación implica conversión real (cuenta USD, importación, etc.).
+ * Devuelve la entrada del historial contable vigente para una fecha: la más
+ * reciente cuya fecha efectiva sea igual o anterior. No inventa tasas.
  */
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
-
-export function resolveBcvRateForDate(
-  history: AccountingBcvRateHistoryEntry[] | undefined | null,
-  date: string
-): number | undefined {
-  if (!history || history.length === 0) return undefined;
-  if (!isValidIsoDate(date)) return undefined;
-
+export function resolveBcvRateEntryForDate(
+  history: AccountingBcvRateHistoryEntry[] | null | undefined,
+  effectiveDate: string
+): AccountingBcvRateHistoryEntry | undefined {
+  if (!Array.isArray(history) || !isValidIsoDate(effectiveDate)) return undefined;
   let best: AccountingBcvRateHistoryEntry | undefined;
   for (const entry of history) {
-    if (!isValidIsoDate(entry.effectiveDate)) continue;
-    if (entry.effectiveDate > date) continue;
+    if (!entry || !isValidIsoDate(entry.effectiveDate) || entry.effectiveDate > effectiveDate) continue;
     const rate = Number(entry.rate);
     if (!Number.isFinite(rate) || rate <= 0) continue;
-    if (!best || entry.effectiveDate >= best.effectiveDate) {
-      best = entry;
-    }
+    if (!best || entry.effectiveDate >= best.effectiveDate) best = entry;
   }
-  return best ? Number(best.rate) : undefined;
+  return best;
+}
+
+/** Returns the latest saved rate whose effective date is not later than the requested date. */
+export function resolveBcvRateForDate(
+  history: AccountingBcvRateHistoryEntry[] | null | undefined,
+  effectiveDate: string
+): number | undefined {
+  return resolveBcvRateEntryForDate(history, effectiveDate)?.rate;
 }

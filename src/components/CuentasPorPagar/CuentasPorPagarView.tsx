@@ -4,6 +4,8 @@ import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { summarizeCreditAging } from '../../types/creditAging';
 import { summarizeCreditDueAlerts } from '../../types/creditDueAlerts';
 import { CreditExposurePanel } from '../shared/CreditExposurePanel';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 const parseAmountInput=(value:string)=>{const raw=value.trim();return Number(raw.includes(',')?raw.replace(/\./g,'').replace(',','.'):raw);};
 const money=(n:number,currency='Bs.')=>`${currency} ${Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -63,6 +65,18 @@ export const CuentasPorPagarView: React.FC = () => {
  const [advanceSupport,setAdvanceSupport]=useState('');
  const [advanceMessage,setAdvanceMessage]=useState('');
  const [advanceSaving,setAdvanceSaving]=useState(false);
+ const suggestedAdvanceBcvRate=useHistoricalBcvRate({
+  company:currentCompany,
+  date:advanceDate,
+  value:advanceRate,
+  onValueChange:setAdvanceRate
+ });
+ const suggestedSettlementBcvRate=useHistoricalBcvRate({
+  company:currentCompany,
+  date:settlementDate,
+  value:settlementRate,
+  onValueChange:setSettlementRate
+ });
  const treasuryAccounts=accounts.filter(a=>a.type==='ACTIVO'&&a.isMovement&&a.code.startsWith('1.1.1.'));
  const directAdvanceRows=supplierDirectAdvances.filter(a=>a.companyId===currentCompany.id)
   .sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt));
@@ -108,6 +122,7 @@ export const CuentasPorPagarView: React.FC = () => {
     <label className="text-xs font-semibold text-slate-700">Fecha efectiva<input required type="date" value={advanceDate} onChange={e=>setAdvanceDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Anticipo USD<input required type="text" inputMode="decimal" value={advanceUsd} onChange={e=>setAdvanceUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="text" inputMode="decimal" value={advanceRate} onChange={e=>setAdvanceRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
+    <HistoricalBcvRateNote date={advanceDate} suggestion={suggestedAdvanceBcvRate} appliedRate={parseAmountInput(advanceRate)} onApply={value=>setAdvanceRate(String(value))} className="sm:col-span-2 lg:col-span-3"/>
     <label className="text-xs font-semibold text-slate-700">Cuenta Caja/Banco<select required value={advanceAccount} onChange={e=>setAdvanceAccount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">{treasuryAccounts.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></label>
     <label className="text-xs font-semibold text-slate-700">Moneda desembolsada<select value={advanceCurrency} onChange={e=>setAdvanceCurrency(e.target.value as 'BS'|'USD')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="BS">Bolívares</option><option value="USD">Dólares</option></select></label>
     <label className="text-xs font-semibold text-slate-700">Referencia / operación<input required value={advanceReference} onChange={e=>setAdvanceReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
@@ -125,6 +140,7 @@ export const CuentasPorPagarView: React.FC = () => {
     <label className="text-xs font-semibold text-slate-700">Fecha efectiva<input required type="date" value={settlementDate} onChange={e=>setSettlementDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Importe a liquidar USD<input required type="text" inputMode="decimal" value={settlementUsd} onChange={e=>setSettlementUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
     <label className="text-xs font-semibold text-slate-700">Tasa BCV de la operación<input required type="text" inputMode="decimal" value={settlementRate} onChange={e=>setSettlementRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
+    <HistoricalBcvRateNote date={settlementDate} suggestion={suggestedSettlementBcvRate} appliedRate={parseAmountInput(settlementRate)} onApply={value=>setSettlementRate(String(value))} className="sm:col-span-2 lg:col-span-4"/>
     {settlementKind==='APPLIED_TO_PURCHASE'?<label className="text-xs font-semibold text-slate-700 lg:col-span-2">Documento destino<select required value={settlementTargetId} onChange={e=>setSettlementTargetId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione factura o ND pendiente</option>{settlementTargets.map(p=><option key={p.id} value={p.id}>{p.documentType==='02'?'ND':'Factura'} {p.invoiceNumber} · {p.supplierName} · {money(getCreditBalance(p.id,'PURCHASE_PAYMENT').outstandingUsd,'USD')} pendiente</option>)}</select></label>:<><label className="text-xs font-semibold text-slate-700">Cuenta Caja/Banco receptora<select required value={settlementBankCode} onChange={e=>setSettlementBankCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Seleccione cuenta en Bs.</option>{refundBanks.map(a=><option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></label><label className="text-xs font-semibold text-slate-700">Bs. efectivamente recibidos<input required type="text" inputMode="decimal" value={settlementCashBs} onChange={e=>setSettlementCashBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label></>}
     <label className="text-xs font-semibold text-slate-700">Referencia / soporte<input required value={settlementReference} onChange={e=>setSettlementReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"/></label>
    </div>

@@ -4,8 +4,9 @@ import { NewBankAccountModal } from '../Conciliacion/NewBankAccountModal';
 import { Landmark, Plus, ArrowDownLeft, ArrowUpRight, ArrowRightLeft, Wallet, ReceiptText } from 'lucide-react';
 import { formatBs, formatDate } from '../../utils/formatters';
 import { calculateBankAvailableBalance } from '../../types/bankAccountAvailability';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import { resolveHistoricalBcvRate } from '../../utils/historicalBcvRate';
 import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
 
 type MovementKind = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -70,10 +71,7 @@ export const TesoreriaView: React.FC = () => {
       if (!monetaryRule.allowsUsd) return 0;
       if (parsedBcvRate > 0) return parsedBcvRate;
       if (!isUsdAccount) {
-        const historical = resolveBcvRateForDate(
-          currentCompany.accountingBcvRateHistory,
-          date
-        );
+        const historical = resolveHistoricalBcvRate(currentCompany, date)?.rate;
         return historical ?? 0;
       }
       return 0;
@@ -173,12 +171,15 @@ export const TesoreriaView: React.FC = () => {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
                 placeholder="Obligatoria desde 2018"
               />
-              {activeBank?.currency !== 'USD' && (() => {
-                const suggested = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, date);
-                return suggested
-                  ? <p className="mt-1 text-[10px] text-slate-500">Tasa en historial para {date}: <strong>{suggested.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</strong> Bs./USD — se usará si deja el campo vacío.</p>
-                  : <p className="mt-1 text-[10px] text-amber-600">No hay tasa BCV registrada para {date}. Regístrela en Configuración o ingrésela aquí.</p>;
-              })()}
+              {activeBank?.currency !== 'USD' && (
+                <HistoricalBcvRateNote
+                  date={date}
+                  suggestion={resolveHistoricalBcvRate(currentCompany, date)}
+                  appliedRate={parsedBcvRate}
+                  onApply={value => setBcvRateInput(String(value))}
+                  className="mt-1"
+                />
+              )}
             </div>
           ) : (
             <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">

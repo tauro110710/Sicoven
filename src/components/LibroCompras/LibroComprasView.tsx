@@ -23,6 +23,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
 import { PurchaseServiceCreditNoteModal } from './PurchaseServiceCreditNoteModal';
+import { paymentMethodShortLabel } from '../../types/paymentMethods';
 import { SupplierDebitNoteModal } from './SupplierDebitNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
@@ -294,7 +295,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
                       {Number(p.igtfAmountBs || 0) > 0 ? formatBs(signed(p, Number(p.igtfAmountBs))) : '-'}
-                      {p.paymentMethod && <div className="text-[10px] text-slate-400 font-normal">{({BS:'Bs./nacional',FOREIGN_CASH:'Divisas efectivo',ZELLE:'Zelle',INTERNATIONAL_TRANSFER:'Transferencia intl.',CRYPTO:'Cripto'} as Record<string,string>)[p.paymentMethod] || p.paymentMethod}</div>}
+                      {p.paymentMethod && <div className="text-[10px] text-slate-400 font-normal">{paymentMethodShortLabel(p.paymentMethod)}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
                       {p.exemptAmountBs > 0 ? formatBs(signed(p, p.exemptAmountBs)) : '-'}

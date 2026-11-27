@@ -4736,3 +4736,109 @@ test('SQLite accepts only the linked and balanced automatic year-end closing ent
     ...next, journalEntries: [ordinaryEntry]
   }), /período cerrado/);
 });
+
+test('SQLite reconciles each sale stock exit with its own cost-of-sales entry', () => {
+  const rate = 301.3709;
+  const accounts = [
+    { code: '1.1.2.01', name: 'Cuentas por cobrar', type: 'ACTIVO', isMovement: true },
+    { code: '4.1.1.01', name: 'Ingresos', type: 'INGRESOS', isMovement: true },
+    { code: '2.1.2.01', name: 'IVA débito fiscal', type: 'PASIVO', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true },
+    { code: '5.1.1.01', name: 'Costo de ventas', type: 'COSTOS', isMovement: true }
+  ];
+  const product = (id, code, stock, cost) => ({
+    id, companyId: 'company-1', code, name: 'Artículo ' + code,
+    currentStock: stock, avgCostBs: cost, avgCostUsd: cost / rate,
+    costingMethod: 'PROMEDIO_PONDERADO', vatTreatment: 'GENERAL_16',
+    inventoryAccountCode: '1.1.4.01', costOfSalesAccountCode: '5.1.1.01'
+  });
+  const products = [product('p-1', 'P-1', 100, 1130.14), product('p-2', 'P-2', 50, 500)];
+  const taxable = 2500;
+  const vat = 400;
+  const total = 2900;
+  const saleEntry = {
+    id: 'entry-sale-1', companyId: 'company-1', entryNumber: 1, date: '2026-11-20',
+    description: 'Factura de Venta N° 1', type: 'VENTA', bcvRate: rate, referenceDoc: 'FAC-1',
+    items: [
+      { accountCode: '1.1.2.01', debitBs: total, creditBs: 0, debitUsd: total / rate, creditUsd: 0 },
+      { accountCode: '4.1.1.01', debitBs: 0, creditBs: taxable, debitUsd: 0, creditUsd: taxable / rate },
+      { accountCode: '2.1.2.01', debitBs: 0, creditBs: vat, debitUsd: 0, creditUsd: vat / rate }
+    ],
+    createdAt: '2026-11-20T10:00:00.000Z'
+  };
+  const costEntry = (id, entryNumber, cost) => ({
+    id, companyId: 'company-1', entryNumber, date: '2026-11-20',
+    description: 'Costo de Ventas ' + id, type: 'INVENTARIO', bcvRate: rate, referenceDoc: 'FAC-1',
+    items: [
+      { accountCode: '5.1.1.01', debitBs: cost, creditBs: 0, debitUsd: cost / rate, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 0, creditBs: cost, debitUsd: 0, creditUsd: cost / rate }
+    ],
+    createdAt: '2026-11-20T10:00:00.000Z'
+  });
+  const firstCost = costEntry('entry-cogs-1', 2, 1130.14);
+  const secondCost = costEntry('entry-cogs-2', 3, 500);
+  const exitMovement = (id, productId, code, cost, costEntryId) => ({
+    id, companyId: 'company-1', productId, productName: 'Artículo ' + code, productCode: code,
+    date: '2026-11-20', type: 'SALIDA', concept: 'VENTA', documentType: 'Factura',
+    documentRef: 'FAC-1', quantity: 1, unitCostBs: cost, unitCostUsd: cost / rate,
+    totalCostBs: cost, totalCostUsd: cost / rate,
+    balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+    bcvRate: rate, costingMethod: 'PROMEDIO_PONDERADO',
+    counterpartyRif: 'J-12345678-9', journalEntryId: costEntryId
+  });
+  const sale = {
+    id: 'sale-1', companyId: 'company-1', opNumber: 1, invoiceDate: '2026-11-20',
+    customerRif: 'J-12345678-9', customerName: 'CLIENTE', invoiceNumber: '1',
+    controlNumber: '00-1', documentType: '01', totalAmountBs: total, taxableBaseBs: taxable,
+    exemptAmountBs: 0, taxRate: 16, vatAmountBs: vat, vatWithheldBs: 0, igtfApplicable: false,
+    igtfAmountBs: 0, paymentCurrency: 'BS', bcvRate: rate, totalAmountUsd: total / rate,
+    taxableBaseUsd: taxable / rate, vatAmountUsd: vat / rate, vatWithheldUsd: 0,
+    // Venta a crédito: este fixture prueba la conciliación de Kardex/costo de
+    // ventas, no el cobro de contado (que exige cuenta de tesorería).
+    paymentTerm: 'CREDITO', journalEntryId: saleEntry.id,
+    inventoryLines: [
+      {
+        productId: 'p-1', productCode: 'P-1', productName: 'Artículo P-1', quantity: 1,
+        unitPriceBs: 2000, netAmountBs: 2000, taxRate: 16, vatAmountBs: 320,
+        additionalLuxuryTaxBs: 0, exemptAmountBs: 0, totalBs: 2320
+      },
+      {
+        productId: 'p-2', productCode: 'P-2', productName: 'Artículo P-2', quantity: 1,
+        unitPriceBs: 500, netAmountBs: 500, taxRate: 16, vatAmountBs: 80,
+        additionalLuxuryTaxBs: 0, exemptAmountBs: 0, totalBs: 580
+      }
+    ]
+  };
+  const previous = {
+    ...emptyState(), products: products.map(item => ({ ...item })), accounts,
+    companies: [{ id: 'company-1', name: 'Empresa de prueba' }]
+  };
+  const next = {
+    ...previous, sales: [sale],
+    journalEntries: [saleEntry, firstCost, secondCost],
+    movements: [
+      exitMovement('mov-1', 'p-1', 'P-1', 1130.14, firstCost.id),
+      exitMovement('mov-2', 'p-2', 'P-2', 500, secondCost.id)
+    ],
+    products: [product('p-1', 'P-1', 99, 1130.14), product('p-2', 'P-2', 49, 500)]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+
+  // La salida debe apuntar al asiento de costo de ventas, no al asiento de la factura.
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    movements: [
+      exitMovement('mov-1', 'p-1', 'P-1', 1130.14, saleEntry.id),
+      next.movements[1]
+    ]
+  }), /no concilian con las salidas de Kardex/);
+
+  // Un único asiento agregado ya no representa el costo de cada línea.
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    journalEntries: [saleEntry, {
+      ...firstCost,
+      items: [...firstCost.items, ...secondCost.items]
+    }]
+  }), /no concilian con las salidas de Kardex/);
+});

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useAccounting } from '../../context/AccountingContext';
 import { Landmark, X, Check } from 'lucide-react';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 interface NewBankAccountModalProps {
   isOpen: boolean;
@@ -10,7 +12,7 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { addBankAccount, waitForPersistence, accounts } = useAccounting();
+  const { addBankAccount, waitForPersistence, accounts, currentCompany } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -25,6 +27,14 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
   const [bcvRateInput, setBcvRateInput] = useState<string>('');
   const [openingDate, setOpeningDate] = useState<string>('');
+  const effectiveOpeningDate = openingDate || (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: effectiveOpeningDate,
+    value: bcvRateInput,
+    onValueChange: setBcvRateInput,
+    enabled: isOpen && getReglaMonetariaPorFecha(effectiveOpeningDate).allowsUsd
+  });
 
   if (!isOpen) return null;
 
@@ -33,7 +43,6 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const selectedParentAccount = accounts.find(account => account.code === parentAccountCode && account.code === expectedParentCode && account.type === 'ACTIVO' && account.level === 4 && account.parentCode === '1.1.1' && !account.isMovement);
   const parseAmount = (value: string) => { const raw = value.trim(); return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw); };
   const parsedOpeningBalance = parseAmount(initialBalanceBs) || 0;
-  const effectiveOpeningDate = openingDate || (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
   // Regla monetaria única por fecha contable: antes de 2018 no hay tasa BCV ni USD.
   const monetaryRule = getReglaMonetariaPorFecha(effectiveOpeningDate);
   const usdEnabled = monetaryRule.allowsUsd;
@@ -230,6 +239,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
           {parsedOpeningBalance > 0 && usdEnabled && <div>
             <label className="block font-semibold text-slate-700 mb-1">Tasa BCV aplicable al saldo inicial (Bs./USD) {rateRequired ? '*' : ''}</label>
             <input type="text" inputMode="decimal" value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} placeholder="Ej.: 889,67" required={rateRequired} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <HistoricalBcvRateNote date={effectiveOpeningDate} suggestion={suggestedBcvRate} appliedRate={bcvRate} onApply={value => setBcvRateInput(String(value))} className="mt-1" />
           </div>}
           {parsedOpeningBalance > 0 && !usdEnabled && <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
             Saldo inicial del {effectiveOpeningDate} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.

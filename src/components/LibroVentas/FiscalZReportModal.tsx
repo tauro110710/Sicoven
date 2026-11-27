@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { FiscalZReportMetadata, JournalEntryItem } from '../../types/accounting';
 import { buildFiscalZReferenceDoc, calculateFiscalZTaxBreakdown } from '../../types/fiscalZReport';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 import { todayLocalIso } from '../../utils/localDate';
 
 type PaymentKey = 'cash' | 'foreignCash' | 'transfer' | 'card' | 'zelle' | 'biopago' | 'credit' | 'other';
@@ -54,15 +55,14 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const savingRef = React.useRef(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Antes de 2018 el cierre es solo en bolívares: no se registra tasa BCV.
-    if (!getReglaMonetariaPorFecha(date).allowsUsd) {
-      setRateInput('');
-      return;
-    }
-    const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], date);
-    setRateInput(historicalRate === undefined ? '' : String(historicalRate).replace('.', ','));
-  }, [currentCompany.accountingBcvRateHistory, date]);
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date,
+    value: rateInput,
+    onValueChange: setRateInput,
+    preserveManualEdit: false,
+    format: rate => String(rate).replace('.', ',')
+  });
 
 
   const movementAccounts = useMemo(() => accounts.filter(account => account.isMovement), [accounts]);
@@ -228,9 +228,10 @@ export const FiscalZReportModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <label className="font-semibold text-slate-700">{sourceType === 'POS' ? 'Nombre del sistema POS' : 'Plataforma / proveedor digital'}<input value={sourceSystemName} onChange={event => setSourceSystemName(event.target.value)} required placeholder={sourceType === 'POS' ? 'Ej. SICOVEN POS, otro sistema' : 'Nombre de la plataforma / proveedor'} className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
             <label className="font-semibold text-slate-700">Terminal / caja (si aplica)<input value={sourceTerminalId} onChange={event => setSourceTerminalId(event.target.value)} placeholder="Ej. Caja 01" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
           </>}
-          {usdEnabled ? (
+          {usdEnabled ? (<>
             <label className="font-semibold text-slate-700">Tasa BCV del cierre *<input inputMode="decimal" value={rateInput} onChange={event => setRateInput(event.target.value)} required placeholder="Ej. 889,67" className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal"/></label>
-          ) : (
+            <HistoricalBcvRateNote date={date} suggestion={suggestedBcvRate} appliedRate={rate} onApply={value => setRateInput(String(value).replace('.', ','))} />
+          </>) : (
             <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
               Cierre del {date} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.
             </p>

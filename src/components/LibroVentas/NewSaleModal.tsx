@@ -6,11 +6,14 @@ import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { useGuidedEntryError } from '../shared/useGuidedEntryError';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
 import { getCompanyTaxStatusForDate } from '../../types/accounting';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
 import { calculateFiscalBreakdown, roundFiscalBs } from '../../types/vatFiscalEngine';
 import { buildSaleInventoryFiscalLines } from '../../types/saleInventoryFiscalLines';
+import { paymentMethodLabel, salePaymentCurrencyForMethod } from '../../types/paymentMethods';
+import PaymentMethodField, { type PaymentSelectionValue } from '../shared/PaymentMethodField';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -18,7 +21,7 @@ interface NewSaleModalProps {
 }
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addSale, waitForPersistence, products } = useAccounting();
+  const { currentCompany, addSale, waitForPersistence, products, accounts, bankAccounts } = useAccounting();
   const savingRef = React.useRef(false);
   const [saving, setSaving] = useState(false);
   const { submitError, errorField, noticeRef, showGuidedError, clearError, fieldTone, editText } = useGuidedEntryError();
@@ -56,7 +59,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [retentionRate, setRetentionRate] = useState<number>(75);
   const [retentionVoucherNumber, setRetentionVoucherNumber] = useState<string>('');
   const [retentionVoucherDate, setRetentionVoucherDate] = useState<string>('');
-  const [paymentCurrency, setPaymentCurrency] = useState<'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO'>('BS');
+  // Un único objeto mantiene sincronizados medio de cobro, contrapartida y referencia.
+  const [paymentSelection, setPaymentSelection] = useState<PaymentSelectionValue>({
+    method: 'CASH_BS', accountCode: '', reference: ''
+  });
+  const paymentCurrency = salePaymentCurrencyForMethod(paymentSelection.method);
   const [applyIgtf, setApplyIgtf] = useState(false);
 
   const [bcvRateInput, setBcvRateInput] = useState('');
@@ -65,21 +72,15 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const monetaryRule = getReglaMonetariaPorFecha(invoiceDate);
   const usdEnabled = monetaryRule.allowsUsd;
   const effectiveBcvRate = usdEnabled ? bcvRate : 0;
-  // Sugerir tasa BCV histórica del historial general de la empresa.
-  // No se borra lo que el contador ya escribió; solo pre-llena si el campo está vacío.
-  const [suggestedBcvRate, setSuggestedBcvRate] = React.useState<number | undefined>(undefined);
-  React.useEffect(() => {
-    // Antes de 2018 la operación es solo en bolívares: no se sugiere ni conserva tasa BCV.
-    if (!getReglaMonetariaPorFecha(invoiceDate).allowsUsd) {
-      setSuggestedBcvRate(undefined);
-      setBcvRateInput('');
-      return;
-    }
-    const resolved = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory, invoiceDate);
-    setSuggestedBcvRate(resolved);
-    // La tasa anterior no debe quedar asociada a una fecha distinta.
-    setBcvRateInput(resolved ? String(resolved) : '');
-  }, [invoiceDate, currentCompany.id, currentCompany.accountingBcvRateHistory]);
+  // Tasa histórica de la fecha de factura; no se pisa una tasa ya editada
+  // cuando solo se actualiza el historial.
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: invoiceDate,
+    value: bcvRateInput,
+    onValueChange: setBcvRateInput,
+    enabled: usdEnabled
+  });
   const hasValidBcvRate = Number.isFinite(bcvRate) && bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
@@ -210,6 +211,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       igtfAmountBs,
       igtfAmountUsd: effectiveBcvRate > 0 ? igtfAmountBs / effectiveBcvRate : 0,
       paymentCurrency,
+      paymentMethod: paymentSelection.method,
+      paymentAccountCode: paymentSelection.accountCode || undefined,
+      paymentReference: paymentSelection.reference.trim() || undefined,
       bcvRate: effectiveBcvRate,
       totalAmountUsd,
       taxableBaseUsd,
@@ -428,15 +432,13 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                     onChange={editText(setBcvRateInput)}
                     className={`w-full px-3 py-2 rounded-lg font-mono font-bold focus:ring-1 focus:outline-none read-only:bg-slate-100 read-only:text-slate-600 ${fieldTone('bcvRate')}`}
                   />
-                  {suggestedBcvRate && suggestedBcvRate > 0 && String(suggestedBcvRate) !== bcvRateInput && (
-                    <button
-                      type="button"
-                      onClick={() => setBcvRateInput(String(suggestedBcvRate))}
-                      className="mt-1 text-xs text-emerald-600 hover:text-emerald-800 underline"
-                    >
-                      Usar tasa del historial: {suggestedBcvRate}
-                    </button>
-                  )}
+                  <HistoricalBcvRateNote
+                    date={invoiceDate}
+                    suggestion={suggestedBcvRate}
+                    appliedRate={bcvRate}
+                    onApply={rate => setBcvRateInput(String(rate))}
+                    className="mt-1"
+                  />
                 </div>
                 <div className="text-xs text-slate-700">
                   Ingrese manualmente la tasa oficial correspondiente a la fecha de esta factura. No existe una tasa BCV global ni se reutiliza la tasa de otra operación. El valor quedará guardado como parte de este documento y de su asiento contable.
@@ -511,10 +513,25 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">5. Condiciones de pago/cobro y ajuste cambiario</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Condición de la operación</label><select value={paymentTerm} onChange={e => { setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO'); setApplyIgtf(false); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO" disabled>Contado (bloqueado hasta conciliar caja/banco)</option><option value="CREDITO">A crédito</option></select></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Condición de la operación</label><select value={paymentTerm} onChange={e => { setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO'); setApplyIgtf(false); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO">Contado</option><option value="CREDITO">A crédito</option></select></div>
               {paymentTerm === 'CREDITO' && <div><label className="block font-semibold text-slate-700 mb-1">Plazo del crédito (días)</label><input type="number" min="1" max="3650" value={creditDays} onChange={e => setCreditDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><span className="text-[11px] text-slate-600">Vencimiento calculado: {dueDate}</span></div>}
             </div>
-            {paymentTerm === 'CONTADO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El registro de ventas de contado está temporalmente bloqueado: el asiento actual todavía no identifica la caja o cuenta bancaria que recibió el dinero. Para evitar registrar una venta pagada como CxC, solo se permite registrar aquí ventas realmente a crédito hasta completar esa conciliación.</p>}
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <PaymentMethodField
+                kind="SALE"
+                value={paymentSelection}
+                onChange={next => {
+                  if (next.method !== paymentSelection.method) setApplyIgtf(false);
+                  setPaymentSelection(next);
+                }}
+                accounts={accounts}
+                bankAccounts={bankAccounts}
+                companyId={currentCompany.id}
+                amountBs={totalAmountBs - vatWithheldBs}
+                disabled={paymentTerm === 'CREDITO'}
+                invalid={errorField === 'accounts'}
+              />
+            </div>
             {paymentTerm === 'CREDITO' && <>
               <div><label className="block font-semibold text-slate-700 mb-1">Condición contractual del precio</label><select value={currencyPricingMode} onChange={e => setCurrencyPricingMode(e.target.value as typeof currencyPricingMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="USD_FIJO">Precio fijo en USD; liquidación según contrato</option><option value="BS_AJUSTABLE">Precio en Bs. ajustable por tasa BCV al liquidar</option><option value="REVISION_MANUAL">Otra condición; requiere revisión manual</option></select></div>
               <div><label className="block font-semibold text-slate-700 mb-1">Tratamiento del ajuste fiscal</label><select value={fiscalAdjustmentMode} onChange={e => setFiscalAdjustmentMode(e.target.value as typeof fiscalAdjustmentMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="IVA_ORIGINAL_DIF_CAMBIARIA">Conservar IVA original y evaluar diferencia cambiaria</option><option value="AJUSTE_BASE_IVA">Evaluar ajuste de base e IVA mediante documento aplicable</option><option value="REVISION_CONTADOR">Revisión del contador antes de registrar ajuste fiscal</option></select></div>
@@ -528,14 +545,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <input type="checkbox" checked={isIgtfPerceptionAgentForDate} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
               <span>Agente de percepción configurado: <strong>{isIgtfPerceptionAgentForDate ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
             </label>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
-              <select value={paymentCurrency} onChange={e => { setPaymentCurrency(e.target.value as typeof paymentCurrency); setApplyIgtf(false); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
-                <option value="BS">Bolívares (no calcular IGTF)</option>
-                <option value="FOREIGN_CASH">Efectivo en moneda extranjera</option>
-                <option value="FOREIGN_TRANSFER">Pago/transferencia en moneda extranjera</option>
-                <option value="CRYPTO">Criptoactivos</option>
-              </select>
+            <div className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-700">
+              Moneda del cobro derivada del medio seleccionado:{' '}
+              <strong>{paymentMethodLabel(paymentSelection.method)} · {paymentCurrency === 'BS' ? 'bolívares' : 'divisas'}</strong>.
+              {paymentCurrency === 'FOREIGN_TRANSFER' && ' Las transferencias en divisas no se calculan automáticamente: su tratamiento depende del supuesto legal concreto.'}
             </div>
             <label className="flex items-start gap-2 text-slate-700 text-xs font-semibold">
               <input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={!igtfEligible} className="mt-0.5 rounded text-sky-600" />

@@ -25,6 +25,7 @@ import { SaleCorrectionNoteModal } from './SaleCorrectionNoteModal';
 import { FiscalZReportModal } from './FiscalZReportModal';
 import { resolveVatOwnDailySalesSources } from '../../types/vatOwnDeclaration';
 import { filterCompanyFiscalDocuments, filterActiveFiscalDocuments } from '../../types/companyFiscalDocuments';
+import { paymentMethodShortLabel } from '../../types/paymentMethods';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -333,6 +334,7 @@ export const LibroVentasView: React.FC = () => {
                       <span className={`inline-flex rounded px-1.5 py-0.5 font-semibold ${s.paymentTerm === 'CREDITO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{s.paymentTerm === 'CREDITO' ? 'CRÉDITO' : s.paymentTerm === 'CONTADO' ? 'CONTADO' : 'SIN DEFINIR'}</span>
                       {s.paymentTerm === 'CREDITO' && <div className="text-slate-500 mt-1">Vence: {s.dueDate ? formatDate(s.dueDate) : 'Sin fecha'}</div>}
                       {s.paymentTerm === 'CREDITO' && <div className="text-slate-400">{s.currencyPricingMode === 'USD_FIJO' ? 'USD fijo' : s.currencyPricingMode === 'BS_AJUSTABLE' ? 'Bs. ajustable' : 'Revisión manual'}</div>}
+                      {s.paymentTerm === 'CONTADO' && s.paymentMethod && <div className="text-slate-500 mt-1">{paymentMethodShortLabel(s.paymentMethod)}</div>}
                     </td>
                     <td className="py-2 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
                       {s.customerRif}

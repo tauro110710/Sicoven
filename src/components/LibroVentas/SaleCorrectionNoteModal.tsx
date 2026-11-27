@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { SaleRecord } from '../../types/accounting';
 import type { SaleCorrectionNoteRequest } from '../../types/saleCorrectionNote';
 import type { Account } from '../../types/accounting';
 import { useAccounting } from '../../context/AccountingContext';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import { resolveHistoricalBcvRate } from '../../utils/historicalBcvRate';
 import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
 import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 type Draft = Omit<SaleCorrectionNoteRequest, 'sourceSale' | 'priorCreditNotes' | 'closedThroughDate'> & { sourceSaleId: string };
 
@@ -24,23 +26,22 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [noteDate, setNoteDate] = useState(today);
-  const initialHistoricalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], today);
+  const initialHistoricalRate = resolveHistoricalBcvRate(currentCompany, today)?.rate;
   const [noteBcvRate, setNoteBcvRate] = useState(String(initialHistoricalRate ?? bcvRate ?? ''));
   const monetaryRule = getReglaMonetariaPorFecha(noteDate);
   const rateRequired = monetaryRule.requiresBcvRate;
-  useEffect(() => {
-    // Antes de 2018 la nota es solo en bolívares: no se sugiere ni conserva tasa BCV.
-    if (!getReglaMonetariaPorFecha(noteDate).allowsUsd) {
-      setNoteBcvRate('');
-      return;
-    }
-    const historicalRate = resolveBcvRateForDate(currentCompany.accountingBcvRateHistory || [], noteDate);
-    const sameDateSourceRate = noteDate === sourceSale.invoiceDate && Number(sourceSale.bcvRate) > 0
-      ? Number(sourceSale.bcvRate) : undefined;
-    const currentRateForToday = noteDate === today && Number(bcvRate) > 0 ? Number(bcvRate) : undefined;
-    const resolved = historicalRate ?? sameDateSourceRate ?? currentRateForToday;
-    setNoteBcvRate(resolved === undefined ? '' : String(resolved).replace('.', ','));
-  }, [currentCompany.accountingBcvRateHistory, noteDate, sourceSale.invoiceDate, sourceSale.bcvRate, bcvRate, today]);
+  const sameDateSourceRate = noteDate === sourceSale.invoiceDate && Number(sourceSale.bcvRate) > 0
+    ? Number(sourceSale.bcvRate) : undefined;
+  const currentRateForToday = noteDate === today && Number(bcvRate) > 0 ? Number(bcvRate) : undefined;
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: noteDate,
+    value: noteBcvRate,
+    onValueChange: setNoteBcvRate,
+    preserveManualEdit: false,
+    fallbackRate: sameDateSourceRate ?? currentRateForToday,
+    format: rate => String(rate).replace('.', ',')
+  });
   const [fiscalEmissionMedium, setFiscalEmissionMedium] = useState<'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | ''>(sourceSale.fiscalEmissionMedium || '');
   const [sameMediumAsOriginal, setSameMediumAsOriginal] = useState(sourceSale.sameMediumAsOriginal === true);
   const [noteNumber, setNoteNumber] = useState('');
@@ -128,9 +129,12 @@ export const SaleCorrectionNoteModal: React.FC<Props> = ({ sourceSale, kind, bcv
             <input required value={controlNumber} onChange={e=>setControlNumber(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
           </label>
           {monetaryRule.allowsUsd ? (
-            <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión *
-              <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
-            </label>
+            <>
+              <label className="text-xs font-semibold text-slate-700">Tasa BCV vigente en la fecha de emisión *
+                <input required type="text" inputMode="decimal" value={noteBcvRate} onChange={e=>setNoteBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5 text-sm font-normal" />
+              </label>
+              <HistoricalBcvRateNote date={noteDate} suggestion={suggestedBcvRate} appliedRate={parseAmount(noteBcvRate)} onApply={value => setNoteBcvRate(String(value).replace('.', ','))} className="sm:col-span-2" />
+            </>
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600 sm:col-span-2">
               Nota del {noteDate} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni montos en dólares.

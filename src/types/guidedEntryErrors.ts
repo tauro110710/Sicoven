@@ -45,7 +45,17 @@ export const classifyGuidedEntryError = (message: string): GuidedEntryError => {
     };
   }
 
-  // 2. Kardex: la entrada y la línea de la factura deben describir la misma
+  // 2. Venta con mercancía: cada salida de Kardex debe coincidir con su línea
+  // de factura y con el asiento de costo de ventas que la respalda.
+  if (has(text, /salidas de kardex|costo de ventas|l[ií]neas de mercanc[ií]a/i)) {
+    return {
+      field: 'inventory',
+      hint:
+        'Las líneas de mercancía no concilian con las salidas de Kardex y el asiento de Costo de Ventas. Verifica que cada artículo tenga existencia disponible, que la cantidad y el precio correspondan a la línea de la factura y que la fecha sea la de emisión. El costo unitario lo toma SICOVEN del Kardex: no se escribe en este formulario. Corrige la línea de inventario y vuelve a guardar.'
+    };
+  }
+
+  // 3. Kardex: la entrada y la línea de la factura deben describir la misma
   // operación. El costo anterior del artículo no es un requisito: cada compra
   // fija su propio costo y esas diferencias alimentan el costo promedio.
   if (has(text, /kardex/i)) {

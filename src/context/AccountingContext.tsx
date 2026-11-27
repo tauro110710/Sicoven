@@ -27,7 +27,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
-import { resolveInventoryBcvRate } from '../types/inventoryBcvRate';
+import { resolveHistoricalBcvRate } from '../utils/historicalBcvRate';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts, isJournalEntryBalanced, isJournalEntryCurrencyPolicySatisfied } from '../types/journalEntryValidation';
 import { matchesBankStatementDualCurrency, validateBankMovementFxSnapshot, isDuplicateBankStatementMovement } from '../types/bankStatementMatching';
@@ -82,6 +82,7 @@ import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmoun
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode, validatePurchasePaymentDate } from '../types/purchaseSettlement';
 import { validateSaleSettlementMode } from '../types/saleSettlement';
+import { isIgtfEligiblePaymentMethod, listPaymentCounterpartAccounts, paymentMethodLabel, salePaymentCurrencyForMethod } from '../types/paymentMethods';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
@@ -3323,7 +3324,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la compra.');
     }
     const settlementModeError = validatePurchaseSettlementMode(
-      purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference
+      purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference,
+      purchaseData.paymentMethod
     );
     if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
@@ -3346,13 +3348,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const purchaseNeedsRate = isBcvRateRequiredForDate(purchaseData.invoiceDate);
     let rate = Number(purchaseData.bcvRate);
     if (purchaseNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
-      const companyBcvHistory = targetCompany.inventoryBcvRateHistory;
-      if (companyBcvHistory && companyBcvHistory.length > 0) {
-        const resolved = resolveInventoryBcvRate(companyBcvHistory, purchaseData.invoiceDate);
-        if (resolved) {
-          rate = resolved.rate;
-        }
-      }
+      const resolved = resolveHistoricalBcvRate(targetCompany, purchaseData.invoiceDate);
+      if (resolved) rate = resolved.rate;
     }
     // La tasa BCV es obligatoria para medios de pago en divisas, no para operaciones
     // nominales en bolívares. Sin tasa, la equivalencia USD queda pendiente (0).
@@ -3443,12 +3440,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (igtfAmount > 0 && purchaseData.paymentTerm === 'CREDITO') {
       throw new Error('No se puede reconocer IGTF al registrar una compra totalmente a crédito. La obligación se evalúa cuando se debite la cuenta o se cancele la deuda.');
     }
-    const eligibleIgtfMethods = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'];
-    if (igtfAmount > 0 && (!purchaseData.igtfApplicable || !eligibleIgtfMethods.includes(purchaseData.paymentMethod || ''))) {
+    if (igtfAmount > 0 && (!purchaseData.igtfApplicable || !isIgtfEligiblePaymentMethod(purchaseData.paymentMethod))) {
       throw new Error('El IGTF requiere un medio de pago elegible y confirmación expresa.');
     }
     if (purchaseData.igtfApplicable) {
-      if (!eligibleIgtfMethods.includes(purchaseData.paymentMethod || '')) {
+      if (!isIgtfEligiblePaymentMethod(purchaseData.paymentMethod)) {
         throw new Error('El medio de pago seleccionado no corresponde a los medios configurados para IGTF.');
       }
       const expectedIgtf = calculateFiscalBreakdown({
@@ -4698,7 +4694,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (typeof window === 'undefined' || !window.sicovenStore?.save || !storageReady || persistenceFaultRef.current) {
       throw new Error('La edición de escritorio requiere SQLite local disponible y lista. No se registró la venta.');
     }
-    const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
+    const settlementModeError = validateSaleSettlementMode({
+      paymentTerm: saleData.paymentTerm,
+      paymentMethod: saleData.paymentMethod,
+      paymentAccountCode: saleData.paymentAccountCode,
+      paymentReference: saleData.paymentReference,
+      accounts: listPaymentCounterpartAccounts(accounts, bankAccounts, targetCompany.id)
+    });
     if (settlementModeError) throw new Error(settlementModeError);
     if (!targetCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     let rate = Number(saleData.bcvRate);
@@ -4707,13 +4709,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Si no hay historial, el usuario debe proporcionar la tasa manualmente.
     const saleNeedsRate = isBcvRateRequiredForDate(saleData.invoiceDate);
     if (saleNeedsRate && (!Number.isFinite(rate) || rate <= 0)) {
-      const companyBcvHistory = targetCompany.inventoryBcvRateHistory;
-      if (companyBcvHistory && companyBcvHistory.length > 0) {
-        const resolved = resolveInventoryBcvRate(companyBcvHistory, saleData.invoiceDate);
-        if (resolved) {
-          rate = resolved.rate;
-        }
-      }
+      const resolved = resolveHistoricalBcvRate(targetCompany, saleData.invoiceDate);
+      if (resolved) rate = resolved.rate;
     }
     // Desde 2018 las facturas de venta requieren tasa para mantener su snapshot dual.
     // Antes de 2018, la operación puede conservarse nominalmente en Bs. sin equivalencia ficticia.
@@ -4758,6 +4755,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La retención de IVA del cliente no puede superar el IVA causado.');
     }
     const saleIgtf = Number(saleData.igtfAmountBs || 0);
+    // La moneda del cobro se deriva del medio cuando el documento no la trae
+    // (importaciones y registros previos al catálogo compartido).
+    const salePaymentCurrency = saleData.paymentCurrency || salePaymentCurrencyForMethod(saleData.paymentMethod);
     if (saleIgtf > 0 && !saleData.igtfApplicable) {
       throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
     }
@@ -4768,7 +4768,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const eligibleSaleIgtf = effectiveIgtfAgentStatus === true &&
         saleData.paymentTerm === 'CONTADO' &&
-        (saleData.paymentCurrency === 'FOREIGN_CASH' || saleData.paymentCurrency === 'CRYPTO');
+        (salePaymentCurrency === 'FOREIGN_CASH' || salePaymentCurrency === 'CRYPTO');
       if (!eligibleSaleIgtf) {
         throw new Error('El IGTF en ventas requiere que la empresa estuviera designada como agente de percepción en la fecha de la factura y que el cobro sea de contado en un medio elegible.');
       }
@@ -4837,16 +4837,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
-    // Debe: Cuentas por Cobrar Clientes (Total - Retención)
-    const receivableBs = saleData.totalAmountBs - (saleData.vatWithheldBs || 0);
+    // Debe: contado -> Caja/Banco que recibió el cobro; crédito -> CxC.
+    // El importe cobrado excluye la retención de IVA que el cliente descuenta
+    // y que se reconoce por separado en 1.1.3.03.
+    const collectedBs = saleData.totalAmountBs - (saleData.vatWithheldBs || 0);
+    const cashSaleAccount = saleData.paymentTerm === 'CONTADO'
+      ? accounts.find(account => account.code === saleData.paymentAccountCode && account.isMovement)
+      : undefined;
+    if (saleData.paymentTerm === 'CONTADO' && !cashSaleAccount) {
+      throw new Error('La cuenta contable de Caja o Banco del cobro de contado ya no está disponible en el Plan de Cuentas.');
+    }
     items.push({
-      accountCode: '1.1.2.01',
-      accountName: 'Cuentas por Cobrar Clientes Comerciales',
-      debitBs: receivableBs,
+      accountCode: saleData.paymentTerm === 'CONTADO' ? cashSaleAccount!.code : '1.1.2.01',
+      accountName: saleData.paymentTerm === 'CONTADO' ? cashSaleAccount!.name : 'Cuentas por Cobrar Clientes Comerciales',
+      debitBs: collectedBs,
       creditBs: 0,
-      debitUsd: toUsd(receivableBs),
+      debitUsd: toUsd(collectedBs),
       creditUsd: 0,
-      description: `Por cobrar Fac. Venta ${saleData.invoiceNumber}`
+      description: saleData.paymentTerm === 'CONTADO'
+        ? `Cobro ${paymentMethodLabel(saleData.paymentMethod)} Fac. Venta ${saleData.invoiceNumber}` +
+          (saleData.paymentReference ? ` · Ref. ${saleData.paymentReference}` : '')
+        : `Por cobrar Fac. Venta ${saleData.invoiceNumber}`
     });
 
     // Haber: IGTF percibido por cuenta del Fisco, cuando la venta lo incluye.
@@ -4936,6 +4947,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalSale: SaleRecord = {
       ...saleData,
+      paymentCurrency: salePaymentCurrency,
       bcvRate: rate,
       totalAmountUsd: toUsd(saleData.totalAmountBs),
       taxableBaseUsd: toUsd(saleData.taxableBaseBs),
@@ -4953,12 +4965,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     let saleAutoMovementsForCommit: InventoryMovement[] = [];
     let saleProductStateForCommit = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
-    let saleCogsEntry: JournalEntry | null = null;
+    const saleCogsEntries: JournalEntry[] = [];
     // Generar salidas automáticas de Kardex + asiento de Costo de Ventas
     // cuando la venta incluye líneas de inventario detalladas.
     const hasSaleInventoryLines = Array.isArray(saleData.inventoryLines) && saleData.inventoryLines!.length > 0;
     if (hasSaleInventoryLines) {
-      const cogsItems: JournalEntryItem[] = [];
       const saleProductCostScaleMap = new Map<string, string>();
       saleProductStateForCommit = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
       saleAutoMovementsForCommit = [];
@@ -5037,6 +5048,44 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
+        // Cada línea genera su propio asiento de costo de ventas de dos cuentas.
+        // El movimiento de Kardex queda vinculado a ese asiento INVENTARIO, que es
+        // el que SQLite reconcilia con la línea de la factura.
+        if (totalCostBs > 0) {
+          const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
+          const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
+          if (!cogsAccount || !inventoryAccount) {
+            throw new Error('Faltan cuentas válidas de Costo de Ventas o Inventario para ' + product.name + '. La venta no se registró.');
+          }
+          const lineCogsItems = buildCostOfSalesLines({
+            productCode: product.code, quantity: qty, invoiceNumber: saleData.invoiceNumber,
+            costOfSalesAccount: cogsAccount, inventoryAccount,
+            totalCostBs, totalCostUsd
+          });
+          if (lineCogsItems.length > 0) {
+            const lineDebitBs = lineCogsItems.reduce((s, i) => s + i.debitBs, 0);
+            const lineCreditBs = lineCogsItems.reduce((s, i) => s + i.creditBs, 0);
+            const lineDebitUsd = lineCogsItems.reduce((s, i) => s + i.debitUsd, 0);
+            const lineCreditUsd = lineCogsItems.reduce((s, i) => s + i.creditUsd, 0);
+            if (!isJournalEntryBalanced({ debitBs: lineDebitBs, creditBs: lineCreditBs, debitUsd: lineDebitUsd, creditUsd: lineCreditUsd })) {
+              throw new Error('El asiento de Costo de Ventas no cuadra en Bs. y USD; la venta no se registró.');
+            }
+            const lineCogsEntry: JournalEntry = {
+              id: `entry-cogs-${saleId}-${product.id}`,
+              companyId: targetCompany.id,
+              entryNumber: nextEntryNum + 1 + saleCogsEntries.length,
+              date: saleData.invoiceDate,
+              description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${product.code}`,
+              type: 'INVENTARIO',
+              bcvRate: rate,
+              referenceDoc: `FAC-${saleData.invoiceNumber}`,
+              items: lineCogsItems,
+              createdAt: new Date().toISOString()
+            };
+            saleCogsEntries.push(lineCogsEntry);
+            saleAutoMov.journalEntryId = lineCogsEntry.id;
+          }
+        }
         saleAutoMovementsForCommit.push(saleAutoMov);
         saleProductStateForCommit.set(product.id, {
           currentStock: newStock,
@@ -5044,41 +5093,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           avgCostUsd: newAverageUsd
         });
         saleProductCostScaleMap.set(product.id, saleData.invoiceDate);
-        // Acumular costo de ventas para el asiento.
-        if (totalCostBs > 0) {
-          const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
-          const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
-          if (!cogsAccount || !inventoryAccount) {
-            throw new Error('Faltan cuentas válidas de Costo de Ventas o Inventario para ' + product.name + '. La venta no se registró.');
-          }
-          cogsItems.push(...buildCostOfSalesLines({
-            productCode: product.code, quantity: qty, invoiceNumber: saleData.invoiceNumber,
-            costOfSalesAccount: cogsAccount, inventoryAccount,
-            totalCostBs, totalCostUsd
-          }));
-        }
-      }
-      // Preparar el asiento de costo de ventas sin publicar estado ni consumir correlativos.
-      if (cogsItems.length > 0) {
-        const cogsDebitBs = cogsItems.reduce((s, i) => s + i.debitBs, 0);
-        const cogsCreditBs = cogsItems.reduce((s, i) => s + i.creditBs, 0);
-        const cogsDebitUsd = cogsItems.reduce((s, i) => s + i.debitUsd, 0);
-        const cogsCreditUsd = cogsItems.reduce((s, i) => s + i.creditUsd, 0);
-        if (!isJournalEntryBalanced({ debitBs: cogsDebitBs, creditBs: cogsCreditBs, debitUsd: cogsDebitUsd, creditUsd: cogsCreditUsd })) {
-          throw new Error('El asiento de Costo de Ventas no cuadra en Bs. y USD; la venta no se registró.');
-        }
-        saleCogsEntry = {
-          id: `entry-cogs-${saleId}`,
-          companyId: targetCompany.id,
-          entryNumber: nextEntryNum + 1,
-          date: saleData.invoiceDate,
-          description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${saleData.customerName}`,
-          type: 'INVENTARIO',
-          bcvRate: rate,
-          referenceDoc: `FAC-${saleData.invoiceNumber}`,
-          items: cogsItems,
-          createdAt: new Date().toISOString()
-        };
       }
     }
 
@@ -5086,10 +5100,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // ya finalizaron. La persistencia del snapshot se confirma en una transacción SQLite.
     reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
     saleSequenceRef.current[companyKey] = nextOp;
-    journalSequenceRef.current[companyKey] = saleCogsEntry?.entryNumber || nextEntryNum;
-    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
-    if (saleCogsEntry) activeImportBatchRef.current?.journalEntries.push(saleCogsEntry);
-    setJournalEntries(prev => [...prev, createdJournalEntry, ...(saleCogsEntry ? [saleCogsEntry] : [])]);
+    journalSequenceRef.current[companyKey] = saleCogsEntries.length > 0
+      ? saleCogsEntries[saleCogsEntries.length - 1].entryNumber
+      : nextEntryNum;
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry, ...saleCogsEntries);
+    setJournalEntries(prev => [...prev, createdJournalEntry, ...saleCogsEntries]);
     activeImportBatchRef.current?.sales.push(finalSale);
     setSales(prev => [...prev, finalSale]);
     if (saleAutoMovementsForCommit.length > 0) {

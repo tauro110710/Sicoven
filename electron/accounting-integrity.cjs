@@ -1697,7 +1697,7 @@ function validateVatOwnDeclarationLedger(previousState, nextState) {
   }
 }
 
-function saleJournalMatchesInvoice(sale, entry, company) {
+function saleJournalMatchesInvoice(sale, entry, company, accounts = []) {
   if (!sale || !entry || entry.type !== 'VENTA' || entry.companyId !== sale.companyId ||
       entry.date !== sale.invoiceDate ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
@@ -1742,8 +1742,18 @@ function saleJournalMatchesInvoice(sale, entry, company) {
       Math.abs(Number(sale.igtfAmountUsd || 0) - igtf / rate) > 0.0001 ||
       Math.abs(Number(entry.bcvRate) - rate) > 0.000001) return false;
 
+  // Contado: el débito va a la caja o banco que recibió el dinero. Crédito: CxC.
+  const cashSale = sale.paymentTerm === 'CONTADO';
+  const collectionAccountCode = cashSale ? String(sale.paymentAccountCode || '').trim() : '1.1.2.01';
+  if (cashSale) {
+    const collectionAccount = asArray(accounts).find(account => String(account.code) === collectionAccountCode);
+    const isTreasury = collectionAccount && collectionAccount.type === 'ACTIVO' &&
+      collectionAccount.isMovement === true && /^1\.1\.1(?:\.|$)/.test(collectionAccountCode);
+    if (!isTreasury) return false;
+  }
+
   const expected = new Map([
-    ['1.1.2.01', { debitBs: total - withheld, creditBs: 0, debitUsd: (total - withheld) / rate, creditUsd: 0 }],
+    [collectionAccountCode, { debitBs: total - withheld, creditBs: 0, debitUsd: (total - withheld) / rate, creditUsd: 0 }],
     ['1.1.3.03', { debitBs: withheld, creditBs: 0, debitUsd: withheld / rate, creditUsd: 0 }],
     ['2.1.2.06', { debitBs: 0, creditBs: igtf, debitUsd: 0, creditUsd: igtf / rate }],
     ['4.1.1.01', { debitBs: 0, creditBs: taxableBase + exempt, debitUsd: 0, creditUsd: (taxableBase + exempt) / rate }],
@@ -2742,8 +2752,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
       if (collectionName === 'sales' && !oldDocument && !saleJournalMatchesInvoice(document, linkedEntry,
-            asArray(nextState.companies).find(company => String(company.id) === String(document.companyId)))) {
-        throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, CxC, retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
+            asArray(nextState.companies).find(company => String(company.id) === String(document.companyId)),
+            nextState.accounts)) {
+        throw new Error('SQLite rechazó la venta: el asiento no concilia fecha, tasa BCV, cuenta de cobro (Caja/Banco o CxC), retención recibida, IGTF, ingresos e IVA en Bs. y USD con la factura.');
       }
       if (collectionName === 'sales' && !oldDocument &&
           Array.isArray(document.inventoryLines) && document.inventoryLines.length > 0 &&

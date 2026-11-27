@@ -1,3 +1,5 @@
+import { validatePaymentMethodSelection } from './paymentMethods';
+
 /**
  * Cash purchases post directly to a selected movement account classified as
  * cash/bank. No POS, cash drawer or shift integration is involved.
@@ -11,16 +13,26 @@ export function isPurchasePaymentAccount(account?: PurchasePaymentAccount | null
   return /\b(CAJA|BANCO|BANCOS|EFECTIVO|EQUIVALENTES DE EFECTIVO)\b/.test(name) ||
     /^1\.1\.1(?:\.|$)/.test(String(account.code || ''));
 }
+/**
+ * Regla única del contado en compras: contrapartida de Caja/Banco y soporte
+ * del desembolso. La usan tanto el formulario como `addPurchase` para que el
+ * mensaje guiado y la validación de dominio nunca diverjan.
+ */
 export function validatePurchaseSettlementMode(
   paymentTerm?: 'CONTADO' | 'CREDITO', paymentAccountCode?: string,
-  accounts: PurchasePaymentAccount[] = [], paymentReference?: string
+  accounts: PurchasePaymentAccount[] = [], paymentReference?: string,
+  paymentMethod?: string
 ): string | null {
   if (paymentTerm !== 'CONTADO') return null;
-  if (!isPurchasePaymentAccount(accounts.find(account => account.code === paymentAccountCode))) {
-    return 'Para una compra de contado, selecciona una cuenta de movimiento de Caja o Banco del Plan de Cuentas.';
-  }
-  if (!String(paymentReference || '').trim()) return 'Indica el número de comprobante, referencia bancaria o soporte del desembolso de contado.';
-  return null;
+  return validatePaymentMethodSelection({
+    method: paymentMethod,
+    accountCode: paymentAccountCode,
+    reference: paymentReference,
+    accounts,
+    movementLabel: 'pago',
+    // El soporte del egreso es obligatorio incluso si se pagó en efectivo.
+    requireReference: true
+  });
 }
 
 /** A supplier payable cannot be settled before the date on which it is recognized. */

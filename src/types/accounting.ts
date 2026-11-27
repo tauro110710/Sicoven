@@ -1,4 +1,5 @@
 import type { ConsumedFifoLayer } from './inventoryAccounting';
+import type { StoredPaymentMethodCode } from './paymentMethods';
 
 export type TaxpayerType = 'ESPECIAL' | 'ORDINARIO';
 export type AccountingFramework = 'VEN_NIF_GE' | 'VEN_NIF_PYME';
@@ -488,8 +489,8 @@ export interface PurchaseRecord {
   paymentAccountCode?: string;
   /** Referencia del comprobante/soporte del desembolso de contado. */
   paymentReference?: string;
-  /** Medio declarado de pago; se conserva para auditoría de IGTF. */
-  paymentMethod?: 'BS' | 'FOREIGN_CASH' | 'ZELLE' | 'INTERNATIONAL_TRANSFER' | 'CRYPTO';
+  /** Medio declarado de pago (catálogo compartido); se conserva para auditoría de IGTF. */
+  paymentMethod?: StoredPaymentMethodCode;
   igtfApplicable?: boolean;
   igtfRate?: number;
   igtfAmountBs?: number;
@@ -563,6 +564,14 @@ export interface SaleRecord {
   igtfAmountBs?: number;
   igtfAmountUsd?: number;
   paymentCurrency?: 'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO';
+  /** Medio declarado de cobro (catálogo compartido); se conserva para auditoría de IGTF. */
+  paymentMethod?: StoredPaymentMethodCode;
+  /** Cuenta contable de origen utilizada en ventas pagadas al contado. */
+  bankAccountId?: string;
+  /** Referencia del comprobante/soporte del desembolso de contado. */
+  paymentAccountCode?: string;
+  /** Referencia del comprobante/soporte del desembolso de contado. */
+  paymentReference?: string;
   bcvRate: number;
   totalAmountUsd: number;
   taxableBaseUsd: number;

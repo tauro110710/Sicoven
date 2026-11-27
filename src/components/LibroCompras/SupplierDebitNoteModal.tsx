@@ -6,6 +6,8 @@ import type { SupplierDebitNoteEconomicCause } from '../../types/supplierDebitNo
 import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
 import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 interface Props {
   purchase: PurchaseRecord;
@@ -41,6 +43,12 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
   const [vatAmount, setVatAmount] = useState('');
   const [taxRate, setTaxRate] = useState('');
   const [bcvRate, setBcvRate] = useState('');
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date: recognitionDate,
+    value: bcvRate,
+    onValueChange: setBcvRate
+  });
   const [fiscalBreakdownReviewed, setFiscalBreakdownReviewed] = useState(false);
   const [withholdingNotApplicableConfirmed, setWithholdingNotApplicableConfirmed] = useState(false);
   const [igtfNotApplicableConfirmed, setIgtfNotApplicableConfirmed] = useState(false);
@@ -175,6 +183,7 @@ export const SupplierDebitNoteModal: React.FC<Props> = ({ purchase, onClose }) =
             <label className="text-xs font-semibold text-slate-700">Fecha de reconocimiento / abono<input required type="date" value={recognitionDate} onChange={e=>setRecognitionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
             {usdEnabled ? <label className="text-xs font-semibold text-slate-700">Tasa BCV de la ND *<input required type="text" inputMode="decimal" value={bcvRate} onChange={e=>setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label> : <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Moneda de la ND</span><span className="block text-xs font-bold text-slate-800">{monetaryRule.currencyLabel} · sin tasa BCV ni USD antes de 2018</span></div>}
           </div>
+          {usdEnabled && <HistoricalBcvRateNote date={recognitionDate} suggestion={suggestedBcvRate} appliedRate={parsedBcvRate} onApply={value => setBcvRate(String(value))} />}
             <label className="text-xs font-semibold text-slate-700">Medio de emisión de la factura original
           <select required value={fiscalEmissionMedium} onChange={event => setFiscalEmissionMedium(event.target.value as 'DIGITAL' | 'FISCAL_MACHINE' | 'CONTINGENCY' | '')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal">
             <option value="">Seleccione…</option><option value="DIGITAL">Digital / electrónico</option><option value="FISCAL_MACHINE">Máquina fiscal</option><option value="CONTINGENCY">Contingencia autorizada</option>

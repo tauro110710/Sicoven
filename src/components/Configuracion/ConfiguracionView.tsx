@@ -28,6 +28,8 @@ import { buildClosingEntryItems } from '../../types/accountingYearClosing';
 import { CompanyModal } from '../CompanyModal';
 import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { requestNonBlockingConfirm } from '../../utils/safeAlert';
+import { resolveHistoricalBcvRate } from '../../utils/historicalBcvRate';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
 import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 import { TaxStatusHistoryPanel } from './TaxStatusHistoryPanel';
 import { ReconversionPanel } from './ReconversionPanel';
@@ -62,6 +64,7 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
   const [showUniversalMigrationWizard, setShowUniversalMigrationWizard] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [companySaveBusy, setCompanySaveBusy] = useState(false);
+  const [companySaveMessage, setCompanySaveMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const companySaveInFlightRef = React.useRef(false);
   const [showCompanyAudit, setShowCompanyAudit] = useState(false);
   const [companyAuditEvents, setCompanyAuditEvents] = useState<Array<{ id: number; eventType: string; details: Record<string, unknown>; createdAt: string }>>([]);
@@ -451,6 +454,11 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
     if (companySaveInFlightRef.current) return;
     companySaveInFlightRef.current = true;
     setCompanySaveBusy(true);
+    setCompanySaveMessage(null);
+    // La confirmación se suscribe antes de mutar el estado: el guardado siempre
+    // recibe la respuesta de SQLite y el botón vuelve a su estado normal.
+    const persistenceConfirmation = waitForPersistence();
+    void persistenceConfirmation.catch(() => undefined);
     try {
       await updateCompany({
         ...currentCompany,
@@ -473,11 +481,15 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
         inventoryPricingDefaults,
         fiscalYear: Number(fiscalYear),
       });
-      await waitForPersistence();
+      await persistenceConfirmation;
       setSaveSuccess(true);
+      setCompanySaveMessage({ tone: 'success', text: 'Datos y parámetros guardados correctamente en SQLite.' });
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'SQLite no confirmó los parámetros de la empresa.');
+      setCompanySaveMessage({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'SQLite no confirmó los parámetros de la empresa.'
+      });
     } finally {
       companySaveInFlightRef.current = false;
       setCompanySaveBusy(false);
@@ -1035,7 +1047,16 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
             <p className="text-[10px] text-slate-600">Las dos tasas de brecha deben expresarse en la misma divisa. Esta protección solo determina el precio comercial; no modifica la tasa BCV histórica ni la tasa fiscal de las operaciones.</p>
           </div>
 
-          <div className="flex justify-end pt-3 border-t border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
+            <div role="status" aria-live="polite" className="min-w-0 text-xs">
+              {companySaveMessage && (
+                <span className={companySaveMessage.tone === 'success'
+                  ? 'font-semibold text-emerald-700'
+                  : 'font-semibold text-rose-700'}>
+                  {companySaveMessage.text}
+                </span>
+              )}
+            </div>
             <button
               type="submit"
               disabled={companySaveBusy}
@@ -1192,10 +1213,12 @@ export const ConfiguracionView: React.FC<{ token: string }> = ({ token }) => {
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV al cierre (Bs./USD) *</label>
             <input type="text" inputMode="decimal" value={closingBcvRateInput} onChange={e => { setClosingBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <HistoricalBcvRateNote date={openingPeriodEnd} suggestion={resolveHistoricalBcvRate(currentCompany, openingPeriodEnd)} appliedRate={parseExchangeabilityNumber(closingBcvRateInput)} onApply={value => { setClosingBcvRateInput(String(value)); setOpeningError(null); }} className="mt-1" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Tasa BCV a la apertura (Bs./USD) *</label>
             <input type="text" inputMode="decimal" value={openingBcvRateInput} onChange={e => { setOpeningBcvRateInput(e.target.value); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} placeholder="Ej.: 889,67" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <HistoricalBcvRateNote date={openingDate} suggestion={resolveHistoricalBcvRate(currentCompany, openingDate)} appliedRate={parseExchangeabilityNumber(openingBcvRateInput)} onApply={value => { setOpeningBcvRateInput(String(value)); setOpeningError(null); }} className="mt-1" />
           </div>
           <div className="xl:col-span-2">
             <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para trasladar utilidad o pérdida</label>

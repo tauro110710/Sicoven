@@ -1,7 +1,30 @@
-/** Evita reconocer como cuenta por cobrar una venta que ya fue cobrada sin identificar la tesorería receptora. */
-export function validateSaleSettlementMode(paymentTerm?: 'CONTADO' | 'CREDITO'): string | null {
-  if (paymentTerm === 'CONTADO') {
-    return 'Venta de contado temporalmente bloqueada: el asiento actual aún no identifica de forma fiable la cuenta de caja/banco que recibió el pago. No se registró la venta como CxC ficticia. Complete primero la conciliación del medio de cobro.';
-  }
-  return null;
+import {
+  validatePaymentMethodSelection,
+  type PaymentCounterpartAccount
+} from './paymentMethods';
+
+export interface SaleSettlementInput {
+  paymentTerm?: 'CONTADO' | 'CREDITO';
+  /** Medio de cobro del catálogo compartido. */
+  paymentMethod?: string;
+  /** Cuenta de Caja/Banco que recibió el dinero. */
+  paymentAccountCode?: string;
+  /** Referencia del comprobante de cobro. */
+  paymentReference?: string;
+  accounts?: PaymentCounterpartAccount[];
+}
+
+/**
+ * Una venta de contado debe identificar el medio de cobro y la cuenta real de
+ * Caja/Banco que recibió el dinero; nunca se registra como CxC ficticia.
+ */
+export function validateSaleSettlementMode(input: SaleSettlementInput): string | null {
+  if (input.paymentTerm !== 'CONTADO') return null;
+  return validatePaymentMethodSelection({
+    method: input.paymentMethod,
+    accountCode: input.paymentAccountCode,
+    reference: input.paymentReference,
+    accounts: input.accounts || [],
+    movementLabel: 'cobro'
+  });
 }

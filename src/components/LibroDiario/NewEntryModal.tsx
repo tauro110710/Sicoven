@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { getReglaMonetariaPorFecha } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 
 interface NewEntryModalProps {
   isOpen: boolean;
@@ -50,11 +52,15 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
     if (!raw) return 0;
     return Number(raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw);
   })();
-  // Antes de 2018 la operación es exclusivamente en bolívares: no se admite tasa BCV
-  // ni equivalentes USD, aunque exista una tasa histórica registrada.
-  useEffect(() => {
-    if (!usdEnabled) setBcvRate('');
-  }, [usdEnabled]);
+  // Tasa histórica del asiento: se autocompleta según la fecha contable y solo
+  // desde 2018. Antes de esa fecha no se admite tasa BCV ni equivalentes USD.
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date,
+    value: bcvRate,
+    onValueChange: setBcvRate,
+    enabled: usdEnabled
+  });
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const parseAmount = (raw: string) => {
     const value = raw.trim();
@@ -476,6 +482,13 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({ isOpen, onClose })
                     value={bcvRate}
                     onChange={e => setBcvRate(e.target.value)}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                  />
+                  <HistoricalBcvRateNote
+                    date={date}
+                    suggestion={suggestedBcvRate}
+                    appliedRate={parsedBcvRate}
+                    onApply={rate => setBcvRate(String(rate))}
+                    className="mt-1"
                   />
                 </>
               ) : (

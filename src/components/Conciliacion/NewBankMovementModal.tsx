@@ -3,8 +3,9 @@ import { useAccounting } from '../../context/AccountingContext';
 import { BankAccount, BankMovementType } from '../../types/accounting';
 import { Landmark, X, Check } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
-import { resolveBcvRateForDate } from '../../utils/resolveBcvRateForDate';
 import { getReglaMonetariaPorFecha, formatUsdForDate } from '../../utils/monetaryPolicy';
+import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
+import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 import { todayLocalIso } from '../../utils/localDate';
 
 interface NewBankMovementModalProps {
@@ -43,24 +44,16 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   // La tasa sugerida debe corresponder siempre a la fecha del movimiento,
   // tanto para cuentas Bs como USD (la equivalencia USD también se calcula en cuentas Bs).
+  const suggestedBcvRate = useHistoricalBcvRate({
+    company: currentCompany,
+    date,
+    value: movementBcvRate,
+    onValueChange: setMovementBcvRate,
+    preserveManualEdit: false
+  });
   React.useEffect(() => {
-    // Antes de 2018 no se registra tasa BCV ni equivalencia USD.
-    if (!getReglaMonetariaPorFecha(date).allowsUsd) {
-      setMovementBcvRate('');
-      setBcvRateEffectiveDate('');
-      return;
-    }
-    const history = currentCompany.accountingBcvRateHistory || [];
-    let best;
-    for (const entry of history) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.effectiveDate) || entry.effectiveDate > date) continue;
-      const rate = Number(entry.rate);
-      if (!Number.isFinite(rate) || rate <= 0) continue;
-      if (!best || entry.effectiveDate >= best.effectiveDate) best = entry;
-    }
-    setMovementBcvRate(best ? String(best.rate) : '');
-    setBcvRateEffectiveDate(best ? best.effectiveDate : '');
-  }, [date, currentCompany.id, currentCompany.accountingBcvRateHistory]);
+    setBcvRateEffectiveDate(suggestedBcvRate?.effectiveDate ?? '');
+  }, [suggestedBcvRate]);
 
   if (!isOpen) return null;
 
@@ -169,7 +162,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             </div>
           </div>
 
-          {usdEnabled ? (
+          {usdEnabled ? (<>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Fecha de vigencia BCV {rateRequired ? '*' : ''}</label>
@@ -184,7 +177,8 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
               </div>
             </div>
-          ) : (
+            <HistoricalBcvRateNote date={date} suggestion={suggestedBcvRate} appliedRate={bcvRate} onApply={value => { setMovementBcvRate(String(value)); if (suggestedBcvRate) setBcvRateEffectiveDate(suggestedBcvRate.effectiveDate); }} />
+          </>) : (
             <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
               Movimiento del {date} en <strong>{monetaryRule.currencyLabel}</strong> ({monetaryRule.eraLabel}). Antes del 01/01/2018 no se registra tasa BCV ni importes en dólares.
             </p>
