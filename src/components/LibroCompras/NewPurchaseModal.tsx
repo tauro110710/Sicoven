@@ -417,7 +417,40 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       await waitForPersistence();
       onClose();
     } catch (error) {
-      showGuidedError(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
+      const message = error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.';
+      let field = 'document';
+
+      if (/SQLite rechazó la compra/i.test(message) ||
+          /no reconoce en Bs\. y USD/i.test(message) ||
+          /integridad|no concilia con la factura|no concilia con el asiento/i.test(message)) {
+        showGuidedError(
+          'El asiento no concilia con la factura. Corrija en la compra: número de factura, número de control, RIF, fecha, tasa BCV, cantidad/precio de las 100 unidades y montos de costo/IVA/IGTF/retenciones/CxP en Bs. y USD. Revisa esos importes antes de volver a guardar.'
+        );
+        return;
+      }
+      if (/n[uú]mero de factura/i.test(message)) field = 'document';
+      else if (/n[uú]mero de control/i.test(message)) field = 'document';
+      else if (/rif/i.test(message)) field = 'document';
+      else if (/proveedor|proveedor/i.test(message)) field = 'document';
+      else if (/fecha/i.test(message)) field = 'document';
+      else if (/tasa bcv/i.test(message) || /bcv/i.test(message)) field = 'bcvRate';
+      else if (/base imponible|importe|monto|iva|igtf|retencion/i.test(message)) field = 'amounts';
+      else if (/cantidad|costo|precio|unidad/i.test(message)) field = 'inventory';
+      else if (/cuenta de movimiento|caja|banco|paymentAccount|cuenta contable/i.test(message)) field = 'accounts';
+      else if (/sq|sqlite|persistencia|base de datos|no se pudo guardar|error al guardar/i.test(message)) field = 'storage';
+      else field = 'unknown';
+
+      const fieldLabels: Record<string, string> = {
+        document: 'Completa o corrige en la compra: número de factura, número de control, RIF y fecha.',
+        bcvRate: 'Corrija la tasa BCV de la fecha de la compra (05/01/2026) y vuelva a guardar. No se inventa una tasa de respaldo.',
+        amounts: 'Revise los importes de la factura: base imponible, IVA, IGTF, retenciones y saldo de proveedor en Bs. y USD.',
+        inventory: 'Revise las 100 unidades a Bs. 1200: cantidad, precio unitario, costo y fecha, y concíliguelos con la base imponible y el total.',
+        accounts: 'Selecciona una cuenta de movimiento de Caja o Banco para el pago al contado y el comprobante de pago.',
+        storage: 'La base local de SQLite no está lista. Espere a que se abra la base de datos local y vuelva a guardar sin salir de este formulario.',
+        unknown: 'Revise los datos señalados y vuelva a guardar. El formulario conserva lo que ya cargó.'
+      };
+
+      showGuidedError(fieldLabels[field]);
     } finally {
       savingRef.current = false;
       setSaving(false);
