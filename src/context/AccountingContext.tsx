@@ -4785,7 +4785,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const companySales = sales.filter(s => s.companyId === targetCompany.id);
     const companyKey = targetCompany.id;
     const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
-    saleSequenceRef.current[companyKey] = nextOp;
     const saleId = `sale-${companyKey}-${nextOp}-${Date.now()}`;
     // Asiento contable
     const items: JournalEntryItem[] = [];
@@ -4885,7 +4884,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const companyEntries = journalEntries.filter(e => e.companyId === targetCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
-    journalSequenceRef.current[companyKey] = nextEntryNum;
 
     const createdJournalEntry: JournalEntry = {
       id: `entry-sale-${companyKey}-${nextEntryNum}-${Date.now()}`,
@@ -4900,9 +4898,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
 
-    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
-    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
-    setJournalEntries(prev => [...prev, createdJournalEntry]);
 
     const finalSale: SaleRecord = {
       ...saleData,
@@ -4920,17 +4915,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       journalEntryId: createdJournalEntry.id
     };
 
-    activeImportBatchRef.current?.sales.push(finalSale);
-    setSales(prev => [...prev, finalSale]);
 
+    let saleAutoMovementsForCommit: InventoryMovement[] = [];
+    let saleProductStateForCommit = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
     // Generar salidas automáticas de Kardex + asiento de Costo de Ventas
     // cuando la venta incluye líneas de inventario detalladas.
     const hasSaleInventoryLines = Array.isArray(saleData.inventoryLines) && saleData.inventoryLines!.length > 0;
     if (hasSaleInventoryLines) {
-      const saleAutoMovements: InventoryMovement[] = [];
       const cogsItems: JournalEntryItem[] = [];
-      const saleProductStateMap = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
       const saleProductCostScaleMap = new Map<string, string>();
+      saleProductStateForCommit = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+      saleAutoMovementsForCommit = [];
       // Consolidar líneas repetidas por producto para que PEPS consuma el stock virtual secuencialmente.
       const consolidatedSaleInventoryLines = Array.from(saleData.inventoryLines!.reduce((map, line) => {
         const productId = String(line.productId || '').trim();
@@ -4941,8 +4936,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       // Inicializar estado actual de cada producto.
       for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
-        if (product && !saleProductStateMap.has(product.id)) {
-          saleProductStateMap.set(product.id, {
+        if (product && !saleProductStateForCommit.has(product.id)) {
+          saleProductStateForCommit.set(product.id, {
             currentStock: product.currentStock,
             avgCostBs: product.avgCostBs,
             avgCostUsd: product.avgCostUsd || toUsd(product.avgCostBs)
@@ -4952,7 +4947,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       for (const line of consolidatedSaleInventoryLines) {
         const product = products.find(p => p.id === line.productId && p.companyId === targetCompany.id);
         if (!product) continue;
-        const pState = saleProductStateMap.get(product.id)!;
+        const pState = saleProductStateForCommit.get(product.id)!;
         const qty = Number(line.quantity);
         if (qty <= 0 || pState.currentStock <= 0) continue;
         let totalCostBs = 0;
@@ -5006,17 +5001,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
-        saleAutoMovements.push(saleAutoMov);
-        saleProductStateMap.set(product.id, {
+        saleAutoMovementsForCommit.push(saleAutoMov);
+        saleProductStateForCommit.set(product.id, {
           currentStock: newStock,
           avgCostBs: newAverageBs,
           avgCostUsd: newAverageUsd
         });
         saleProductCostScaleMap.set(product.id, saleData.invoiceDate);
         // Acumular costo de ventas para el asiento.
-        const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
-        const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
-        if (cogsAccount && inventoryAccount) {
+        if (totalCostBs > 0) {
+          const cogsAccount = accounts.find(a => a.code === (product.costOfSalesAccountCode || '5.1.1.01') && a.isMovement);
+          const inventoryAccount = accounts.find(a => a.code === (product.inventoryAccountCode || '1.1.4.01') && a.isMovement);
+          if (!cogsAccount || !inventoryAccount) {
+            throw new Error('Faltan cuentas válidas de Costo de Ventas o Inventario para ' + product.name + '. La venta no se registró.');
+          }
           cogsItems.push(...buildCostOfSalesLines({
             productCode: product.code, quantity: qty, invoiceNumber: saleData.invoiceNumber,
             costOfSalesAccount: cogsAccount, inventoryAccount,
@@ -5024,43 +5022,51 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           }));
         }
       }
-      if (saleAutoMovements.length > 0) {
-        setMovements(prev => [...prev, ...saleAutoMovements]);
-        setProducts(prev => prev.map(p => {
-          const updated = saleProductStateMap.get(p.id);
-          if (!updated || p.companyId !== targetCompany.id) return p;
-          return { ...p, currentStock: updated.currentStock, avgCostBs: updated.avgCostBs, avgCostUsd: updated.avgCostUsd };
-        }));
-        saleAutoMovements.forEach(m => activeImportBatchRef.current?.inventoryMovements?.push(m));
+      if (saleAutoMovementsForCommit.length > 0) {
       }
-      // Asiento de Costo de Ventas separado (tipo INVENTARIO, vinculado a la venta).
+      // Preparar el asiento de costo de ventas sin publicar estado ni consumir correlativos.
       if (cogsItems.length > 0) {
         const cogsDebitBs = cogsItems.reduce((s, i) => s + i.debitBs, 0);
         const cogsCreditBs = cogsItems.reduce((s, i) => s + i.creditBs, 0);
-        if (Math.abs(cogsDebitBs - cogsCreditBs) < 0.02) {
-          const cogsEntryNum = Math.max(
-            journalEntries.filter(e => e.companyId === targetCompany.id).reduce((max, e) => Math.max(max, e.entryNumber || 0), 0),
-            journalSequenceRef.current[companyKey] || 0
-          ) + 1;
-          journalSequenceRef.current[companyKey] = cogsEntryNum;
-          const cogsEntry: JournalEntry = {
-            id: `entry-cogs-${saleId}`,
-            companyId: targetCompany.id,
-            entryNumber: cogsEntryNum,
-            date: saleData.invoiceDate,
-            description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${saleData.customerName}`,
-            type: 'INVENTARIO',
-            bcvRate: rate,
-            referenceDoc: `FAC-${saleData.invoiceNumber}`,
-            items: cogsItems,
-            createdAt: new Date().toISOString()
-          };
-          activeImportBatchRef.current?.journalEntries.push(cogsEntry);
-          setJournalEntries(prev => [...prev, cogsEntry]);
+        const cogsDebitUsd = cogsItems.reduce((s, i) => s + i.debitUsd, 0);
+        const cogsCreditUsd = cogsItems.reduce((s, i) => s + i.creditUsd, 0);
+        if (!isJournalEntryBalanced({ debitBs: cogsDebitBs, creditBs: cogsCreditBs, debitUsd: cogsDebitUsd, creditUsd: cogsCreditUsd })) {
+          throw new Error('El asiento de Costo de Ventas no cuadra en Bs. y USD; la venta no se registró.');
         }
+        saleCogsEntry = {
+          id: `entry-cogs-${saleId}`,
+          companyId: targetCompany.id,
+          entryNumber: nextEntryNum + 1,
+          date: saleData.invoiceDate,
+          description: `Costo de Ventas Fac. ${saleData.invoiceNumber} - ${saleData.customerName}`,
+          type: 'INVENTARIO',
+          bcvRate: rate,
+          referenceDoc: `FAC-${saleData.invoiceNumber}`,
+          items: cogsItems,
+          createdAt: new Date().toISOString()
+        };
       }
     }
 
+    // Commit único de la venta: todos los cálculos de costo e inventario anteriores
+    // ya finalizaron. La persistencia del snapshot se confirma en una transacción SQLite.
+    reserveBankOutgoingAccounts(createdJournalEntry.companyId, createdJournalEntry.items);
+    saleSequenceRef.current[companyKey] = nextOp;
+    journalSequenceRef.current[companyKey] = saleCogsEntry?.entryNumber || nextEntryNum;
+    activeImportBatchRef.current?.journalEntries.push(createdJournalEntry);
+    if (saleCogsEntry) activeImportBatchRef.current?.journalEntries.push(saleCogsEntry);
+    setJournalEntries(prev => [...prev, createdJournalEntry, ...(saleCogsEntry ? [saleCogsEntry] : [])]);
+    activeImportBatchRef.current?.sales.push(finalSale);
+    setSales(prev => [...prev, finalSale]);
+    if (saleAutoMovementsForCommit.length > 0) {
+      setMovements(prev => [...prev, ...saleAutoMovementsForCommit]);
+      setProducts(prev => prev.map(p => {
+        const updated = saleProductStateForCommit.get(p.id);
+        if (!updated || p.companyId !== targetCompany.id) return p;
+        return { ...p, currentStock: updated.currentStock, avgCostBs: updated.avgCostBs, avgCostUsd: updated.avgCostUsd };
+      }));
+      saleAutoMovementsForCommit.forEach(m => activeImportBatchRef.current?.inventoryMovements.push(m));
+    }
     return finalSale;
   };
 
