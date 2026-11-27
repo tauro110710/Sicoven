@@ -4918,6 +4918,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     let saleAutoMovementsForCommit: InventoryMovement[] = [];
     let saleProductStateForCommit = new Map<string, { currentStock: number; avgCostBs: number; avgCostUsd: number }>();
+    let saleCogsEntry: JournalEntry | null = null;
     // Generar salidas automáticas de Kardex + asiento de Costo de Ventas
     // cuando la venta incluye líneas de inventario detalladas.
     const hasSaleInventoryLines = Array.isArray(saleData.inventoryLines) && saleData.inventoryLines!.length > 0;
@@ -5021,8 +5022,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             totalCostBs, totalCostUsd
           }));
         }
-      }
-      if (saleAutoMovementsForCommit.length > 0) {
       }
       // Preparar el asiento de costo de ventas sin publicar estado ni consumir correlativos.
       if (cogsItems.length > 0) {
