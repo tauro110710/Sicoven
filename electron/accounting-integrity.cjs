@@ -8,6 +8,13 @@ function money(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
+// La equivalencia USD de un documento se deriva de Bs. / tasa BCV. Cuando la
+// tasa tiene varios decimales el cociente no es un importe exacto en centavos
+// (113014 / 301,3709 = 374,9997096…), así que conciliar contra la división
+// exacta con tolerancia 0,0001 rechazaba compras legítimas. El importe USD se
+// guarda al centavo: la tolerancia de conciliación es un centavo.
+const USD_CENT_TOLERANCE = 0.01;
+
 // CxP balances in USD are recorded and settled to cents; compare at that same precision.
 function exceedsUsdPayable(applied, payable) {
   return money(applied) > money(payable);
@@ -209,8 +216,8 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
     if (Math.abs(actual.debitBs - amount.debitBs) > 0.02 ||
         Math.abs(actual.creditBs - amount.creditBs) > 0.02) return false;
-    if (usdEquivalent && (Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
-        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001)) return false;
+    if (usdEquivalent && (Math.abs(actual.debitUsd - amount.debitBs / rate) > USD_CENT_TOLERANCE ||
+        Math.abs(actual.creditUsd - amount.creditBs / rate) > USD_CENT_TOLERANCE)) return false;
   }
   const debitBs = items.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
   const creditBs = items.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
@@ -221,14 +228,14 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     // Operación previa a 2018: no existe equivalencia USD que conciliar.
     return debitUsd === 0 && creditUsd === 0 && Number.isFinite(Number(entry.bcvRate)) && Number(entry.bcvRate) === 0;
   }
-  return Math.abs(debitUsd - creditUsd) <= 0.0001 &&
-    Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.additionalLuxuryTaxUsd ?? 0) - luxuryTax / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001 &&
+  return Math.abs(debitUsd - creditUsd) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.additionalLuxuryTaxUsd ?? 0) - luxuryTax / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= USD_CENT_TOLERANCE &&
+    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= USD_CENT_TOLERANCE &&
     Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001;
 }
 
@@ -2845,9 +2852,9 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
           !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
           !Number.isFinite(movementUnitCostUsd) ||
-          Math.abs(movementUnitCostUsd - effectiveUnitCostBs / invoiceRate) > 0.0001 ||
+          Math.abs(movementUnitCostUsd - effectiveUnitCostBs / invoiceRate) > USD_CENT_TOLERANCE ||
           !Number.isFinite(movementCostUsd) ||
-          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001);
+          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > USD_CENT_TOLERANCE);
       const historicalUsdMismatch = !usdEquivalent && (
           !Number.isFinite(movementRate) || movementRate !== 0 ||
           !Number.isFinite(movementUnitCostUsd) || movementUnitCostUsd < 0 ||
@@ -2878,7 +2885,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         purchaseEntry.type !== 'COMPRA' ||
         !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
         (purchaseUsdEquivalent && (!Number.isFinite(Number(inventoryDebitUsd)) ||
-        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001)) ||
+        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > USD_CENT_TOLERANCE)) ||
         (!purchaseUsdEquivalent && (!Number.isFinite(Number(inventoryDebitUsd)) || Number(inventoryDebitUsd) !== 0)) ||
         !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts, asArray(nextState.accounts))) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');

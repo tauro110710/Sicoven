@@ -45,12 +45,14 @@ export const classifyGuidedEntryError = (message: string): GuidedEntryError => {
     };
   }
 
-  // 2. Kardex: la entrada y la línea de la factura deben ser idénticas.
+  // 2. Kardex: la entrada y la línea de la factura deben describir la misma
+  // operación. El costo anterior del artículo no es un requisito: cada compra
+  // fija su propio costo y esas diferencias alimentan el costo promedio.
   if (has(text, /kardex/i)) {
     return {
       field: 'inventory',
       hint:
-        'El Kardex no coincide con la línea de la factura. Verifica que el artículo sea el mismo, que la cantidad sea idéntica, que el costo unitario sea exactamente el precio de esa línea, que la fecha del movimiento sea la fecha de la factura, que el RIF del proveedor esté completo y que la tasa BCV sea la de la factura. Corrige la línea de inventario y vuelve a guardar.'
+        'El Kardex no coincide con la línea de la factura. Verifica que el artículo y la cantidad sean los mismos, que el costo unitario de la entrada coincida con el de esa línea (se acepta diferencia de centavos por redondeo), que la fecha sea la de la factura, que el RIF del proveedor esté completo y que la tasa BCV sea la de la factura. El costo anterior del artículo no tiene que coincidir: el nuevo costo es el que escribes aquí. Corrige la línea de inventario y vuelve a guardar.'
     };
   }
 

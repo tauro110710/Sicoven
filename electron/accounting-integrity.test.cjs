@@ -476,6 +476,47 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
+test('SQLite acepta una compra con tasa BCV de varios decimales sin exigir la división USD exacta', () => {
+  // Caso real: 100 unidades a Bs. 1.130,14 con tasa BCV 301,3709 (05/01/2026).
+  // 113014 / 301,3709 = 374,99970966008993; el documento guarda 375,00 USD.
+  // La diferencia de redondeo (0,00029 USD) no puede bloquear la compra.
+  const purchase = {
+    id: 'purchase-rate-decimals', companyId: 'company-1', invoiceDate: '2026-01-05',
+    supplierRif: 'J-12345678-9', invoiceNumber: '400', documentType: '01',
+    totalAmountBs: 113014, taxableBaseBs: 113014, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 301.3709,
+    totalAmountUsd: 375, taxableBaseUsd: 375, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-rate-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 100, unitCostBs: 1130.14 }]
+  };
+  const entry = {
+    id: 'purchase-rate-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-01-05', description: 'Compra', type: 'COMPRA', bcvRate: 301.3709, referenceDoc: 'FAC-400',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 113014, creditBs: 0, debitUsd: 375, creditUsd: 0 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 113014, debitUsd: 0, creditUsd: 375 }
+    ],
+    createdAt: '2026-01-05T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-rate', companyId: 'company-1', productId: 'p-1',
+    date: '2026-01-05', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-400', counterpartyRif: 'J-12345678-9',
+    quantity: 100, unitCostBs: 1130.14, unitCostUsd: 3.75,
+    totalCostBs: 113014, totalCostUsd: 375, bcvRate: 301.3709
+  };
+  const product = { id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [product] }
+  ));
+  // Una diferencia real de costo en el Kardex sigue rechazándose.
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase], movements: [{ ...movement, totalCostUsd: 300 }], products: [product] }
+  ), /una entrada de Kardex no coincide/);
+});
+
 test('SQLite acepta compras cuya línea capitaliza fletes o gastos de importación en el Kardex', () => {
   const purchase = {
     id: 'purchase-landed', companyId: 'company-1', invoiceDate: '2026-10-10',

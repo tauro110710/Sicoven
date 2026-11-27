@@ -130,6 +130,13 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     const product = companyProducts.find(p => p.id === productId);
     return product ? `${product.code} · ${product.name}` : '';
   };
+  // Costo vigente del artículo: solo informativo. El costo de esta compra es el
+  // que escribe el contador y no tiene que coincidir con el anterior.
+  const productCostHint = (productId: string) => {
+    const product = companyProducts.find(p => p.id === productId);
+    if (!product) return '';
+    return `Costo actual: ${formatBs(Number(product.avgCostBs || 0))} · Existencia: ${product.currentStock}`;
+  };
   const selectProduct = (productId: string, lineIndex: number) => {
     const avgCost = Number(companyProducts.find(p => p.id === productId)?.avgCostBs || 0);
     setInventoryLines(prev => prev.map((item, i) => i === lineIndex
@@ -830,7 +837,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                     </ul>
                   )}</div>
                 <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="text" inputMode="decimal" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} aria-invalid={errorField === 'inventory'} className={`w-full rounded p-2 focus:ring-1 focus:outline-none ${fieldTone('inventory')}`}/></div>
-                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} aria-invalid={errorField === 'inventory'} className={`w-full rounded p-2 focus:ring-1 focus:outline-none ${fieldTone('inventory')}`}/></div>
+                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Nuevo costo unitario Bs.</label><input required type="text" inputMode="decimal" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} aria-invalid={errorField === 'inventory'} className={`w-full rounded p-2 focus:ring-1 focus:outline-none ${fieldTone('inventory')}`}/>{productCostHint(line.productId) && <p className="mt-1 text-[10px] text-slate-500">{productCostHint(line.productId)}</p>}</div>
                 <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
               </div>)}
               <button type="button" onClick={()=>setInventoryLines(prev=>[...prev,{productId:'',quantity:'1',unitCostBs:''}])} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 font-semibold text-indigo-800">+ Añadir artículo</button>
