@@ -5,7 +5,8 @@ import { GuidedErrorNotice } from '../shared/GuidedErrorNotice';
 import { GUIDED_ENTRY_TITLES } from '../../types/guidedEntryErrors';
 import { useGuidedEntryError } from '../shared/useGuidedEntryError';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
-import { getCompanyTaxStatusForDate } from '../../types/accounting';
+import { getCompanyTaxStatusForDate, type InventoryProduct } from '../../types/accounting';
+import { calculateInventoryPrices } from '../../types/inventoryPricing';
 import HistoricalBcvRateNote from '../shared/HistoricalBcvRateNote';
 import { useHistoricalBcvRate } from '../shared/useHistoricalBcvRate';
 import { getLocalISODate, isValidIsoCalendarDate } from '../../utils/isoDateValidation';
@@ -19,6 +20,94 @@ interface NewSaleModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const normalizeInventorySearch = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** Precio de venta en Bs. según el inventario: costo actual + motor de precios del artículo. */
+function resolveInventorySalePriceBs(product: InventoryProduct, bcvRate: number): number {
+  if (product.pricingConfiguration?.mode === 'AUTOMATIC') {
+    try {
+      const calculated = calculateInventoryPrices({
+        baseCost: Number(product.avgCostUsd) || 0,
+        configuration: { ...product.pricingConfiguration, applyExchangeGap: false }
+      }).prices[0];
+      if (calculated > 0) return bcvRate > 0 ? Number((calculated * bcvRate).toFixed(2)) : 0;
+    } catch {
+      // Si la configuración no puede recalcularse, se usa el precio ya guardado.
+    }
+  }
+  const currency = product.priceCurrency || 'BS';
+  const stored = Number(product.price1) > 0
+    ? Number(product.price1)
+    : Number(currency === 'USD' ? product.salesPriceUsd : product.salesPriceBs) || 0;
+  if (!(stored > 0)) return 0;
+  return currency === 'USD' ? (bcvRate > 0 ? Number((stored * bcvRate).toFixed(2)) : 0) : stored;
+}
+
+const InventoryProductCombobox: React.FC<{
+  products: InventoryProduct[];
+  value: string;
+  onChange: (productId: string) => void;
+}> = ({ products, value, onChange }) => {
+  const selected = products.find(product => product.id === value);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  React.useEffect(() => {
+    if (!open) setQuery(selected ? `${selected.code} — ${selected.name}` : '');
+  }, [selected?.id, open]);
+
+  const normalizedQuery = normalizeInventorySearch(query);
+  const matches = normalizedQuery
+    ? products.filter(product =>
+        [product.code, product.name, product.category || '']
+          .some(field => normalizeInventorySearch(field).includes(normalizedQuery)))
+    : products;
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={query}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onChange={event => { setQuery(event.target.value); setOpen(true); }}
+        onBlur={() => setOpen(false)}
+        onKeyDown={event => {
+          if (event.key === 'Enter') event.preventDefault();
+          if (event.key === 'Escape') setOpen(false);
+        }}
+        placeholder="Buscar por nombre, código o palabra clave…"
+        className="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-emerald-500"
+      />
+      {open && (
+        <div
+          onMouseDown={event => event.preventDefault()}
+          className="mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl"
+        >
+          {matches.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-slate-500">Sin coincidencias.</p>
+          ) : matches.map(product => (
+            <button
+              type="button"
+              key={product.id}
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => {
+                onChange(product.id);
+                setQuery(`${product.code} — ${product.name}`);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs hover:bg-emerald-50"
+            >
+              <span className="truncate"><strong className="font-mono">{product.code}</strong> — {product.name}</span>
+              {product.category && <span className="shrink-0 text-[10px] text-slate-400">{product.category}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) => {
   const { currentCompany, addSale, waitForPersistence, products, accounts, bankAccounts } = useAccounting();
@@ -582,14 +671,17 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                     <div key={idx} className="flex gap-2 items-end">
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-slate-600 mb-0.5">Artículo</label>
-                        <select
+                        <InventoryProductCombobox
+                          products={companyProducts}
                           value={line.productId}
-                          onChange={e => setSaleInventoryLines(prev => prev.map((l, i) => i === idx ? {...l, productId: e.target.value} : l))}
-                          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-emerald-500"
-                        >
-                          <option value="">— Seleccionar —</option>
-                          {companyProducts.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-                        </select>
+                          onChange={productId => {
+                            const product = companyProducts.find(p => p.id === productId);
+                            const suggestedPrice = product ? resolveInventorySalePriceBs(product, effectiveBcvRate) : 0;
+                            setSaleInventoryLines(prev => prev.map((l, i) => i === idx
+                              ? { ...l, productId, unitPriceBs: suggestedPrice > 0 ? suggestedPrice.toFixed(2) : l.unitPriceBs }
+                              : l));
+                          }}
+                        />
                       </div>
                       <div className="w-20">
                         <label className="block text-xs font-medium text-slate-600 mb-0.5">Cantidad</label>

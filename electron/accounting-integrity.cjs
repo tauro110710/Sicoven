@@ -1816,21 +1816,29 @@ function saleInventoryLinesMatchKardex(sale, nextState, previousState) {
     const vatAmountBs = Number(line.vatAmountBs);
     const exemptAmountBs = Number(line.exemptAmountBs);
     const totalBs = Number(line.totalBs);
-    const productRate = product?.vatTreatment === 'GENERAL_16' ? 16 :
-      product?.vatTreatment === 'REDUCIDA_8' ? 8 :
-      ['EXENTO', 'EXONERADO'].includes(product?.vatTreatment) ? 0 : NaN;
+    // Un producto histórico puede no conservar vatTreatment: el formulario y
+    // la importación lo tratan como alícuota general (16 %). La tasa 31 % es
+    // la general más el adicional suntuario del 15 %, no un IVA del 31 %.
+    const productRate = product?.vatTreatment === 'REDUCIDA_8' ? 8 :
+      ['EXENTO', 'EXONERADO'].includes(product?.vatTreatment) ? 0 : 16;
+    const vatRate = taxRate === 31 ? 16 : taxRate;
+    const luxuryRate = taxRate === 31 ? 15 : 0;
+    const allowedTaxRates = productRate === 16 ? [16, 31] : [productRate];
     if (!product || !productId || seenProducts.has(productId) ||
         String(line.productCode || '') !== String(product.code || '') ||
         !Number.isFinite(quantity) || quantity <= 0 ||
         !Number.isFinite(unitPriceBs) || unitPriceBs <= 0 ||
         !Number.isFinite(netAmountBs) || Math.abs(netAmountBs - round2(quantity * unitPriceBs)) > 0.02 ||
-        !Number.isFinite(taxRate) || taxRate !== productRate ||
+        !Number.isFinite(taxRate) || !allowedTaxRates.includes(taxRate) ||
         (taxRate > 0 && taxRate !== Number(sale.taxRate)) ||
         !Number.isFinite(vatAmountBs) ||
-        Math.abs(vatAmountBs - round2(netAmountBs * taxRate / 100)) > 0.02 ||
+        Math.abs(vatAmountBs - round2(netAmountBs * vatRate / 100)) > 0.02 ||
+        !Number.isFinite(Number(line.additionalLuxuryTaxBs || 0)) ||
+        Math.abs(Number(line.additionalLuxuryTaxBs || 0) - round2(netAmountBs * luxuryRate / 100)) > 0.02 ||
         !Number.isFinite(exemptAmountBs) ||
         Math.abs(exemptAmountBs - (taxRate === 0 ? netAmountBs : 0)) > 0.02 ||
-        !Number.isFinite(totalBs) || Math.abs(totalBs - netAmountBs - vatAmountBs) > 0.02 ||
+        !Number.isFinite(totalBs) ||
+        Math.abs(totalBs - netAmountBs - vatAmountBs - Number(line.additionalLuxuryTaxBs || 0)) > 0.02 ||
         (line.unitPriceUsd != null &&
           (!Number.isFinite(Number(line.unitPriceUsd)) ||
            Math.abs(Number(line.unitPriceUsd) - unitPriceBs / rate) > 0.02))) return false;

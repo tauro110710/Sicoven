@@ -5045,6 +5045,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
           bcvRate: rate,
           costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO',
+          counterpartyRif: saleData.customerRif,
+          counterpartyName: saleData.customerName,
           ...(consumedFifoLayers ? { consumedFifoLayers } : {}),
           journalEntryId: createdJournalEntry.id
         };
